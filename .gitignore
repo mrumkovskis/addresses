@@ -1,0 +1,26 @@
+# eclipse + scala plugin + idea
+.classpath
+.project
+.manager
+.scala_dependencies
+class/
+bin/
+.settings/
+.idea/
+.cache
+.worksheet/
+lib/
+*.iml
+
+# sbt
+target
+lib_managed
+src_managed
+project/boot/
+*/project/boot
+setenv*
+.history
+bin/*.jar
+
+application.conf
+
