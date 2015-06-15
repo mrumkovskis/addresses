@@ -44,6 +44,7 @@ lazy val addresses = project
   .settings(initialCommands in console :=
     "import lv.addresses.service.AddressFinder; import lv.addresses.service.AddressService;")
   .settings(
+    mainClass in assembly := Some("lv.addresses.service.Boot"),
     assemblyMergeStrategy in assembly := {
       case "application.conf" => MergeStrategy.concat
       case x =>
