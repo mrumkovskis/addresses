@@ -41,6 +41,7 @@ lazy val addresses = project
   .in(file("."))
   .aggregate(indexer, service)
   .settings(name := "addresses")
+  .settings(commonSettings: _*)
   .settings(initialCommands in console :=
     "import lv.addresses.indexer.AddressFinder._; import lv.addresses.service.AddressService._;")
   .settings(
