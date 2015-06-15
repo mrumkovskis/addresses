@@ -4,8 +4,7 @@ import Keys._
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
   scalaVersion := "2.11.6",
-  scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8"),
-  initialCommands in console := "import lv.addresses.indexer.AddressFinder._;"
+  scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
 lazy val serviceDependencies = {
@@ -31,7 +30,6 @@ lazy val service = project
   .settings(
     libraryDependencies ++= serviceDependencies,
     resolvers ++= Seq("spray repo" at "http://repo.spray.io/"),
-    initialCommands in console += "import lv.addresses.service.AddressService._;",
     mainClass in Compile := Some("lv.addresses.service.Boot")
   )
   .settings(Revolver.settings: _*)
@@ -40,10 +38,11 @@ lazy val service = project
 lazy val addresses = project
   .in(file("."))
   .aggregate(indexer, service)
+  .dependsOn(service)
   .settings(name := "addresses")
   .settings(commonSettings: _*)
   .settings(initialCommands in console :=
-    "import lv.addresses.indexer.AddressFinder._; import lv.addresses.service.AddressService._;")
+    "import lv.addresses.service.AddressFinder; import lv.addresses.service.AddressService;")
   .settings(
     assemblyMergeStrategy in assembly := {
       case "application.conf" => MergeStrategy.concat

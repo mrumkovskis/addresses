@@ -161,7 +161,7 @@ trait AddressLoader { this: AddressFinder =>
   def conv_dziv(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(7), line(5).toInt, null,
       normalize(line(7)).toVector)
 
-  def loadAddresses(addressZipFile: String = akFileName) = {
+  def loadAddresses(addressZipFile: String = addressFileName) = {
     println(s"Loading addreses from file $addressZipFile...")
     val start = System.currentTimeMillis
     var currentFile: String = null
@@ -299,9 +299,9 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
   def init: Unit = {
     if (ready) return
-    if (akFileName == null) println("Address file not set")
+    if (addressFileName == null) println("Address file not set")
     else {
-      if (hasIndex(akFileName)) loadIndex else {
+      if (hasIndex(addressFileName)) loadIndex else {
         _addressMap = loadAddresses()
         index(addressMap)
         saveIndex
@@ -454,11 +454,11 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _index, akFileName)
+    save(addressMap, _index, addressFileName)
   }
 
   def loadIndex = {
-    val r = load(akFileName)
+    val r = load(addressFileName)
     _addressMap = r._1
     _index = r._2
   }
@@ -548,6 +548,6 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 }
 
 trait AddressIndexerConfig {
-  def akFileName: String
+  def addressFileName: String
   def blackList: Set[String]
 }

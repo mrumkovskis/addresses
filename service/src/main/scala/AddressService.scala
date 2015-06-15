@@ -146,7 +146,7 @@ object AddressService extends AddressServiceConfig {
       case s: Struct => router.route(s.copy(af = af), sender)
       case a: Address => router.route(a.copy(af = af), sender)
       case Finder => sender ! af
-      case GetVersion => sender ! Version(af.akFileName)
+      case GetVersion => sender ! Version(af.addressFileName)
       case Terminated(a) =>
         router = router.removeRoutee(a)
         createRoutee
@@ -162,7 +162,7 @@ object AddressService extends AddressServiceConfig {
 
     override def postStop() {
       af = null
-      as.log.info(s"Server stopped: ${af.akFileName}")
+      as.log.info(s"Server stopped: ${af.addressFileName}")
     }
 
   }
@@ -187,12 +187,12 @@ object AddressService extends AddressServiceConfig {
 }
 
 trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
-  val conf = com.typesafe.config.ConfigFactory.load
-  val akFileName = if (conf.hasPath("VZD.ak-file")) conf.getString("VZD.ak-file") else {
+  def conf = com.typesafe.config.ConfigFactory.load
+  def akFileName = if (conf.hasPath("VZD.ak-file")) conf.getString("VZD.ak-file") else {
     println("ERROR: address file setting 'VZD.ak-file' not found")
     null
   }
-  val blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
+  def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
     conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
   val initOnStartup =
     if (conf.hasPath("VZD.init-on-startup")) conf.getBoolean("VZD.init-on-startup") else false
@@ -218,7 +218,7 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
   }
 }
 
-class AddressFinder(val akFileName: String, val blackList: Set[String])
+class AddressFinder(val addressFileName: String, val blackList: Set[String])
 extends lv.addresses.indexer.AddressFinder
 //for debugging purposes
 object AddressFinder extends lv.addresses.indexer.AddressFinder with AddressServiceConfig
