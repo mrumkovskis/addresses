@@ -44,13 +44,14 @@ lazy val addresses = project
   .settings(initialCommands in console :=
     "import lv.addresses.service.AddressFinder; import lv.addresses.service.AddressService;")
   .settings(
+    aggregate in assembly := false,
     mainClass in assembly := Some("lv.addresses.service.Boot"),
     assemblyMergeStrategy in assembly := {
       case "application.conf" => MergeStrategy.concat
       case x =>
         val oldStrategy = (assemblyMergeStrategy in assembly).value
         oldStrategy(x)
-    }  
+    }
   )
   .settings(
     publishTo <<= version { v: String =>
