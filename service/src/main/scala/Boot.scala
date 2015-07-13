@@ -55,12 +55,16 @@ class AddressServiceActor extends Actor with AddressHttpService {
 }
 
 trait AddressHttpService extends HttpService {
-  
+
   val CODE_PATTERN = "(\\d{9,})"r
 
   val route = detach() {
     dynamic {
-      (path("address") & get & parameterMultiMap) { params =>
+      path("") {
+        redirect("/index.html", StatusCodes.SeeOther)
+      } ~ path("index.html") {
+        getFromResource("index.html")
+      } ~ (path("address") & get & parameterMultiMap) { params =>
         val pattern = params.get("search") map (_.head) getOrElse ("")
         val limit = params.get("limit") map (_.head.toInt) getOrElse 20
         val types = params.get("type").map(_.toSet.map((t: String) => t.toInt)).orNull
@@ -70,7 +74,7 @@ trait AddressHttpService extends HttpService {
             s <- (pattern match {
               case CODE_PATTERN(code) => address(code.toInt) map (_.toArray)
               case p => search(p, limit, types)
-              })
+            })
           } yield {
             s map { a =>
               val st = f.addressStruct(a.code)
@@ -89,6 +93,8 @@ trait AddressHttpService extends HttpService {
         complete(struct(code) map (_.toJson.prettyPrint))
       } ~ path("version") {
         complete(version map (Option(_).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")))
+      } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
+        path(Rest) { resource => getFromResource(resource) }
       }
     }
   }
@@ -103,7 +109,7 @@ object Boot extends scala.App {
 
   // create and start webhouse service actor
   val service = system.actorOf(Props[AddressServiceActor], "address-service")
-  
+
   AddressService.maybeInit
 
   // start a new HTTP server with webhouse service actor as the handler
