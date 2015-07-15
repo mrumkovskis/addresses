@@ -22,7 +22,7 @@
       <h1>Adrešu serviss</h1>
       <p>Versija: <code>{{version}}</code></p>
       <form>
-        <input type="text" class="form-control" placeholder="Meklējamā adrese">
+        <input type="text" class="form-control" ng-model="search" placeholder="Meklējamā adrese">
       </form>
       <table class="table">
         <thead>
@@ -30,10 +30,15 @@
             <th>#</th>
             <th>Adrese</th>
             <th>Kods</th>
-            <tbody>
-            </tbody>
           </tr>
         </thead>
+        <tbody>
+          <tr ng-repeat="address in addresses">
+            <td>{{$index + 1}}</td>
+            <td>{{address.address}}</td>
+            <td>{{address.code}}</td>
+          </tr>
+        </tbody>
       </table>
     </div>
   </body>
