@@ -10,6 +10,8 @@ import scala.concurrent.duration._
 import scala.collection.JavaConversions._
 
 import akka.actor.Actor
+import akka.actor.ActorRef
+import akka.actor.ActorLogging
 import akka.pattern.ask
 
 import spray.can.server.Stats
@@ -22,6 +24,8 @@ import spray.httpx.encoding.Gzip
 import spray.httpx.marshalling.Marshaller
 import spray.json._
 import spray.http.HttpHeaders._
+import spray.can.websocket._
+import spray.can.websocket.frame.{ BinaryFrame, TextFrame }
 
 import com.typesafe.config._
 
@@ -42,16 +46,29 @@ case class AddressFull(code: Int, address: String, zipCode: Option[String], typ:
 import MyJsonProtocol._
 import AddressService._
 
-class AddressServiceActor extends Actor with AddressHttpService {
+class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker with AddressHttpService {
 
-  // the HttpService trait defines only one abstract member, which
-  // connects the services environment to the enclosing actor or test
+  final case class Push(msg: String)
+
   def actorRefFactory = context
 
-  // this actor only runs our route, but you could add
-  // other things here, like request stream processing
-  // or timeout handling
-  def receive = akka.event.LoggingReceive { runRoute(route) }
+  override def receive = handshaking orElse businessLogicNoUpgrade orElse closeLogic
+
+  def businessLogic: Receive = {
+    // just bounce frames back for Autobahn testsuite
+    case x @ (_: BinaryFrame | _: TextFrame) =>
+      sender() ! x
+
+    case Push(msg) => send(TextFrame(msg))
+
+    case x: FrameCommandFailed =>
+      log.error("frame command failed", x)
+
+    case x: HttpRequest => // do something
+  }
+
+  def businessLogicNoUpgrade: Receive = akka.event.LoggingReceive { runRoute(route) }
+
 }
 
 trait AddressHttpService extends HttpService {
@@ -100,6 +117,16 @@ trait AddressHttpService extends HttpService {
   }
 }
 
+class AddressHttpServer extends Actor with ActorLogging {
+  def receive = {
+    // when a new connection comes in we register a WebSocketConnection actor as the per connection handler
+    case _: Http.Connected =>
+      val serverConnection = sender()
+      val conn = context.actorOf(Props(classOf[AddressServiceActor], serverConnection))
+      serverConnection ! Http.Register(conn)
+  }
+}
+
 object Boot extends scala.App {
 
   val conf = com.typesafe.config.ConfigFactory.load
@@ -108,7 +135,7 @@ object Boot extends scala.App {
   implicit val system = ActorSystem("address-service")
 
   // create and start webhouse service actor
-  val service = system.actorOf(Props[AddressServiceActor], "address-service")
+  val service = system.actorOf(Props[AddressHttpServer], "address-service")
 
   AddressService.maybeInit
 
