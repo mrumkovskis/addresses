@@ -7,17 +7,12 @@ addresses.controller('AddressesCtrl', function($scope, $http, $interval) {
   	var i = data.indexOf('.');
   	$scope.version = i == -1 ? data : data.substring(0, i);
   });
-  $scope.currentSearch = '';
-  $interval(function () {
-    var localCurrentSearch = '';
-    if ($scope.search !== $scope.currentSearch) {
-      localCurrentSearch = $scope.search;
-      $http.get('address', {params: {search: $scope.search}}).success(function(data) {
-        if ($scope.search === localCurrentSearch) {
-          $scope.addresses = data;
-          $scope.currentSearch = localCurrentSearch;
-        }
-      });
-    }
-  }, 200);
+  $scope.updateAddress = function () {
+    var searched = $scope.search;
+    $http.get('address', {params: {search: $scope.search}}).success(function(data) {
+      if ($scope.search === searched) {
+        $scope.addresses = data;
+      }
+    });
+  }
 });
