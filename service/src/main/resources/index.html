@@ -22,7 +22,7 @@
       <h1>Adrešu serviss</h1>
       <p>Versija: <code>{{version}}</code></p>
       <form>
-        <input type="text" class="form-control" ng-model="search" placeholder="Meklējamā adrese">
+        <input type="text" class="form-control" ng-model="search" ng-change="updateAddress()" ng-model-options="{debounce:300}" placeholder="Meklējamā adrese">
       </form>
       <table class="table">
         <thead>

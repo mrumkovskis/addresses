@@ -89,7 +89,7 @@ object AddressService extends AddressServiceConfig {
       case Initialize =>
         if (ready) proxy ! GetVersion
         else as.log.info("Initializer not started, another initialization in progress!")
-      case Version(version) =>
+      case Version(version) if ready =>
         val fn = addressFileName
         if (fn != null && (version == null || version < fn)) {
           context.actorOf(Props[Server]).tell(Init(fn, blackList), proxy)

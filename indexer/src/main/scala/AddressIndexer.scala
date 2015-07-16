@@ -368,7 +368,8 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
         insertIntoHeap(result, key)
         i += 1
       }
-      (if (size < result.size / 2) heap_topx(result, size) else result.sorted.toArray)
+      (if (size < result.size / 2) heap_topx(result, size)
+        else result.sorted.toArray.take(size))
         .map(_ & 0x00000000FFFFFFFFL)
         .map(_.toInt)
     }) map address
