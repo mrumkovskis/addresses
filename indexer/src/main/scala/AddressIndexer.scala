@@ -71,7 +71,7 @@ trait AddressIndexer { this: AddressFinder =>
 
     println("Starting address indexing...")
     val start = System.currentTimeMillis
-    
+
     println(s"Sorting ${addressMap.size} addresses...")
     val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
@@ -83,7 +83,7 @@ trait AddressIndexer { this: AddressFinder =>
     })
     val sortedAddresses = addresses.sortWith((a1, a2) => a1._2 < a2._2 || (a1._2 == a2._2 &&
         (a1._3.length < a2._3.length || (a1._3.length == a2._3.length && a1._3 < a2._3))))
-    
+
     println("Creating index...")
     idx = 0
     val index = sortedAddresses
@@ -358,7 +358,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     else {
       var (perfectRankCount, i) = (0, 0)
       val size = Math.min(codes.length, limit)
-      
+
       val result = new scala.collection.mutable.ArrayBuffer[Long](size)
       while (perfectRankCount < size && i < codes.length) {
         val code = codes(i)
@@ -369,7 +369,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
         i += 1
       }
       (if (size < result.size / 2) heap_topx(result, size)
-        else result.sorted.toArray.take(size))
+        else (if (size < result.size) result.take(size) else result).sorted.toArray)
         .map(_ & 0x00000000FFFFFFFFL)
         .map(_.toInt)
     }) map address
@@ -402,9 +402,9 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
             if (r._2 == null) a.zipCode else r._2,
             a.typ))
       }.map(r => Address(code, r._1.drop(2).toString, r._2, r._3))
-  
+
   def address(code: Int) = addressOption(code).get
-  
+
 
   //matching starts from the end of array and from the end of address object chain
   def seqMatchCount(words: Array[String], code: Int) = {
@@ -424,19 +424,19 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
         .getOrElse(s)
     words.length - (run(words.length - 1, code) + 1)
   }
-  /**Integer of which last 10 bits are significant. 
+  /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.
    * 0 is highest ranking meaning all words sequentially have exact match */
   def rank(words: Array[String], code: Int) = {
     def count(s: Int, n: Vector[String]) = {
       var seqCount: Int = s >> 16 toShort
-      var exactCount: Int = s & 0x0000FFFF toShort 
+      var exactCount: Int = s & 0x0000FFFF toShort
       var j = n.length - 1
       while (seqCount >= 0 && j >= 0) {
         if (n(j).startsWith(words(seqCount))) {
           if (n(j).length == words(seqCount).length) exactCount -= 1
           seqCount -= 1
-        } 
+        }
         j -= 1
       }
       seqCount.toShort.toInt << 16 | exactCount.toShort
@@ -463,7 +463,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     _addressMap = r._1
     _index = r._2
   }
-  
+
   def insertIntoHeap(h: scala.collection.mutable.ArrayBuffer[Long], el: Long) {
     var i = h.size
     var j = 0
@@ -502,7 +502,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
             } else i = n
           else if (h(j) < h(i)) {
             swap(i, j)
-            i = j          
+            i = j
         } else i = n
         else i = n
       }
@@ -517,7 +517,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     }
     na
   }
-      
+
   def heapsortx(a: scala.collection.mutable.ArrayBuffer[Long], x: Int) = {
     def swap(i: Int, j: Int) = {
       val x = a(j)
@@ -538,7 +538,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     //get x smallest elements
     heap_topx(a, x)
   }
-  
+
   //for debugging purposes
   def t(block: => Any) = {
     val t1 = System.currentTimeMillis
