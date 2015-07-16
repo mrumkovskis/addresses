@@ -16,7 +16,8 @@ lazy val serviceDependencies = {
   "io.spray"            %%  "spray-json"    % "1.3.2",
   "io.spray"            %%  "spray-testkit" % sprayV % "test",
   "com.typesafe.akka"   %%  "akka-actor"    % akkaV,
-  "com.typesafe.akka"   %%  "akka-testkit"  % akkaV  % "test")
+  "com.typesafe.akka"   %%  "akka-testkit"  % akkaV  % "test",
+  "commons-net" % "commons-net" % "3.3")
 }
 
 lazy val indexer = project
@@ -41,8 +42,7 @@ lazy val addresses = project
   .dependsOn(service)
   .settings(name := "addresses")
   .settings(commonSettings: _*)
-  .settings(initialCommands in console :=
-    "import lv.addresses.service.AddressFinder; import lv.addresses.service.AddressService;")
+  .settings(initialCommands in console := "import lv.addresses.service._")
   .settings(
     aggregate in assembly := false,
     mainClass in assembly := Some("lv.addresses.service.Boot"),

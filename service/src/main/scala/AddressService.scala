@@ -24,11 +24,11 @@ object AddressService extends AddressServiceConfig {
   private case object Shutdown extends Msg
   private case object GetVersion extends Msg
 
-  private val as = ActorSystem("uniso-address-service")
+  private[service] val as = ActorSystem("uniso-address-service")
   private val proxy = as.actorOf(Props[Proxy])
   private val initializer = as.actorOf(Props[Initializer])
   implicit val execCtx = as.dispatcher
-  
+
   def maybeInit = if (initOnStartup) initializer ! Initialize
 
   def search(pattern: String, limit: Int, types: Set[Int]) = proxy
