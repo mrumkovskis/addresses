@@ -21,22 +21,28 @@
     <div class="col-sm-offset-1 col-sm-10">
       <h1>Adrešu serviss</h1>
       <p>Versija: <code>{{version}}</code></p>
-      <form>
-        <input type="text" class="form-control" ng-model="search" ng-change="updateAddress()" ng-model-options="{debounce:300}" placeholder="Meklējamā adrese">
-      </form>
-      <table class="table">
+      <p>
+        <span ng-repeat="type in types">
+          <input type="checkbox" value="{{type.name}}" ng-model="type.selected"
+                 ng-change="updateAddress()">&nbsp{{type.nosaukums}}&nbsp&nbsp&nbsp</input>
+        </span>
+      </p>
+      <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
+        ng-if="search.length > 0">address?{{urlParams}}</a></p>
+      <input type="text" class="form-control" ng-model="search" ng-change="updateAddress()" ng-model-options="{debounce:300}" placeholder="Meklējamā adrese">
+      <table class="table col-sm-12">
         <thead>
           <tr>
-            <th>#</th>
-            <th>Adrese</th>
-            <th>Kods</th>
+            <th class="col-sm-1">#</th>
+            <th class="col-sm-9">Adrese</th>
+            <th class="col-sm-2">Kods</th>
           </tr>
         </thead>
         <tbody>
           <tr ng-repeat="address in addresses">
-            <td>{{$index + 1}}</td>
-            <td>{{address.address}}</td>
-            <td>{{address.code}}</td>
+            <td class="col-sm-1">{{$index + 1}}</td>
+            <td class="col-sm-9">{{address.address}}</td>
+            <td class="col-sm-2">{{address.code}}</td>
           </tr>
         </tbody>
       </table>
