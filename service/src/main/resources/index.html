@@ -22,10 +22,12 @@
       <h1>Adrešu serviss</h1>
       <p>Versija: <code>{{version}}</code></p>
       <p>
-        <label ng-repeat="type in types">
-          <input type="checkbox" value="{{type.name}}" ng-model="type.selected"
-                 ng-change="updateAddress()">&nbsp;{{type.nosaukums}}&nbsp;&nbsp;&nbsp;
-        </label>
+        <p class="checkbox">
+          <label ng-repeat="type in types">
+            <input type="checkbox" value="{{type.name}}" ng-model="type.selected"
+                   ng-change="updateAddress()">&nbsp;{{type.nosaukums}}&nbsp;&nbsp;&nbsp;
+          </label>
+        </p>
       </p>
       <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
         ng-if="search.length > 0">address?{{urlParams}}</a></p>
