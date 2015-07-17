@@ -29,8 +29,8 @@
       <p>
         <p class="checkbox">
           <label ng-repeat="type in types">
-            <input type="checkbox" value="{{type.name}}" ng-model="type.selected"
-                   ng-change="updateAddress()">&nbsp;{{type.nosaukums}}&nbsp;&nbsp;&nbsp;
+            <input type="checkbox" ng-model="type.selected"
+                   ng-change="updateAddress()">&nbsp;{{type.name}}&nbsp;&nbsp;&nbsp;
           </label>
         </p>
       </p>
@@ -67,7 +67,6 @@
                 <tr><td>Iela</td><td>{{ address.ielCode }}</td><td>{{ address.ielName }}</td></tr>
                 <tr><td>Māja</td><td>{{ address.nltCode }}</td><td>{{ address.nltName }}</td></tr>
                 <tr><td>Dzīvoklis</td><td>{{ address.dzvCode }}</td><td>{{ address.dzvName }}</td></tr>
-
               </table>
             </td>
             <td>&nbsp;</td>
