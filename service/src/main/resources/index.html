@@ -27,11 +27,19 @@
       <h1>Adrešu serviss</h1>
       <p>Versija: <code>{{version}}</code></p>
       <p>
-        <p class="checkbox">
+        <p class="checkbox form-inline">
           <label ng-repeat="type in types">
             <input type="checkbox" ng-model="type.selected"
                    ng-change="updateAddress()">&nbsp;{{type.name}}&nbsp;&nbsp;&nbsp;
           </label>
+          <label>
+            &nbsp;&nbsp;&nbsp;
+            <input type="checkbox" ng-model="limit.selected"
+                   ng-change="updateAddress()">
+            <span ng-class="{'text-muted': !limit.selected}">&nbsp;{{limit.name}}&nbsp;</span>
+          </label>
+          <input type="number" min="1" max="500" ng-model="limit.value" ng-readonly="!limit.selected"
+                 class="form-control input-sm">
         </p>
       </p>
       <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
