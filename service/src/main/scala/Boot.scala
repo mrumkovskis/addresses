@@ -15,6 +15,7 @@ import akka.actor.ActorLogging
 import akka.pattern.ask
 
 import spray.can.server.Stats
+import spray.can.server.UHttp
 import spray.can.Http
 import spray.routing._
 import spray.util._
@@ -48,8 +49,6 @@ import AddressService._
 
 class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker with AddressHttpService {
 
-  final case class Push(msg: String)
-
   def actorRefFactory = context
 
   override def receive = handshaking orElse businessLogicNoUpgrade orElse closeLogic
@@ -59,7 +58,7 @@ class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServe
     case x @ (_: BinaryFrame | _: TextFrame) =>
       sender() ! x
 
-    case Push(msg) => send(TextFrame(msg))
+    case Version(version) => send(TextFrame(normalizeVersion(version)))
 
     case x: FrameCommandFailed =>
       log.error("frame command failed", x)
@@ -68,6 +67,26 @@ class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServe
   }
 
   def businessLogicNoUpgrade: Receive = akka.event.LoggingReceive { runRoute(route) }
+
+  override def handshaking: Receive = {
+
+      // when a client request for upgrading to websocket comes in, we send
+      // UHttp.Upgrade to upgrade to websocket pipelines with an accepting response.
+      case HandshakeRequest(state) =>
+        state match {
+          case wsFailure: HandshakeFailure => sender() ! wsFailure.response
+          case wsContext: HandshakeContext => sender() ! UHttp.UpgradeServer(
+            pipelineStage(self, wsContext), wsContext.response)
+        }
+
+      // upgraded successfully
+      case UHttp.Upgraded =>
+        context.become(businessLogic orElse closeLogic)
+        subscribe(self, "version")
+        self ! UpgradedToWebSocket // notify Upgraded to WebSocket protocol
+    }
+
+    override def postStop() = unsubscribe(self)
 
 }
 
@@ -109,12 +128,16 @@ trait AddressHttpService extends HttpService {
       } ~ (path("address-structure" / IntNumber)) { code =>
         complete(struct(code) map (_.toJson.prettyPrint))
       } ~ path("version") {
-        complete(version map (Option(_).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")))
+        complete(version map (normalizeVersion(_)))
       } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
         path(Rest) { resource => getFromResource(resource) }
       }
     }
   }
+
+  def normalizeVersion(version: String) =
+    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>") 
+
 }
 
 class AddressHttpServer extends Actor with ActorLogging {
@@ -139,8 +162,8 @@ object Boot extends scala.App {
 
   AddressService.maybeInit
 
-  // start a new HTTP server with webhouse service actor as the handler
-  IO(Http) ! Http.Bind(service, interface = "0.0.0.0",
+  // start a new HTTP server with webhouse service actor as the handler and web socket support
+  IO(UHttp) ! Http.Bind(service, interface = "0.0.0.0",
     port = scala.util.Try(conf.getInt("address-service-port")).toOption.getOrElse(8082))
 }
 

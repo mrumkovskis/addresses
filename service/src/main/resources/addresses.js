@@ -1,6 +1,13 @@
 var addresses = angular.module('addresses', ['ngAnimate']);
 
-addresses.controller('AddressesCtrl', function($scope, $http, $filter,$httpParamSerializer) {
+addresses.controller('AddressesCtrl',
+  function(
+    $scope,
+    $http,
+    $filter,
+    $httpParamSerializer,
+    $log) {
+
   $scope.search = '';
   $scope.addresses = [];
 
@@ -41,7 +48,22 @@ addresses.controller('AddressesCtrl', function($scope, $http, $filter,$httpParam
   }
 
   $http.get('version').success(function(data) {
-    var i = data.indexOf('.');
-    $scope.version = i == -1 ? data : data.substring(0, i);
+    $scope.normalizeVersion(data);
   });
+   
+  //get version updates through websocket
+  var websocket = new WebSocket("ws://" + window.location.host + "/version-update");
+  websocket.onmessage = function(msg) {
+    //call scope apply so scope is synchronized with view are executed
+    $scope.$apply($scope.normalizeVersion(msg.data));
+  };
+  websocket.onopen = function(evt) { $log.info(evt) };
+  websocket.onclose = function(evt) { $log.info(evt) };
+  websocket.onerror = function(evt) { $log.error(evt) };
+
+  $scope.normalizeVersion = function (version) {
+    var i = version.indexOf('.');
+    $scope.version = i == -1 ? version : version.substring(0, i);    
+  }
+
 });

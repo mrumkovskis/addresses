@@ -7,10 +7,11 @@ import akka.actor.Props
 import akka.actor.Status
 import akka.actor.Stash
 import akka.pattern.ask
-import akka.dispatch.Envelope
+import akka.event.EventBus
+import akka.event.LookupClassification
 import scala.concurrent.duration._
 
-object AddressService extends AddressServiceConfig {
+object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
   private trait Msg
   private case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
@@ -18,11 +19,13 @@ object AddressService extends AddressServiceConfig {
   private case class Address(code: Int, af: AddressFinder = null) extends Msg
   private case class Init(akFileName: String, blackList: Set[String]) extends Msg
   private case class Ready(serverActor: ActorRef) extends Msg
-  private case class Version(version: String) extends Msg
   private case object Initialize extends Msg
   private case object Finder extends Msg
   private case object Shutdown extends Msg
   private case object GetVersion extends Msg
+
+  case class Version(version: String)
+  case class MsgEnvelope(topic: String, payload: Any)
 
   private[service] val as = ActorSystem("uniso-address-service")
   private val proxy = as.actorOf(Props[Proxy])
@@ -42,6 +45,30 @@ object AddressService extends AddressServiceConfig {
   def version = proxy.ask(GetVersion)(30.second).mapTo[Version].map(_.version)
   def initialize = initializer.ask(Initialize)(30.second)
 
+  //bus implementation
+  type Event = MsgEnvelope
+  type Classifier = String
+  type Subscriber = ActorRef
+ 
+  // is used for extracting the classifier from the incoming events  
+  override protected def classify(event: Event): Classifier = event.topic
+ 
+  // will be invoked for each event for all subscribers which registered themselves
+  // for the event’s classifier
+  override protected def publish(event: Event, subscriber: Subscriber): Unit = {
+    subscriber ! event.payload
+  }
+ 
+  // must define a full order over the subscribers, expressed as expected from
+  // `java.lang.Comparable.compare`
+  override protected def compareSubscribers(a: Subscriber, b: Subscriber): Int =
+    a.compareTo(b)
+ 
+  // determines the initial size of the index data structure
+  // used internally (i.e. the expected number of different classifiers)
+  override protected def mapSize: Int = 128
+  //end of bus implementation  
+
   class Proxy extends Actor with Stash {
 
     private var server: ActorRef = null
@@ -54,6 +81,8 @@ object AddressService extends AddressServiceConfig {
         this.server = server
         initializer forward r
         unstashAll
+        //get version for publishing
+        server ! GetVersion
       case GetVersion => sender ! Version(null)
       case _: Msg =>
         initializer ! Initialize
@@ -66,10 +95,13 @@ object AddressService extends AddressServiceConfig {
       case a: Address => server forward a
       case Finder => server forward Finder
       case GetVersion => server forward GetVersion
+      case v: Version => publish(MsgEnvelope("version", v))
       case r @ Ready(server) =>
         this.server ! Shutdown
         this.server = server
         initializer forward r
+        //get version for publishing
+        server ! GetVersion
       case Shutdown =>
         server ! Shutdown
         server = null
