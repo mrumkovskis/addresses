@@ -32,6 +32,11 @@ addresses.controller('AddressesCtrl', function($scope, $http, $filter,$httpParam
       }
     });
   };
+
+  $scope.addressClicked = function (a) {
+    a.extended_view = ! a.extended_view;
+  }
+
   $scope.updateVersion = function() {
     $http.get('version').success(function(data) {
       var i = data.indexOf('.');
