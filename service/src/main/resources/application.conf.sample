@@ -13,6 +13,12 @@ spray.can.server {
   pipelining-limit = 5
 }
 
+spray.websocket {
+  # Supported Per-message Compression Extensions. To disable, set to []
+  #pmce = []
+  pmce = ["permessage-deflate"]
+}
+
 VZD {
   ak-file = "tmp/AK\\d{8}\\.zip"
   blacklist = "AW_VIETA_GEO.CSV, AW_IELA_GEO.CSV, AW_VIETA_CENTROID_GEO.CSV, AW_EKA_GEO.CSV"
