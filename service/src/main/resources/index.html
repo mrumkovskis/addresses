@@ -55,16 +55,19 @@
             <td>&nbsp;</td>
             <td>
               <table class="table table-condensed">
-                <tr><td class="col-sm-2">code   </td><td>{{ address.code }}</td></tr>
-                <tr><td>typ    </td><td>{{ address.typ }}</td></tr>
-                <tr><td>address</td><td>{{ address.address }}</td></tr>
-                <tr><td>ielCode</td><td>{{ address.ielCode }}</td></tr>
-                <tr><td>ielName</td><td>{{ address.ielName }}</td></tr>
-                <tr><td>nltCode</td><td>{{ address.nltCode }}</td></tr>
-                <tr><td>nltName</td><td>{{ address.nltName }}</td></tr>
-                <tr><td>pilCode</td><td>{{ address.pilCode }}</td></tr>
-                <tr><td>pilName</td><td>{{ address.pilName }}</td></tr>
-                <tr><td>zipCode</td><td>{{ address.zipCode }}</td></tr>
+                <tr><td class="col-sm-2">Kods</td><td colspan="2">{{ address.code }}</td></tr>
+                <tr><td>Adrese</td><td colspan="2">{{ address.address }}</td></tr>
+                <tr><td>Indekss</td><td colspan="2">{{ address.zipCode }}</td></tr>
+                <tr><td>Tips</td><td colspan="2">{{ address.typ }}</td></tr>
+                <tr><td colspan="3"><strong>Struktūra</strong></td></tr>
+                <tr><td>Pilsēta </td><td>{{ address.pilCode }}</td><td>{{ address.pilName }}</td></tr>
+                <tr><td>Novads</td><td>{{ address.novCode }}</td><td>{{ address.novName }}</td></tr>
+                <tr><td>Pagasts</td><td>{{ address.pagCode }}</td><td>{{ address.pagName }}</td></tr>
+                <tr><td>Ciems</td><td>{{ address.cieCode }}</td><td>{{ address.cieName }}</td></tr>
+                <tr><td>Iela</td><td>{{ address.ielCode }}</td><td>{{ address.ielName }}</td></tr>
+                <tr><td>Māja</td><td>{{ address.nltCode }}</td><td>{{ address.nltName }}</td></tr>
+                <tr><td>Dzīvoklis</td><td>{{ address.dzvCode }}</td><td>{{ address.dzvName }}</td></tr>
+
               </table>
             </td>
             <td>&nbsp;</td>
