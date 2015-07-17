@@ -1,4 +1,4 @@
-var addresses = angular.module('addresses', []);
+var addresses = angular.module('addresses', ['ngAnimate']);
 
 addresses.controller('AddressesCtrl', function($scope, $http, $filter,$httpParamSerializer) {
   $scope.search = '';
