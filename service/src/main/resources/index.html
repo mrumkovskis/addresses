@@ -16,6 +16,11 @@
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.2/angular.min.js"></script>
 
     <script src="addresses.js"></script>
+    <style type="text/css">
+      .address-row {
+        cursor: pointer;
+      }
+    </style>
   </head>
   <body ng-controller="AddressesCtrl">
     <div class="col-sm-offset-1 col-sm-10">
@@ -32,7 +37,7 @@
       <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
         ng-if="search.length > 0">address?{{urlParams}}</a></p>
       <input type="text" class="form-control" ng-model="search" ng-change="updateAddress()" ng-model-options="{debounce:300}" placeholder="Meklējamā adrese">
-      <table class="table table-striped col-sm-12">
+      <table class="table table-striped">
         <thead>
           <tr>
             <th class="col-sm-1">#</th>
@@ -41,10 +46,28 @@
           </tr>
         </thead>
         <tbody>
-          <tr ng-repeat="address in addresses">
+          <tr ng-repeat-start="address in addresses" ng-click="addressClicked(address)" class="address-row">
             <td>{{$index + 1}}</td>
             <td>{{address.address}}</td>
             <td>{{address.code}}</td>
+          </tr>
+          <tr ng-repeat-end ng-if="address.extended_view">
+            <td>&nbsp;</td>
+            <td>
+              <table class="table table-condensed">
+                <tr><td class="col-sm-2">code   </td><td>{{ address.code }}</td></tr>
+                <tr><td>typ    </td><td>{{ address.typ }}</td></tr>
+                <tr><td>address</td><td>{{ address.address }}</td></tr>
+                <tr><td>ielCode</td><td>{{ address.ielCode }}</td></tr>
+                <tr><td>ielName</td><td>{{ address.ielName }}</td></tr>
+                <tr><td>nltCode</td><td>{{ address.nltCode }}</td></tr>
+                <tr><td>nltName</td><td>{{ address.nltName }}</td></tr>
+                <tr><td>pilCode</td><td>{{ address.pilCode }}</td></tr>
+                <tr><td>pilName</td><td>{{ address.pilName }}</td></tr>
+                <tr><td>zipCode</td><td>{{ address.zipCode }}</td></tr>
+              </table>
+            </td>
+            <td>&nbsp;</td>
           </tr>
         </tbody>
       </table>
