@@ -50,7 +50,7 @@ import AddressService._
 class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker {
 
   def businessLogic: Receive = {
-    // just bounce frames back for Autobahn testsuite
+    // just bounce frames back for the time being
     case x @ (_: BinaryFrame | _: TextFrame) =>
       sender() ! x
 
@@ -130,7 +130,6 @@ trait AddressHttpService extends HttpService {
 
 class AddressHttpServer extends HttpServiceActor with AddressHttpService with ActorLogging {
   def wsHandshaking: Receive = {
-    // when a new connection comes in we register a WebSocketConnection actor as the per connection handler
     case HandshakeRequest(state) =>
       val serverConnection = sender()
       val conn = context.actorOf(Props(classOf[WsServiceActor], serverConnection))
