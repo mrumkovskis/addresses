@@ -67,7 +67,11 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   // determines the initial size of the index data structure
   // used internally (i.e. the expected number of different classifiers)
   override protected def mapSize: Int = 128
-  //end of bus implementation  
+  //end of bus implementation
+
+  //beautification method
+  def normalizeVersion(version: String) =
+    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>") 
 
   class Proxy extends Actor with Stash {
 

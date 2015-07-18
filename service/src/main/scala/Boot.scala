@@ -47,11 +47,7 @@ case class AddressFull(code: Int, address: String, zipCode: Option[String], typ:
 import MyJsonProtocol._
 import AddressService._
 
-class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker with AddressHttpService {
-
-  def actorRefFactory = context
-
-  override def receive = handshaking orElse businessLogicNoUpgrade orElse closeLogic
+class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker {
 
   def businessLogic: Receive = {
     // just bounce frames back for Autobahn testsuite
@@ -66,18 +62,13 @@ class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServe
     case x: HttpRequest => // do something
   }
 
-  def businessLogicNoUpgrade: Receive = akka.event.LoggingReceive { runRoute(route) }
-
   override def handshaking: Receive = {
 
       // when a client request for upgrading to websocket comes in, we send
       // UHttp.Upgrade to upgrade to websocket pipelines with an accepting response.
-      case HandshakeRequest(state) =>
-        state match {
-          case wsFailure: HandshakeFailure => sender() ! wsFailure.response
-          case wsContext: HandshakeContext => sender() ! UHttp.UpgradeServer(
-            pipelineStage(self, wsContext), wsContext.response)
-        }
+      case wsFailure: HandshakeFailure => serverConnection ! wsFailure.response
+      case wsContext: HandshakeContext => serverConnection ! UHttp.UpgradeServer(
+        pipelineStage(self, wsContext), wsContext.response)
 
       // upgraded successfully
       case UHttp.Upgraded =>
@@ -86,7 +77,7 @@ class AddressServiceActor(val serverConnection: ActorRef) extends WebSocketServe
         self ! UpgradedToWebSocket // notify Upgraded to WebSocket protocol
     }
 
-    override def postStop() = unsubscribe(self)
+  override def postStop() = unsubscribe(self)
 
 }
 
@@ -135,19 +126,19 @@ trait AddressHttpService extends HttpService {
     }
   }
 
-  def normalizeVersion(version: String) =
-    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>") 
-
 }
 
-class AddressHttpServer extends Actor with ActorLogging {
-  def receive = {
+class AddressHttpServer extends HttpServiceActor with AddressHttpService with ActorLogging {
+  def wsHandshaking: Receive = {
     // when a new connection comes in we register a WebSocketConnection actor as the per connection handler
-    case _: Http.Connected =>
+    case HandshakeRequest(state) =>
       val serverConnection = sender()
-      val conn = context.actorOf(Props(classOf[AddressServiceActor], serverConnection))
-      serverConnection ! Http.Register(conn)
+      val conn = context.actorOf(Props(classOf[WsServiceActor], serverConnection))
+      conn ! state
   }
+
+  def receive: Receive = wsHandshaking orElse akka.event.LoggingReceive { runRoute(route) }
+
 }
 
 object Boot extends scala.App {
