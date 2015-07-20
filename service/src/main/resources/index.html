@@ -21,6 +21,13 @@
       .address-row {
         cursor: pointer;
       }
+      .table>tbody>tr>td.details {
+        padding: 0;
+        border-top: none;
+      }
+      td.details .table-condensed>tbody>tr>td {
+        padding-left: 8px;
+      }
     </style>
   </head>
   <body ng-controller="AddressesCtrl">
@@ -62,7 +69,7 @@
           </tr>
           <tr ng-repeat-end ng-if="address.extended_view" class="animate-if">
             <td>&nbsp;</td>
-            <td>
+            <td class="details">
               <table class="table table-condensed">
                 <tr><td class="col-sm-2">Kods</td><td colspan="2">{{ address.code }}</td></tr>
                 <tr><td>Adrese</td><td colspan="2">{{ address.address }}</td></tr>
