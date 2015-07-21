@@ -49,6 +49,8 @@ import AddressService._
 
 class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker {
 
+  override def receive = akka.event.LoggingReceive { handshaking orElse closeLogic }
+
   def businessLogic: Receive = {
     // just bounce frames back for the time being
     case x @ (_: BinaryFrame | _: TextFrame) =>
@@ -72,7 +74,8 @@ class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWork
 
       // upgraded successfully
       case UHttp.Upgraded =>
-        context.become(businessLogic orElse closeLogic)
+        context.become(
+          akka.event.LoggingReceive { businessLogic orElse closeLogic })
         subscribe(self, "version")
         self ! UpgradedToWebSocket // notify Upgraded to WebSocket protocol
     }
@@ -136,7 +139,7 @@ class AddressHttpServer extends HttpServiceActor with AddressHttpService with Ac
       conn ! state
   }
 
-  def receive: Receive = wsHandshaking orElse akka.event.LoggingReceive { runRoute(route) }
+  def receive: Receive = akka.event.LoggingReceive { wsHandshaking orElse runRoute(route) }
 
 }
 
@@ -156,4 +159,3 @@ object Boot extends scala.App {
   IO(UHttp) ! Http.Bind(service, interface = "0.0.0.0",
     port = scala.util.Try(conf.getInt("address-service-port")).toOption.getOrElse(8082))
 }
-

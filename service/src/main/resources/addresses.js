@@ -50,20 +50,27 @@ addresses.controller('AddressesCtrl',
   $http.get('version').success(function(data) {
     $scope.normalizeVersion(data);
   });
-   
+
   //get version updates through websocket
-  var websocket = new WebSocket("ws://" + window.location.host + "/version-update");
-  websocket.onmessage = function(msg) {
-    //call scope apply so scope is synchronized with view are executed
-    $scope.$apply($scope.normalizeVersion(msg.data));
+  function createWebsocket() {
+    var ws = new WebSocket("ws://" + window.location.host + "/version-update");
+    ws.onmessage = function(msg) {
+      //call scope apply so scope is synchronized with view are executed
+      $scope.$apply($scope.normalizeVersion(msg.data));
+    };
+    ws.onopen = function(evt) { $log.info(evt) };
+    ws.onclose = function(evt) {
+      createWebsocket();
+      $log.info(evt);
+    };
+    ws.onerror = function(evt) { $log.error(evt) };
   };
-  websocket.onopen = function(evt) { $log.info(evt) };
-  websocket.onclose = function(evt) { $log.info(evt) };
-  websocket.onerror = function(evt) { $log.error(evt) };
+
+  createWebsocket();
 
   $scope.normalizeVersion = function (version) {
     var i = version.indexOf('.');
-    $scope.version = i == -1 ? version : version.substring(0, i);    
+    $scope.version = i == -1 ? version : version.substring(0, i);
   }
 
 });
