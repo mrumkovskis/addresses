@@ -26,7 +26,7 @@ import spray.httpx.marshalling.Marshaller
 import spray.json._
 import spray.http.HttpHeaders._
 import spray.can.websocket._
-import spray.can.websocket.frame.{ BinaryFrame, TextFrame }
+import spray.can.websocket.frame.{ Frame, FrameStream, BinaryFrame, TextFrame }
 
 import com.typesafe.config._
 
@@ -47,16 +47,20 @@ case class AddressFull(code: Int, address: String, zipCode: Option[String], typ:
 import MyJsonProtocol._
 import AddressService._
 
-class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWorker {
+class WsServiceActor(val serverConnection: ActorRef,
+  val businessLogic: PartialFunction[Any, Any]) extends Actor with ActorLogging {
+
+    println(s"\n\nCreated ws actor with conn: $serverConnection\n\n")
 
   override def receive = akka.event.LoggingReceive { handshaking orElse closeLogic }
 
-  def businessLogic: Receive = {
+  def work: Receive = {
     // just bounce frames back for the time being
     case x @ (_: BinaryFrame | _: TextFrame) =>
-      sender() ! x
+      sender ! x
 
-    case Version(version) => send(TextFrame(normalizeVersion(version)))
+    //is defined is checked in businessLogic, so accept any string message
+    case businessMessage: String => send(TextFrame(businessMessage))
 
     case x: FrameCommandFailed =>
       log.error("frame command failed", x)
@@ -64,21 +68,33 @@ class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWork
     case x: HttpRequest => // do something
   }
 
-  override def handshaking: Receive = {
+  def handshaking: Receive = {
+    // when a client request for upgrading to websocket comes in, we send
+    // UHttp.Upgrade to upgrade to websocket pipelines with an accepting response.
+    case wsFailure: HandshakeFailure => serverConnection ! wsFailure.response
+    case wsContext: HandshakeContext => serverConnection ! UHttp.UpgradeServer(
+      pipelineStage(self, wsContext), wsContext.response)
 
-      // when a client request for upgrading to websocket comes in, we send
-      // UHttp.Upgrade to upgrade to websocket pipelines with an accepting response.
-      case wsFailure: HandshakeFailure => serverConnection ! wsFailure.response
-      case wsContext: HandshakeContext => serverConnection ! UHttp.UpgradeServer(
-        pipelineStage(self, wsContext), wsContext.response)
+    // upgraded successfully
+    case UHttp.Upgraded =>
+      context.become(
+        akka.event.LoggingReceive { (businessLogic andThen work) orElse closeLogic })
+      subscribe(self, "version")
+  }
 
-      // upgraded successfully
-      case UHttp.Upgraded =>
-        context.become(
-          akka.event.LoggingReceive { businessLogic orElse closeLogic })
-        subscribe(self, "version")
-        self ! UpgradedToWebSocket // notify Upgraded to WebSocket protocol
-    }
+  def closeLogic: Receive = {
+    case ev: Http.ConnectionClosed =>
+      context.stop(self)
+      log.debug("Connection closed on event: {}", ev)
+  }
+
+  def send(frame: Frame) {
+    serverConnection ! FrameCommand(frame)
+  }
+
+  def send(frame: FrameStream) {
+    serverConnection ! FrameStreamCommand(frame)
+  }
 
   override def postStop() = unsubscribe(self)
 
@@ -87,6 +103,10 @@ class WsServiceActor(val serverConnection: ActorRef) extends WebSocketServerWork
 trait AddressHttpService extends HttpService {
 
   val CODE_PATTERN = "(\\d{9,})"r
+
+  val wsLogic: PartialFunction[Any, Any] = {
+    case Version(version) => normalizeVersion(version)
+  }
 
   val route = detach() {
     dynamic {
@@ -135,7 +155,8 @@ class AddressHttpServer extends HttpServiceActor with AddressHttpService with Ac
   def wsHandshaking: Receive = {
     case HandshakeRequest(state) =>
       val serverConnection = sender()
-      val conn = context.actorOf(Props(classOf[WsServiceActor], serverConnection))
+      val conn = context.actorOf(Props(classOf[WsServiceActor],
+        serverConnection, wsLogic))
       conn ! state
   }
 
