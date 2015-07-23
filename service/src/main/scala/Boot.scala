@@ -50,8 +50,6 @@ import AddressService._
 class WsServiceActor(val serverConnection: ActorRef,
   val businessLogic: PartialFunction[Any, Any]) extends Actor with ActorLogging {
 
-    println(s"\n\nCreated ws actor with conn: $serverConnection\n\n")
-
   override def receive = akka.event.LoggingReceive { handshaking orElse closeLogic }
 
   def work: Receive = {
