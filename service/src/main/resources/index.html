@@ -28,6 +28,9 @@
       td.details .table-condensed>tbody>tr>td {
         padding-left: 8px;
       }
+      .address-types {
+        padding-right: 20px;
+      }
     </style>
   </head>
   <body ng-controller="AddressesCtrl">
@@ -36,9 +39,9 @@
       <p>Versija: <code>{{version}}</code></p>
       <p>
         <p class="checkbox form-inline">
-          <label ng-repeat="type in types">
+          <label class="address-types" ng-repeat="type in types">
             <input type="checkbox" ng-model="type.selected"
-                   ng-change="updateAddress()">{{type.name}}&nbsp;&nbsp;&nbsp;&nbsp;
+                   ng-change="updateAddress()">{{type.name}}
           </label>
           <label>
             &nbsp;&nbsp;&nbsp;
@@ -47,7 +50,7 @@
             <span ng-class="{'text-muted': !limit.selected}">&nbsp;{{limit.name}}&nbsp;</span>
           </label>
           <input type="number" min="1" max="500" ng-model="limit.value" ng-readonly="!limit.selected"
-                 class="form-control input-sm">
+                 ng-change="updateAddress()" class="form-control input-sm">
         </p>
       </p>
       <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
