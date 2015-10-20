@@ -35,6 +35,8 @@ trait AddressIndexer { this: AddressFinder =>
     )
 
   protected var _index: scala.collection.mutable.HashMap[String, Array[Long]] = null
+  //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
+  protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
   def searchCodes(str: String, limit: Int = 20, types: Set[Int] = null) =
     (searchParams(str)
@@ -83,6 +85,9 @@ trait AddressIndexer { this: AddressFinder =>
     })
     val sortedAddresses = addresses.sortWith((a1, a2) => a1._2 < a2._2 || (a1._2 == a2._2 &&
         (a1._3.length < a2._3.length || (a1._3.length == a2._3.length && a1._3 < a2._3))))
+
+    _sortedPilsNovPagCiem = sortedAddresses.filter(_._2 % 100 < 5).map(_._1).toVector
+    println(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
 
     println("Creating index...")
     idx = 0
@@ -192,6 +197,7 @@ trait AddressIndexLoader { this: AddressIndexer =>
   import java.io._
   def save(addressMap: Map[Int, AddrObj],
     index: scala.collection.mutable.Map[String, Array[Long]],
+    sortedPilNovPagCiem: Vector[Int],
     akFileName: String) = {
 
     println(s"Saving address index for $akFileName...")
@@ -203,6 +209,8 @@ trait AddressIndexLoader { this: AddressIndexer =>
     println(s"Max. reference array length for the word '${maxRefArray._1}': ${maxRefArray._2.length}")
     val os = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))
     try {
+      os.writeInt(sortedPilNovPagCiem.size)
+      sortedPilNovPagCiem foreach os.writeInt
       os.writeInt(maxRefArrayLength)
       index.foreach(i => {
         os.writeUTF(i._1)
@@ -231,14 +239,22 @@ trait AddressIndexLoader { this: AddressIndexer =>
     val in = new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))
     val index = scala.collection.mutable.HashMap[String, Array[Long]]()
     var c = 0
+    var spnpc = new Array[Int](in.readInt)
+    //load pilseta, novads, pagasts, ciems
+    var i = 0
+    while(i < spnpc.length) {
+      spnpc(i) = in.readInt
+      i += 1
+    }
     var a = new Array[Long](in.readInt)
     try {
       while (in.available > 0) {
+        i = 0
         val w = in.readUTF
         val l = in.readInt
         if (a.length < l) a = new Array[Long](l)
         //(0 until l) foreach (a(_) = in.readLong) this is slow
-        var i = 0
+        i = 0
         while (i < l) {
           a(i) = in.readLong
           i += 1
@@ -265,7 +281,7 @@ trait AddressIndexLoader { this: AddressIndexer =>
         addressMap += (o.code -> o)
       })
     println(s"Address index loaded (words - $c, addresses - $ac) in ${System.currentTimeMillis - start}ms")
-    (addressMap, index)
+    (addressMap, index, spnpc.toVector)
   }
 
   def hasIndex(akFileName: String) = addressCacheFile(akFileName).exists && indexFile(akFileName).exists
@@ -316,63 +332,46 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
            Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
-  @deprecated("use search method with improved ranking", "")
-  def searchOld(str: String, limit: Int = 20, types: Set[Int] = null) = {
-    checkIndex
-    //deprecated
-    //sort(str, searchCodes(str, limit * 3) map address) take limit
-
-    //choose first addreses where seqMatchCount equals word count
-    val codes = searchCodes(str, -1, types)
-    val words = normalize(str)
-    (if (words.length < 2) codes take limit
-    else {
-      var (goodCount, otherCount, i) = (0, 0, 0)
-      val size = Math.min(codes.length, limit)
-      val result = new Array[Int](size)
-      while (goodCount < size && i < codes.length) {
-        if (seqMatchCount(words, codes(i)) == words.length) {
-          result(goodCount) = codes(i)
-          goodCount += 1
-        } else {
-          //not good matches add from the bottom of array
-          otherCount += 1
-          if (goodCount + otherCount <= size) result(size - otherCount) = codes(i)
-        }
-        i += 1
-      }
-      //revert others
-      0 until (size - goodCount)/2 foreach { x =>
-        val c = result(goodCount + x)
-        result(goodCount + x) = result(size - 1 - x)
-        result(size - 1 - x) = c
-      }
-      result
-    }) map address
-  }
   def search(str: String, limit: Int = 20, types: Set[Int] = null) = {
     checkIndex
-    val codes = searchCodes(str, -1, types)
-    val words = normalize(str)
-    (if (words.length < 2) codes take limit
-    else {
-      var (perfectRankCount, i) = (0, 0)
-      val size = Math.min(codes.length, limit)
-
-      val result = new scala.collection.mutable.ArrayBuffer[Long](size)
-      while (perfectRankCount < size && i < codes.length) {
-        val code = codes(i)
-        val r = rank(words, code)
-        if (r == 0) perfectRankCount += 1
-        val key = r.toLong << 53 | i.toLong << 32 | code
-        insertIntoHeap(result, key)
-        i += 1
+    if (str.trim.length == 0)
+      if (types == null || (types -- Set(104, 113, 105, 106)) != Set.empty)
+        Array[Address]()
+      else {
+        val result = new scala.collection.mutable.ArrayBuffer[Int]()
+        var (s, i) = (0, 0)
+        while (i < _sortedPilsNovPagCiem.size && s < limit) {
+          if(types contains _addressMap(_sortedPilsNovPagCiem(i)).typ) {
+            result += _sortedPilsNovPagCiem(i)
+            s += 1
+          }
+          i += 1
+        }
+        (result map address).toArray
       }
-      (if (size < result.size / 2) heap_topx(result, size)
-        else (if (size < result.size) result.take(size) else result).sorted.toArray)
-        .map(_ & 0x00000000FFFFFFFFL)
-        .map(_.toInt)
-    }) map address
+    else {
+      val codes = searchCodes(str, -1, types)
+      val words = normalize(str)
+      (if (words.length < 2) codes take limit
+      else {
+        var (perfectRankCount, i) = (0, 0)
+        val size = Math.min(codes.length, limit)
+
+        val result = new scala.collection.mutable.ArrayBuffer[Long](size)
+        while (perfectRankCount < size && i < codes.length) {
+          val code = codes(i)
+          val r = rank(words, code)
+          if (r == 0) perfectRankCount += 1
+          val key = r.toLong << 53 | i.toLong << 32 | code
+          insertIntoHeap(result, key)
+          i += 1
+        }
+        (if (size < result.size / 2) heap_topx(result, size)
+          else (if (size < result.size) result.take(size) else result).sorted.toArray)
+          .map(_ & 0x00000000FFFFFFFFL)
+          .map(_.toInt)
+      }) map address
+    }
   }
 
   def addressStruct(code: Int) = {
@@ -455,13 +454,14 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _index, addressFileName)
+    save(addressMap, _index, _sortedPilsNovPagCiem, addressFileName)
   }
 
   def loadIndex = {
     val r = load(addressFileName)
     _addressMap = r._1
     _index = r._2
+    _sortedPilsNovPagCiem = r._3
   }
 
   def insertIntoHeap(h: scala.collection.mutable.ArrayBuffer[Long], el: Long) {
