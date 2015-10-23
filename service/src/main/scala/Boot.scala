@@ -31,11 +31,13 @@ import spray.can.websocket.frame.{ Frame, FrameStream, BinaryFrame, TextFrame }
 import com.typesafe.config._
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f01 = jsonFormat18(AddressFull)
+  implicit val f01 = jsonFormat20(AddressFull)
   implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
 }
 
-case class AddressFull(code: Int, address: String, zipCode: Option[String], typ: Int,
+case class AddressFull(
+  code: Int, address: String, zipCode: Option[String], typ: Int,
+  coordX: Option[BigDecimal], coordY: Option[BigDecimal],
   pilCode: Option[Int] = None, pilName: Option[String] = None,
   novCode: Option[Int] = None, novName: Option[String] = None,
   pagCode: Option[Int] = None, pagName: Option[String] = None,
@@ -128,6 +130,7 @@ trait AddressHttpService extends HttpService {
               val st = f.addressStruct(a.code)
               import st._
               AddressFull(a.code, a.address, Option(a.zipCode), a.typ,
+                Option(a.coordX), Option(a.coordY),
                 pilCode, pilName,
                 novCode, novName,
                 pagCode, pagName,

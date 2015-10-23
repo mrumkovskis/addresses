@@ -17,7 +17,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
   private case class Struct(code: Int, af: AddressFinder = null) extends Msg
   private case class Address(code: Int, af: AddressFinder = null) extends Msg
-  private case class Init(akFileName: String, blackList: Set[String]) extends Msg
+  private case class Init(akFileName: String, blackList: Set[String], houseCoordFile: String) extends Msg
   private case class Ready(serverActor: ActorRef) extends Msg
   private case object Initialize extends Msg
   private case object Finder extends Msg
@@ -49,21 +49,21 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   type Event = MsgEnvelope
   type Classifier = String
   type Subscriber = ActorRef
- 
-  // is used for extracting the classifier from the incoming events  
+
+  // is used for extracting the classifier from the incoming events
   override protected def classify(event: Event): Classifier = event.topic
- 
+
   // will be invoked for each event for all subscribers which registered themselves
   // for the event’s classifier
   override protected def publish(event: Event, subscriber: Subscriber): Unit = {
     subscriber ! event.payload
   }
- 
+
   // must define a full order over the subscribers, expressed as expected from
   // `java.lang.Comparable.compare`
   override protected def compareSubscribers(a: Subscriber, b: Subscriber): Int =
     a.compareTo(b)
- 
+
   // determines the initial size of the index data structure
   // used internally (i.e. the expected number of different classifiers)
   override protected def mapSize: Int = 128
@@ -71,7 +71,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
   //beautification method
   def normalizeVersion(version: String) =
-    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>") 
+    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")
 
   class Proxy extends Actor with Stash {
 
@@ -128,7 +128,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       case Version(version) if ready =>
         val fn = addressFileName
         if (fn != null && (version == null || version < fn)) {
-          context.actorOf(Props[Server]).tell(Init(fn, blackList), proxy)
+          context.actorOf(Props[Server]).tell(Init(fn, blackList,
+            houseCoordFile), proxy)
           ready = false
         } else {
           if (fn == null && version == null) proxy ! Status.Failure(new RuntimeException(
@@ -170,8 +171,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     def receive = init
 
     def init: Receive = {
-      case Init(akFileName, blackList) =>
-        af = new AddressFinder(akFileName, blackList)
+      case Init(akFileName, blackList, houseCoordFile) =>
+        af = new AddressFinder(akFileName, blackList, houseCoordFile)
         af.init
         context.become(serve, true)
         sender ! Ready(self)
@@ -252,9 +253,11 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
           .map(_.getPath)
       }.orNull
   }
+  def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
 }
 
-class AddressFinder(val addressFileName: String, val blackList: Set[String])
+class AddressFinder(val addressFileName: String, val blackList: Set[String],
+  val houseCoordFile: String)
 extends lv.addresses.indexer.AddressFinder
 //for debugging purposes
 object AddressFinder extends lv.addresses.indexer.AddressFinder with AddressServiceConfig

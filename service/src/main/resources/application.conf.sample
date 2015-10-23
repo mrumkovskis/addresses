@@ -22,6 +22,7 @@ spray.websocket {
 VZD {
   ak-file = "tmp/AK\\d{8}\\.zip"
   blacklist = "AW_VIETA_GEO.CSV, AW_IELA_GEO.CSV, AW_VIETA_CENTROID_GEO.CSV, AW_EKA_GEO.CSV"
+  house-coord-file = "AW_EKA_GEO.CSV"
   init-on-startup = false
   worker-actor-count = 10
   initializer-run-interval = 1h

@@ -16,7 +16,7 @@ import scala.language.postfixOps
 trait AddressIndexer { this: AddressFinder =>
 
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
-      words: Vector[String]) {
+      words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null) {
     def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
       addressMap.get(superCode).map(ao => ao.foldLeft(o(z, this))(o)).getOrElse(o(z, this))
     def foldRight[A](z: A)(o: (A, AddrObj) => A): A =
@@ -166,12 +166,22 @@ trait AddressLoader { this: AddressFinder =>
   def conv_dziv(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(7), line(5).toInt, null,
       normalize(line(7)).toVector)
 
-  def loadAddresses(addressZipFile: String = addressFileName) = {
-    println(s"Loading addreses from file $addressZipFile...")
+  def loadAddresses(addressZipFile: String = addressFileName, hcf: String = houseCoordFile) = {
+    println(s"Loading addreses from file $addressZipFile, house coordinates from file $houseCoordFile...")
     val start = System.currentTimeMillis
     var currentFile: String = null
     var converter: Array[String] => AddrObj = null
     val f = new java.util.zip.ZipFile(addressZipFile)
+    val houseCoords = Option(hcf).flatMap(cf => Option(f.getEntry(cf)))
+      .map{e =>
+        println(s"Loading house coordinates...")
+        scala.io.Source.fromInputStream(f.getInputStream(e))
+      }.toList
+      .flatMap(_.getLines.drop(1))
+      .map{r =>
+        val coords = r.split(";").map(_.drop(1).dropRight(1))
+        coords(1).toInt -> (BigDecimal(coords(2)) -> BigDecimal(coords(3)))
+      }.toMap
     val addressMap = f.entries.asScala
       .filter(files contains _.getName)
       .map(f => { println(s"loading file: $f"); converter = files(f.getName); currentFile = f.getName; f })
@@ -184,7 +194,10 @@ trait AddressLoader { this: AddressFinder =>
         (if (Set("AW_NLIETA.CSV", "AW_DZIV.CSV") contains currentFile) r(2) else r(7)) == "#EKS#"
       })
       .map(r => converter(r.split(";").map(_.drop(1).dropRight(1))))
-      .map(o => o.code -> o)
+      .map(o => o.code -> houseCoords
+        .get(o.code)
+        .map(coords => o.copy(coordX = coords._1).copy(coordY = coords._2))
+        .getOrElse(o))
       .toMap
     f.close
     println(s"${addressMap.size} addresses loaded in ${System.currentTimeMillis - start}ms")
@@ -226,7 +239,10 @@ trait AddressIndexLoader { this: AddressIndexer =>
     try {
       addressMap.foreach(a => {
         import a._2._
-        w.println(s"$code;$typ;$name;$superCode;${Option(zipCode).getOrElse("")}")
+        w.println(s"$code;$typ;$name;$superCode;${
+          Option(zipCode).getOrElse("")};${
+          Option(coordX).getOrElse("")};${
+          Option(coordY).getOrElse("")}")
       })
     } finally w.close
     println(s"Address index saved in ${System.currentTimeMillis - start}ms")
@@ -270,16 +286,19 @@ trait AddressIndexLoader { this: AddressIndexer =>
     var ac = 0
     scala.io.Source.fromInputStream(new BufferedInputStream(new FileInputStream(addrFile)), "UTF-8")
       .getLines
-      .foreach(l => {
+      .foreach { l =>
         ac += 1
-        val a = l.split(";").padTo(5, null)
+        val a = l.split(";").padTo(7, null)
         val o =
-          try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4), normalize(a(2)).toVector)
+          try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
+            normalize(a(2)).toVector,
+            Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
+            Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull)
           catch {
             case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
           }
         addressMap += (o.code -> o)
-      })
+      }
     println(s"Address index loaded (words - $c, addresses - $ac) in ${System.currentTimeMillis - start}ms")
     (addressMap, index, spnpc.toVector)
   }
@@ -296,7 +315,8 @@ trait AddressIndexLoader { this: AddressIndexer =>
   }
 }
 
-case class Address(code: Int, address: String, zipCode: String, typ: Int)
+case class Address(code: Int, address: String, zipCode: String, typ: Int,
+  coordX: BigDecimal, coordY: BigDecimal)
 case class AddressStruct(
   pilCode: Option[Int] = None, pilName: Option[String] = None,
   novCode: Option[Int] = None, novName: Option[String] = None,
@@ -395,12 +415,19 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     addressMap
       .get(code)
       .map {
-        _.foldRight((new scala.collection.mutable.StringBuilder(), null: String, -1))((r, a) =>
+        _.foldRight((
+          new scala.collection.mutable.StringBuilder(),
+          null: String,
+          -1,
+          null: BigDecimal,
+          null: BigDecimal))((r, a) =>
           ( //place dash before apartment, otherwise comma
             if (a.typ == 109) r._1.append(" - " + a.name) else r._1.append(", " + a.name),
             if (r._2 == null) a.zipCode else r._2,
-            a.typ))
-      }.map(r => Address(code, r._1.drop(2).toString, r._2, r._3))
+            a.typ,
+            if (r._4 == null) a.coordX else r._4,
+            if (r._5 == null) a.coordY else r._5))
+      }.map(r => Address(code, r._1.drop(2).toString, r._2, r._3, r._4, r._5))
 
   def address(code: Int) = addressOption(code).get
 
@@ -551,4 +578,5 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 trait AddressIndexerConfig {
   def addressFileName: String
   def blackList: Set[String]
+  def houseCoordFile: String
 }
