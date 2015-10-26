@@ -1,6 +1,6 @@
 package lv.addresses.service
 
-import akka.actor.{ ActorSystem, Props, ActorRef }
+import akka.actor.{ ActorSystem, Props, ActorRef, Actor, ActorLogging }
 
 import scala.util.Try
 import scala.language.postfixOps
@@ -12,6 +12,8 @@ import spray.json._
 import com.typesafe.config._
 
 import akka.stream._
+import akka.stream.actor.ActorPublisher
+import akka.stream.actor.ActorPublisherMessage._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.Http
@@ -37,28 +39,38 @@ case class AddressFull(
 import MyJsonProtocol._
 import AddressService._
 
+class VersionSubscriberActor extends Actor with ActorLogging with ActorPublisher[Version] {
+  override def preStart {
+    subscribe(self, "version")
+    log.info("Version subscription actor started...")
+  }
+  def receive = {
+    case v: Version => onNext(v)
+    case Cancel | SubscriptionTimeoutExceeded => context.stop(self)
+  }
+  override def postStop {
+    unsubscribe(self)
+    log.info("Version subscription actor stopped...")
+  }
+}
+
 trait AddressHttpService {
 
   val CODE_PATTERN = "(\\d{9,})"r
 
+  val wsVersionNofifications =
+    Flow.wrap(FlowGraph.partial[FlowShape[Message, Message], ActorRef](
+      Source.actorPublisher[Version](Props[VersionSubscriberActor])
+        .map[Message](v => TextMessage.Strict(normalizeVersion(v.version)))) {
+        import FlowGraph.Implicits._
+        implicit builder => src =>
+          val M = builder.add(Merge[Message](2))
+          src ~> M
+          FlowShape(M.in(1), M.out)
+      }).via(Flow[Message].collect { case version: TextMessage.Strict => version })
+
   val route =
-    handleWebsocketMessages({
-      val graph = FlowGraph.partial[FlowShape[Message, Message], ActorRef](
-        Source.actorRef[Version](0, akka.stream.OverflowStrategy.fail)
-          .map[Message](v => TextMessage.Strict(normalizeVersion(v.version)))) {
-          import FlowGraph.Implicits._
-          implicit builder => src =>
-            val M = builder.add(Merge[Message](2))
-            src ~> M
-            FlowShape(M.in(1), M.out)
-      }
-      Flow.wrap(graph).viaMat(Flow[Message].collect {
-        case version: TextMessage.Strict => version
-      })((actor, _) => {
-          //TODO add watch to Service actor so unsubscribe is called on termination
-          subscribe(actor, "version")
-        })
-    }) ~ path("") {
+    handleWebsocketMessages(wsVersionNofifications) ~ path("") {
       redirect("/index.html", SeeOther)
     } ~ path("index.html") {
       getFromResource("index.html")
