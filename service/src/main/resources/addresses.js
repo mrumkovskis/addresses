@@ -51,6 +51,7 @@ addresses.controller('AddressesCtrl',
     $scope.normalizeVersion(data);
   });
 
+  $scope.wsFailCount = 0;
   //get version updates through websocket
   function createWebsocket() {
     var ws = new WebSocket("ws://" + window.location.host + "/version-update");
@@ -58,12 +59,12 @@ addresses.controller('AddressesCtrl',
       //call scope apply so scope is synchronized with view are executed
       $scope.$apply($scope.normalizeVersion(msg.data));
     };
-    ws.onopen = function(evt) { $log.info(evt) };
+    ws.onopen = function(evt) { $scope.wsFailCount = 0; $log.info(evt) };
     ws.onclose = function(evt) {
-      createWebsocket();
+      if ($scope.wsFailCount < 5) createWebsocket();
       $log.info(evt);
     };
-    ws.onerror = function(evt) { $log.error(evt) };
+    ws.onerror = function(evt) { $scope.wsFailCount++; $log.error(evt) };
   };
 
   createWebsocket();
