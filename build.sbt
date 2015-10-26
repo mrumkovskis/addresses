@@ -33,7 +33,7 @@ lazy val service = project
     mainClass in Compile := Some("lv.addresses.service.Boot")
   )
   .settings(Revolver.settings: _*)
-  .settings(javaOptions in Revolver.reStart += "-Xmx3G")
+  .settings(javaOptions in Revolver.reStart += "-Xmx4G")
 
 lazy val addresses = project
   .in(file("."))
