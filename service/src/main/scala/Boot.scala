@@ -51,7 +51,7 @@ trait AddressHttpService {
             val M = builder.add(Merge[Message](2))
             src ~> M
             FlowShape(M.in(1), M.out)
-      }.named("partial")
+      }
       Flow.wrap(graph).viaMat(Flow[Message].collect {
         case version: TextMessage.Strict => version
       })((actor, _) => {
