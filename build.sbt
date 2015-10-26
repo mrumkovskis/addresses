@@ -8,16 +8,14 @@ lazy val commonSettings = Seq(
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.3.9"
-  val sprayV = "1.3.3"
+  val akkaV = "2.4.0"
   Seq(
-  "io.spray"            %%  "spray-can"     % sprayV,
-  "io.spray"            %% "spray-routing-shapeless2" % sprayV,
+  "com.typesafe.akka" %% "akka-stream-experimental" % "1.0",
+  "com.typesafe.akka" %% "akka-http-core-experimental" % "1.0",
+  "com.typesafe.akka" %% "akka-http-experimental" % "1.0",
   "io.spray"            %%  "spray-json"    % "1.3.2",
-  "io.spray"            %%  "spray-testkit" % sprayV % "test",
   "com.typesafe.akka"   %%  "akka-actor"    % akkaV,
   "com.typesafe.akka"   %%  "akka-testkit"  % akkaV  % "test",
-  "com.wandoulabs.akka" %% "spray-websocket" % "0.1.4",
   "commons-net" % "commons-net" % "3.3")
 }
 
