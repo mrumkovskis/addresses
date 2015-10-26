@@ -59,15 +59,14 @@ trait AddressHttpService {
   val CODE_PATTERN = "(\\d{9,})"r
 
   val wsVersionNofifications =
-    Flow.wrap(FlowGraph.partial[FlowShape[Message, Message], ActorRef](
-      Source.actorPublisher[Version](Props[VersionSubscriberActor])
-        .map[Message](v => TextMessage.Strict(normalizeVersion(v.version)))) {
-        import FlowGraph.Implicits._
-        implicit builder => src =>
-          val M = builder.add(Merge[Message](2))
-          src ~> M
-          FlowShape(M.in(1), M.out)
-      })
+    Flow.wrap(FlowGraph.partial(Source.actorPublisher[Version](Props[VersionSubscriberActor])
+      .map(v => TextMessage.Strict(normalizeVersion(v.version)))) {
+      import FlowGraph.Implicits._
+      implicit builder => src =>
+        val M = builder.add(Merge[Message](2))
+        src ~> M
+        FlowShape(M.in(1), M.out)
+    })
 
   val route =
     handleWebsocketMessages(wsVersionNofifications) ~ path("") {
