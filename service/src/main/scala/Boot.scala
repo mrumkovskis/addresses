@@ -39,34 +39,19 @@ case class AddressFull(
 import MyJsonProtocol._
 import AddressService._
 
-class VersionSubscriberActor extends Actor with ActorLogging with ActorPublisher[Version] {
-  override def preStart {
-    subscribe(self, "version")
-    log.info("Version subscription actor started...")
-  }
-  def receive = {
-    case v: Version => onNext(v)
-    case Cancel | SubscriptionTimeoutExceeded => context.stop(self)
-  }
-  override def postStop {
-    unsubscribe(self)
-    log.info("Version subscription actor stopped...")
-  }
-}
-
 trait AddressHttpService {
 
   val CODE_PATTERN = "(\\d{9,})"r
 
   val wsVersionNofifications =
-    Flow.wrap(FlowGraph.partial(Source.actorPublisher[Version](Props[VersionSubscriberActor])
+    Flow.wrap(FlowGraph.partial(Source.actorRef[Version](0, OverflowStrategy.fail)
       .map(v => TextMessage.Strict(normalizeVersion(v.version)))) {
       import FlowGraph.Implicits._
       implicit builder => src =>
         val M = builder.add(Merge[Message](2))
         src ~> M
         FlowShape(M.in(1), M.out)
-    })
+    }).mapMaterializedValue (actor => subscribe(actor, "version"))
 
   val route =
     handleWebsocketMessages(wsVersionNofifications) ~ path("") {

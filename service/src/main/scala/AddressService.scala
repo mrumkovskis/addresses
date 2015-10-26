@@ -6,6 +6,7 @@ import akka.actor.ActorSystem
 import akka.actor.Props
 import akka.actor.Status
 import akka.actor.Stash
+import akka.actor.Terminated
 import akka.pattern.ask
 import akka.event.EventBus
 import akka.event.LookupClassification
@@ -23,6 +24,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private case object Finder extends Msg
   private case object Shutdown extends Msg
   private case object GetVersion extends Msg
+  private case class Subscribe(subscriber: Subscriber)
 
   case class Version(version: String)
   case class MsgEnvelope(topic: String, payload: Any)
@@ -49,6 +51,13 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   type Event = MsgEnvelope
   type Classifier = String
   type Subscriber = ActorRef
+
+  override def subscribe(subscriber: Subscriber, topic: Classifier) = {
+    val res = super.subscribe(subscriber, topic)
+    initializer ! Subscribe(subscriber)
+    as.log.info(s"$subscriber subscribed to version update.")
+    res
+  }
 
   // is used for extracting the classifier from the incoming events
   override protected def classify(event: Event): Classifier = event.topic
@@ -137,6 +146,10 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
           as.log.info(s"Not initializing address file '$fn'. Current version - '$version'")
         }
       case Ready(server) => ready = true
+      case Subscribe(subscriber) => context.watch(subscriber)
+      case Terminated(subscriber) =>
+        unsubscribe(subscriber)
+        as.log.info(s"$subscriber unsubscribed from version update.")
     }
 
     override def postStop() = initScheduler.cancel
@@ -148,7 +161,6 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     import akka.routing.ActorRefRoutee
     import akka.routing.Router
     import akka.routing.RoundRobinRoutingLogic
-    import akka.actor.Terminated
 
     var routerNr = 1
     private def createRoutee = {
