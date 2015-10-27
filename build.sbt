@@ -13,7 +13,7 @@ lazy val serviceDependencies = {
   "com.typesafe.akka" %% "akka-stream-experimental" % "1.0",
   "com.typesafe.akka" %% "akka-http-core-experimental" % "1.0",
   "com.typesafe.akka" %% "akka-http-experimental" % "1.0",
-  "io.spray"            %%  "spray-json"    % "1.3.2",
+  "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "1.0",
   "com.typesafe.akka"   %%  "akka-actor"    % akkaV,
   "com.typesafe.akka"   %%  "akka-testkit"  % akkaV  % "test",
   "commons-net" % "commons-net" % "3.3")
@@ -29,7 +29,6 @@ lazy val service = project
   .settings(commonSettings: _*)
   .settings(
     libraryDependencies ++= serviceDependencies,
-    resolvers ++= Seq("spray repo" at "http://repo.spray.io/"),
     mainClass in Compile := Some("lv.addresses.service.Boot")
   )
   .settings(Revolver.settings: _*)
