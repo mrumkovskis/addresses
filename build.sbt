@@ -3,20 +3,20 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.11.6",
+  scalaVersion := "2.11.7",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
 lazy val serviceDependencies = {
   val akkaV = "2.4.0"
   Seq(
-  "com.typesafe.akka" %% "akka-stream-experimental" % "1.0",
-  "com.typesafe.akka" %% "akka-http-core-experimental" % "1.0",
-  "com.typesafe.akka" %% "akka-http-experimental" % "1.0",
+  "com.typesafe.akka" %% "akka-stream-experimental"          % "1.0",
+  "com.typesafe.akka" %% "akka-http-core-experimental"       % "1.0",
+  "com.typesafe.akka" %% "akka-http-experimental"            % "1.0",
   "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "1.0",
-  "com.typesafe.akka"   %%  "akka-actor"    % akkaV,
-  "com.typesafe.akka"   %%  "akka-testkit"  % akkaV  % "test",
-  "commons-net" % "commons-net" % "3.3")
+  "com.typesafe.akka" %% "akka-actor"                        % akkaV,
+  "com.typesafe.akka" %% "akka-testkit"                      % akkaV  % "test",
+  "commons-net"        % "commons-net"                       % "3.3")
 }
 
 lazy val indexer = project

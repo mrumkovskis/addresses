@@ -11,6 +11,7 @@ import akka.pattern.ask
 import akka.event.EventBus
 import akka.event.LookupClassification
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
@@ -143,7 +144,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         } else {
           if (fn == null && version == null) proxy ! Status.Failure(new RuntimeException(
             s"Unable to load addresses using address file pattern $akFileName!"))
-          as.log.info(s"Not initializing address file '$fn'. Current version - '$version'")
+          as.log.debug(s"Not initializing address file '$fn'. Current version - '$version'")
         }
       case Ready(server) => ready = true
       case Subscribe(subscriber) => context.watch(subscriber)
@@ -241,6 +242,11 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
     println("ERROR: address file setting 'VZD.ak-file' not found")
     null
   }
+  def akDirName = {
+    val idx = akFileName.lastIndexOf('/')
+    if (idx != -1) akFileName.substring(0, idx) else "."
+  }
+  def akFileNamePattern = akFileName.substring(akFileName.lastIndexOf('/') + 1)
   def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
     conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
   val initOnStartup =
@@ -254,12 +260,11 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
 
   //return alphabetically last file name matching pattern
   def addressFileName: String = {
-    val idx = akFileName.lastIndexOf('/')
-    val dirName = if (idx != -1) akFileName.substring(0, idx) else "."
-    val regex = new scala.util.matching.Regex(akFileName.substring(idx + 1))
-    Option(new java.io.File(dirName)
-      .listFiles(new java.io.FileFilter { def accept(f: java.io.File) = regex.findFirstIn(f.getName) != None }))
-      .flatMap {
+    Option(new java.io.File(akDirName)
+      .listFiles(new java.io.FileFilter {
+        def accept(f: java.io.File) =
+          java.util.regex.Pattern.matches(akFileNamePattern, f.getName)
+      })).flatMap {
         _.sortBy(_.getName)
           .lastOption
           .map(_.getPath)

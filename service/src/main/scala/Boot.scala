@@ -100,6 +100,7 @@ object Boot extends scala.App with AddressHttpService {
   implicit val materializer = ActorMaterializer()
 
   AddressService.maybeInit
+  FTPDownload.initialize
   val bindingFuture = Http().bindAndHandle(route, "localhost",
     scala.util.Try(conf.getInt("address-service-port")).toOption.getOrElse(8082))
 }

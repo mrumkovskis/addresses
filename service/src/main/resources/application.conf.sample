@@ -2,21 +2,9 @@ akka {
   loglevel = INFO
   #loglevel = DEBUG
   actor.debug {
-    receive = on
-    autoreceive = on
+    #receive = on
+    #autoreceive = on
   }
-}
-
-spray.can.server {
-  request-timeout = 20s
-  registration-timeout = 5s
-  pipelining-limit = 5
-}
-
-spray.websocket {
-  # Supported Per-message Compression Extensions. To disable, set to []
-  #pmce = []
-  pmce = ["permessage-deflate"]
 }
 
 VZD {
@@ -25,14 +13,13 @@ VZD {
   house-coord-file = "AW_EKA_GEO.CSV"
   init-on-startup = false
   worker-actor-count = 10
-  initializer-run-interval = 1h
-#  ftp {
-#    host = "ftp.vzd.gov.lv"
-#    username = "NVA"
-#    password = ""
-#    path = "VAR_EXPORT/AREXPORT/"
-#    dir = "same as workspace above, normally"
-#  }
+  initializer-run-interval = 12h
+  ftp {
+    #host = "ftp.vzd.gov.lv"
+    #username = ""
+    #password = ""
+    #dir = "VAR_EXPORT/AREXPORT/"
+  }
 }
 
 port = 8082
