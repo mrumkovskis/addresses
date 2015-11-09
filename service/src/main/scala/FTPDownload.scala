@@ -11,6 +11,9 @@ import akka.actor.Props
 import AddressService._
 
 object FTPDownload {
+  
+  case object Download
+
   val config = com.typesafe.config.ConfigFactory.load
 
   val connection = new FTPClient()
@@ -29,15 +32,15 @@ object FTPDownload {
 
   def isFTPConfigured = !(Set(host, username, password, ftpDir, addressFileDir) contains null)
 
-  def initialize = if (isFTPConfigured) as.actorOf(Props[FTPDownload])
-    else as.log.info("FTP downloader not started due to missing configuration.")
+  def initialize = if (isFTPConfigured) {
+    val a =  as.actorOf(Props[FTPDownload])
+    a ! Download
+  } else as.log.info("FTP downloader not started due to missing configuration.")
 
 }
 
 class FTPDownload extends Actor {
   import FTPDownload._
-
-  case object Download
 
   //start scheduler
   private val initScheduler = context.system.scheduler.schedule(
