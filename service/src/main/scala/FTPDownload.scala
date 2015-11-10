@@ -11,7 +11,7 @@ import akka.actor.Props
 import AddressService._
 
 object FTPDownload {
-  
+
   case object Download
 
   val config = com.typesafe.config.ConfigFactory.load
@@ -40,8 +40,10 @@ object FTPDownload {
 }
 
 class FTPDownload extends Actor {
-  
+
   import FTPDownload._
+
+  val FILE_PATTERN = new scala.util.matching.Regex(akFileNamePattern)
 
   //start scheduler
   private val initScheduler = context.system.scheduler.schedule(
@@ -54,19 +56,18 @@ class FTPDownload extends Actor {
   }
 
   private def connect {
-    as.log.info("Attempting to connect to " + host)
+    as.log.debug("Attempting to connect to " + host)
     connection.connect(host)
     connection.login(username, password)
     connection.enterLocalPassiveMode()
     connection.setFileType(FTP.BINARY_FILE_TYPE)
-    as.log.info("Connection established!")
+    as.log.debug("Connection established!")
   }
 
   private def getFileNames: Array[String] = {
     val fileNames = connection.listNames(ftpDir)
     as.log.debug(s"Files on FTP server: ${fileNames.mkString(", ")}")
-    for (file <- fileNames if new scala.util.matching.Regex(akFileNamePattern).findFirstIn(file) != None)
-      yield file
+    fileNames.flatMap(FILE_PATTERN.findFirstIn(_).toList)
   }
 
   private def downloadNewest(fName: String) {
@@ -82,7 +83,7 @@ class FTPDownload extends Actor {
     val zips = getFileNames
     as.log.debug(s"Address files found on FTP server: ${zips.mkString(", ")}")
     val current = Option(addressFileName)
-      .map(fn => fn.substring(fn.indexOf('/') + 1))
+      .map(fn => fn.substring(fn.lastIndexOf('/') + 1))
       .getOrElse("")
     var newest = current
     for (zip <- zips) if (zip > newest) newest = zip
@@ -97,13 +98,13 @@ class FTPDownload extends Actor {
         as.log.info(s"Deleting old VZD address file: $current")
         new File(addressFileDir + "/" + current).delete()
       }
-    } else as.log.info("Already have the newest VZD address file: $current")
+    } else as.log.info(s"Already have the newest VZD address file: $current")
   } finally disconnect
 
   private def disconnect {
     connection.logout()
     connection.disconnect()
-    as.log.info("Disconnected from " + host)
+    as.log.debug("Disconnected from " + host)
   }
 
 }
