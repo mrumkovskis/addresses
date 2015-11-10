@@ -40,6 +40,7 @@ object FTPDownload {
 }
 
 class FTPDownload extends Actor {
+  
   import FTPDownload._
 
   //start scheduler
@@ -63,7 +64,7 @@ class FTPDownload extends Actor {
 
   private def getFileNames: Array[String] = {
     val fileNames = connection.listNames(ftpDir)
-    for (file <- fileNames if java.util.regex.Pattern.matches(akFileNamePattern, file))
+    for (file <- fileNames if new scala.util.matching.Regex(akFileNamePattern).findFirstIn(file) != None)
       yield file
   }
 
