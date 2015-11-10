@@ -211,8 +211,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     }
 
     override def postStop() {
+      as.log.info(s"Server stopped: ${if (af != null) af.addressFileName else ""}")
       af = null
-      as.log.info(s"Server stopped: ${af.addressFileName}")
     }
 
   }
