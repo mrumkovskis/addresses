@@ -64,6 +64,7 @@ class FTPDownload extends Actor {
 
   private def getFileNames: Array[String] = {
     val fileNames = connection.listNames(ftpDir)
+    as.log.debug(s"Files on FTP server: ${fileNames.mkString(", ")}")
     for (file <- fileNames if new scala.util.matching.Regex(akFileNamePattern).findFirstIn(file) != None)
       yield file
   }
@@ -79,6 +80,7 @@ class FTPDownload extends Actor {
   private def download = try {
     connect
     val zips = getFileNames
+    as.log.debug(s"Address files found on FTP server: ${zips.mkString(", ")}")
     val current = Option(addressFileName)
       .map(fn => fn.substring(fn.indexOf('/') + 1))
       .getOrElse("")
@@ -95,7 +97,7 @@ class FTPDownload extends Actor {
         as.log.info(s"Deleting old VZD address file: $current")
         new File(addressFileDir + "/" + current).delete()
       }
-    } else as.log.info("Already have the newest VZD address file")
+    } else as.log.info("Already have the newest VZD address file: $current")
   } finally disconnect
 
   private def disconnect {
