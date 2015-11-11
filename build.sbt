@@ -16,7 +16,9 @@ lazy val serviceDependencies = {
   "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "1.0",
   "com.typesafe.akka" %% "akka-actor"                        % akkaV,
   "com.typesafe.akka" %% "akka-testkit"                      % akkaV  % "test",
-  "commons-net"        % "commons-net"                       % "3.3")
+  "commons-net"        % "commons-net"                       % "3.3",
+  "ch.qos.logback"     % "logback-classic"                   % "1.1.3",
+  "com.typesafe.akka" %%  "akka-slf4j"                       % akkaV)
 }
 
 lazy val indexer = project
