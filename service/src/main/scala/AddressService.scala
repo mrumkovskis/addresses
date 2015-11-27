@@ -24,6 +24,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private case object Initialize extends Msg
   private case object Finder extends Msg
   private case object Shutdown extends Msg
+  private case object CleanIndexes extends Msg
   private case object GetVersion extends Msg
   private case class Subscribe(subscriber: Subscriber)
 
