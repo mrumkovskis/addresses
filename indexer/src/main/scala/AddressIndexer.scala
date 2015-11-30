@@ -305,8 +305,8 @@ trait AddressIndexLoader { this: AddressIndexer =>
 
   def hasIndex(akFileName: String) = addressCacheFile(akFileName).exists && indexFile(akFileName).exists
 
-  private def addressCacheFile(akFileName: String) = cacheFile(akFileName, "addresses")
-  private def indexFile(akFileName: String) = cacheFile(akFileName, "index")
+  def addressCacheFile(akFileName: String) = cacheFile(akFileName, "addresses")
+  def indexFile(akFileName: String) = cacheFile(akFileName, "index")
 
   private def cacheFile(akFileName: String, extension: String) = {
     val akFile = new File(akFileName)

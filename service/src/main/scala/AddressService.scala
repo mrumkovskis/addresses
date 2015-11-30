@@ -112,6 +112,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       case GetVersion => server forward GetVersion
       case v: Version => publish(MsgEnvelope("version", v))
       case r @ Ready(server) =>
+        this.server ! CleanIndexes
         this.server ! Shutdown
         this.server = server
         initializer forward r
@@ -202,6 +203,13 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         router = router.removeRoutee(a)
         createRoutee
         as.log.info(s"Terminated routee: $a")
+      case CleanIndexes =>
+        val (cache, index) = (af.addressCacheFile(af.addressFileName),
+          af.indexFile(af.addressFileName))
+        if (cache.delete) as.log.info(s"Deleted address cache: $cache") else
+          as.log.warning(s"Unable to delete address cache file $cache")
+        if (index.delete) as.log.info(s"Deleted address index: $index") else
+          as.log.warning(s"Unable to delete address index: $index")
       case Shutdown =>
         router.routees.foreach {
           case ActorRefRoutee(ref) =>
