@@ -8,17 +8,17 @@ lazy val commonSettings = Seq(
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.4.0"
+  val (akkaV, httpV) = ("2.4.1", "2.0.1")
   Seq(
-  "com.typesafe.akka" %% "akka-stream-experimental"          % "1.0",
-  "com.typesafe.akka" %% "akka-http-core-experimental"       % "1.0",
-  "com.typesafe.akka" %% "akka-http-experimental"            % "1.0",
-  "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "1.0",
-  "com.typesafe.akka" %% "akka-actor"                        % akkaV,
-  "com.typesafe.akka" %% "akka-testkit"                      % akkaV  % "test",
-  "commons-net"        % "commons-net"                       % "3.3",
-  "ch.qos.logback"     % "logback-classic"                   % "1.1.3",
-  "com.typesafe.akka" %%  "akka-slf4j"                       % akkaV)
+    "com.typesafe.akka" %% "akka-stream-experimental"          % httpV,
+    "com.typesafe.akka" %% "akka-http-core-experimental"       % httpV,
+    "com.typesafe.akka" %% "akka-http-experimental"            % httpV,
+    "com.typesafe.akka" %% "akka-http-spray-json-experimental" % httpV,
+    "com.typesafe.akka" %% "akka-actor"                        % akkaV,
+    "com.typesafe.akka" %%  "akka-slf4j"                       % akkaV,
+    "commons-net"        % "commons-net"                       % "3.3",
+    "ch.qos.logback"     % "logback-classic"                   % "1.1.3",
+    "com.typesafe.akka" %% "akka-testkit"                      % akkaV  % "test")
 }
 
 lazy val indexer = project

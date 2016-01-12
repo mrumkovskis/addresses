@@ -42,9 +42,9 @@ trait AddressHttpService {
   val CODE_PATTERN = "(\\d{9,})"r
 
   val wsVersionNofifications =
-    Flow.wrap(FlowGraph.partial(Source.actorRef[Version](0, OverflowStrategy.fail)
+    Flow.fromGraph(GraphDSL.create(Source.actorRef[Version](0, OverflowStrategy.fail)
       .map(v => TextMessage.Strict(normalizeVersion(v.version)))) {
-      import FlowGraph.Implicits._
+      import GraphDSL.Implicits._
       implicit builder => src =>
         val M = builder.add(Merge[Message](2))
         src ~> M
