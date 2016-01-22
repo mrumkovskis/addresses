@@ -8,7 +8,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val serviceDependencies = {
-  val (akkaV, httpV) = ("2.4.1", "2.0.1")
+  val (akkaV, httpV) = ("2.4.1", "2.0.2")
   Seq(
     "com.typesafe.akka" %% "akka-stream-experimental"          % httpV,
     "com.typesafe.akka" %% "akka-http-core-experimental"       % httpV,
