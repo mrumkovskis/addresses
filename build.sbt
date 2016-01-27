@@ -8,7 +8,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val serviceDependencies = {
-  val (akkaV, httpV) = ("2.4.1", "2.0.2")
+  val (akkaV, httpV) = ("2.4.1", "2.0.3")
   Seq(
     "com.typesafe.akka" %% "akka-stream-experimental"          % httpV,
     "com.typesafe.akka" %% "akka-http-core-experimental"       % httpV,
@@ -42,7 +42,10 @@ lazy val addresses = project
   .dependsOn(service)
   .settings(name := "addresses")
   .settings(commonSettings: _*)
-  .settings(initialCommands in console := "import lv.addresses.service._")
+  .settings(initialCommands in console := s"""
+    |import lv.addresses.service._
+    |import akka.actor._
+    |import akka.stream._""".stripMargin)
   .settings(
     aggregate in assembly := false,
     mainClass in assembly := Some("lv.addresses.service.Boot"),
