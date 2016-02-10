@@ -45,7 +45,10 @@ lazy val addresses = project
   .settings(initialCommands in console := s"""
     |import lv.addresses.service._
     |import akka.actor._
-    |import akka.stream._""".stripMargin)
+    |import akka.stream._
+    |import scaladsl._
+    |implicit val system = ActorSystem("test-system")
+    |implicit val materializer = ActorMaterializer()""".stripMargin)
   .settings(
     aggregate in assembly := false,
     mainClass in assembly := Some("lv.addresses.service.Boot"),
