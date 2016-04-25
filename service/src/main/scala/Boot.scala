@@ -52,7 +52,7 @@ trait AddressHttpService {
     }).mapMaterializedValue (actor => subscribe(actor, "version"))
 
   val route =
-    handleWebsocketMessages(wsVersionNofifications) ~ path("") {
+    handleWebSocketMessages(wsVersionNofifications) ~ path("") {
       redirect("/index.html", SeeOther)
     } ~ path("index.html") {
       getFromResource("index.html")
