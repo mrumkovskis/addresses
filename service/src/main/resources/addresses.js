@@ -54,7 +54,9 @@ addresses.controller('AddressesCtrl',
   $scope.wsFailCount = 0;
   //get version updates through websocket
   function createWebsocket() {
-    var ws = new WebSocket("ws://" + window.location.host + "/version-update");
+    var protocol;
+    if (window.location.protocol == "https:") protocol = "wss://"; else protocol = "ws://";
+    var ws = new WebSocket(protocol + window.location.host + "/version-update");
     ws.onmessage = function(msg) {
       //call scope apply so scope is synchronized with view are executed
       $scope.$apply($scope.normalizeVersion(msg.data));
