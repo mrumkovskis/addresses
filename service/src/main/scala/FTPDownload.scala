@@ -45,14 +45,21 @@ class FTPDownload extends Actor {
 
   val FILE_PATTERN = new scala.util.matching.Regex(akFileNamePattern)
 
-  //start scheduler
-  private val initScheduler = context.system.scheduler.schedule(
-    initializerRunInterval, initializerRunInterval, self, Download)
+  private var initScheduler: akka.actor.Cancellable = null
 
-  as.log.info("FTP downloader started")
+  override def preStart = {
+    //start scheduler
+    initScheduler = context.system.scheduler.schedule(
+      initializerRunInterval, initializerRunInterval, self, Download)
+    as.log.info("FTP downloader started")
+  }
 
   def receive: Receive = {
     case Download => download
+  }
+
+  override def postStop = {
+    as.log.info("FTP downloader stopped")
   }
 
   private def connect {
