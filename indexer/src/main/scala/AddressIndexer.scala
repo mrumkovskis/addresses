@@ -136,7 +136,7 @@ trait AddressIndexer { this: AddressFinder =>
   def normalize(str: String) = str
     .toLowerCase
     .foldLeft(scala.collection.mutable.ArrayBuffer[scala.collection.mutable.StringBuilder]() -> true)(
-      (b, c) => if (c.isWhitespace || "-,/.".contains(c)) (b._1, true)
+      (b, c) => if (c.isWhitespace || "-,/.\"'".contains(c)) (b._1, true)
       else {
         if (b._2) b._1.append(new scala.collection.mutable.StringBuilder)
         b._1.last.append(accents.getOrElse(c, c))
