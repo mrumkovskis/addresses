@@ -25,14 +25,14 @@ trait AddressIndexer { this: AddressFinder =>
   }
 
   val typeOrderMap = Map[Int, Int](
-    104 -> 1, //pilsēta
-    113 -> 2, //novads
-    105 -> 3, //pagasts
-    106 -> 4, //ciems
-    107 -> 5, //iela
-    108 -> 6, //nekustama lieta (māja)
-    109 -> 7 //dzivoklis
-    )
+    PIL -> 1, //pilsēta
+    NOV -> 2, //novads
+    PAG -> 3, //pagasts
+    CIE -> 4, //ciems
+    IEL -> 5, //iela
+    NLT -> 6, //nekustama lieta (māja)
+    DZI -> 7 //dzivoklis
+  )
 
   protected var _index: scala.collection.mutable.HashMap[String, Array[Long]] = null
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
@@ -329,6 +329,14 @@ case class AddressStruct(
 trait AddressFinder extends AddressIndexer
 with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
+  val PIL = 104
+  val NOV = 113
+  val PAG = 105
+  val CIE = 106
+  val IEL = 107
+  val NLT = 108
+  val DZI = 109
+
   private[this] var _addressMap: Map[Int, AddrObj] = null
 
   def addressMap = _addressMap
@@ -355,7 +363,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
   def search(str: String, limit: Int = 20, types: Set[Int] = null) = {
     checkIndex
     if (str.trim.length == 0)
-      if (types == null || (types -- Set(104, 113, 105, 106)) != Set.empty)
+      if (types == null || (types -- Set(PIL, NOV, PAG, CIE)) != Set.empty)
         Array[Address]()
       else {
         val result = new scala.collection.mutable.ArrayBuffer[Int]()
@@ -396,13 +404,13 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
   def addressStruct(code: Int) = {
     def s(st: AddressStruct, typ: Int, code: Int, name: String) = typ match {
-      case 104 => st.copy(pilCode = Option(code), pilName = Option(name))
-      case 113 => st.copy(novCode = Option(code), novName = Option(name))
-      case 105 => st.copy(pagCode = Option(code), pagName = Option(name))
-      case 106 => st.copy(cieCode = Option(code), cieName = Option(name))
-      case 107 => st.copy(ielCode = Option(code), ielName = Option(name))
-      case 108 => st.copy(nltCode = Option(code), nltName = Option(name))
-      case 109 => st.copy(dzvCode = Option(code), dzvName = Option(name))
+      case PIL => st.copy(pilCode = Option(code), pilName = Option(name))
+      case NOV => st.copy(novCode = Option(code), novName = Option(name))
+      case PAG => st.copy(pagCode = Option(code), pagName = Option(name))
+      case CIE => st.copy(cieCode = Option(code), cieName = Option(name))
+      case IEL => st.copy(ielCode = Option(code), ielName = Option(name))
+      case NLT => st.copy(nltCode = Option(code), nltName = Option(name))
+      case DZI => st.copy(dzvCode = Option(code), dzvName = Option(name))
       case _ => st
     }
     addressMap
@@ -415,19 +423,31 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     addressMap
       .get(code)
       .map {
-        _.foldRight((
-          new scala.collection.mutable.StringBuilder(),
-          null: String,
-          -1,
-          null: BigDecimal,
-          null: BigDecimal))((r, a) =>
-          ( //place dash before apartment, otherwise comma
-            if (a.typ == 109) r._1.append(" - " + a.name) else r._1.append(", " + a.name),
-            if (r._2 == null) a.zipCode else r._2,
-            a.typ,
-            if (r._4 == null) a.coordX else r._4,
-            if (r._5 == null) a.coordY else r._5))
-      }.map(r => Address(code, r._1.drop(2).toString, r._2, r._3, r._4, r._5))
+        _.foldLeft((
+            Map[Int, AddrObj](),
+            null: String, //zip code
+            0, //address object type
+            null: BigDecimal, //coordX
+            null: BigDecimal //coordY
+          )) { (m, a) =>
+          (m._1 + (a.typ -> a),
+           if (m._2 == null) a.zipCode else m._2,
+           a.typ,
+           if (m._4 == null) a.coordX else m._4,
+           if (m._5 == null) a.coordX else m._5
+          )
+        }
+      }.map { case (ac, zip, typ, coordX, coordY) =>
+        val as = new scala.collection.mutable.StringBuilder()
+        ac.get(IEL).foreach(iela => as ++= iela.name)
+        ac.get(NLT).foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja.name))
+        ac.get(DZI).foreach(dzivoklis => as ++= (" - " + dzivoklis.name))
+        ac.get(CIE).foreach(ciems => as ++= ((if (as.isEmpty) "" else "\n") + ciems.name))
+        ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
+        ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
+        ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
+        Address(code, as.toString, zip, typ, coordX, coordY)
+      }
 
   def address(code: Int) = addressOption(code).get
 
