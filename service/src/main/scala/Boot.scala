@@ -14,6 +14,7 @@ import com.typesafe.config._
 import akka.stream._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model.ws._
+import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
@@ -60,7 +61,7 @@ trait AddressHttpService {
       val pattern = params.get("search") map (_.head) getOrElse ("")
       val limit = params.get("limit") map (_.head.toInt) getOrElse 20
       val types = params.get("type").map(_.toSet.map((t: String) => t.toInt)).orNull
-      complete(
+      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { complete(
         (for {
           f <- finder
           s <- (pattern match {
@@ -82,8 +83,11 @@ trait AddressHttpService {
               dzvCode, dzvName)
           }
         }) map { _.toJson.prettyPrint })
+      }
     } ~ (path("address-structure" / IntNumber)) { code =>
-      complete(struct(code) map (_.toJson.prettyPrint))
+      respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
+        complete(struct(code) map (_.toJson.prettyPrint))
+      }
     } ~ path("version") {
       complete(version map (normalizeVersion(_)))
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
