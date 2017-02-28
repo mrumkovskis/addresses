@@ -37,7 +37,7 @@ addresses.controller('AddressesCtrl',
     var params = $scope.calculateUrlParams();
     $http.get('address', {params: params}).success(function(data) {
       if ($scope.search === searched) {
-        $scope.addresses = data;
+        $scope.addresses = data.map(a => {a.address = a.address.replace(/\n/g, ", "); return a});
         $scope.urlParams = $httpParamSerializer(params);
       }
     });
