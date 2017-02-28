@@ -87,7 +87,7 @@ trait AddressHttpService {
     } ~ path("version") {
       complete(version map (normalizeVersion(_)))
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
-      path(Rest) { resource => getFromResource(resource) }
+      path(Remaining) { resource => getFromResource(resource) }
     }
 }
 

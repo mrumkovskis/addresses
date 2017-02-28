@@ -3,15 +3,17 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.11.7",
+  scalaVersion := "2.12.1",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.4.4"
+  val akkaV = "2.4.17"
+  val akkaHttpV = "10.0.4"
   Seq(
     "com.typesafe.akka" %% "akka-actor"                        % akkaV,
-    "com.typesafe.akka" %% "akka-http-spray-json-experimental" % akkaV,
+    "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
+    "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
     "commons-net"        % "commons-net"                       % "3.3",
     "ch.qos.logback"     % "logback-classic"                   % "1.1.3",
