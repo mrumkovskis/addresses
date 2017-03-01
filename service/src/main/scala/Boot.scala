@@ -38,7 +38,7 @@ case class AddressFull(
 import MyJsonProtocol._
 import AddressService._
 
-trait AddressHttpService {
+trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport {
 
   val CODE_PATTERN = "(\\d{9,})"r
 
@@ -82,11 +82,11 @@ trait AddressHttpService {
               nltCode, nltName,
               dzvCode, dzvName)
           }
-        }) map { _.toJson.prettyPrint })
+        }) map { _.toJson })
       }
     } ~ (path("address-structure" / IntNumber)) { code =>
       respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-        complete(struct(code) map (_.toJson.prettyPrint))
+        complete(struct(code) map (_.toJson))
       }
     } ~ path("version") {
       complete(version map (normalizeVersion(_)))
