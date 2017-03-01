@@ -19,6 +19,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
   private case class Struct(code: Int, af: AddressFinder = null) extends Msg
   private case class Address(code: Int, af: AddressFinder = null) extends Msg
+  private case class Resolve(address: String, af: AddressFinder = null) extends Msg
   private case class Init(akFileName: String, blackList: Set[String], houseCoordFile: String) extends Msg
   private case class Ready(serverActor: ActorRef) extends Msg
   private case object Initialize extends Msg
@@ -44,6 +45,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     .ask(Struct(code))(30.second).mapTo[lv.addresses.indexer.AddressStruct]
   def address(code: Int) = proxy
     .ask(Address(code))(30.second).mapTo[Option[lv.addresses.indexer.Address]]
+  def resolve(address: String) = proxy
+    .ask(Resolve(address))(30.seconds).mapTo[lv.addresses.indexer.ResolvedAddress]
   def finder = proxy.ask(Finder)(30.second).mapTo[AddressFinder]
   def shutdown = proxy.ask(Shutdown)(30.second)
   def version = proxy.ask(GetVersion)(30.second).mapTo[Version].map(_.version)
@@ -108,6 +111,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       case s: Search => server forward s
       case s: Struct => server forward s
       case a: Address => server forward a
+      case r: Resolve => server forward r
       case Finder => server forward Finder
       case GetVersion => server forward GetVersion
       case v: Version => publish(MsgEnvelope("version", v))
@@ -197,6 +201,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       case s: Search => router.route(s.copy(af = af), sender)
       case s: Struct => router.route(s.copy(af = af), sender)
       case a: Address => router.route(a.copy(af = af), sender)
+      case r: Resolve => router.route(r.copy(af = af), sender)
       case Finder => sender ! af
       case GetVersion => sender ! Version(af.addressFileName)
       case Terminated(a) =>
@@ -231,6 +236,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       case Search(pattern, limit, types, af) => process(af.search(pattern, limit, types))
       case Struct(code, af) => process(af.addressStruct(code))
       case Address(code, af) => process(af.addressOption(code))
+      case Resolve(address, af) => process(af.resolve(address))
     }
     def process(block: => Any) = try {
       val result = block

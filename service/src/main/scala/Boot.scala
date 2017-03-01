@@ -20,7 +20,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f01 = jsonFormat20(AddressFull)
+  implicit val f20 = jsonFormat20(AddressFull)
+  implicit val f02 = jsonFormat2(ResolvedAddressFull)
   implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
 }
 
@@ -34,6 +35,8 @@ case class AddressFull(
   ielCode: Option[Int] = None, ielName: Option[String] = None,
   nltCode: Option[Int] = None, nltName: Option[String] = None,
   dzvCode: Option[Int] = None, dzvName: Option[String] = None)
+
+ case class ResolvedAddressFull(address: String, resolvedAddress: Option[AddressFull])
 
 import MyJsonProtocol._
 import AddressService._
@@ -69,22 +72,20 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
             case p => search(p, limit, types)
           })
         } yield {
-          s map { a =>
-            val st = f.addressStruct(a.code)
-            import st._
-            AddressFull(a.code, a.address, Option(a.zipCode), a.typ,
-              Option(a.coordX), Option(a.coordY),
-              pilCode, pilName,
-              novCode, novName,
-              pagCode, pagName,
-              cieCode, cieName,
-              ielCode, ielName,
-              nltCode, nltName,
-              dzvCode, dzvName)
-          }
+          s map { a => addrFull(a, f.addressStruct(a.code)) }
         }) map { _.toJson })
       }
-    } ~ (path("address-structure" / IntNumber)) { code =>
+    } ~ (path("resolve") & get & parameter("address")) { address =>
+      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { complete(
+        finder.map { f =>
+          val ra = f.resolve(address)
+          ResolvedAddressFull(
+            ra.address,
+            ra.resolvedAddress.map(rao => addrFull(rao, f.addressStruct(rao.code)))
+          ).toJson
+        })
+      }
+    } ~ (path("address-structure" / IntNumber) & get) { code =>
       respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
         complete(struct(code) map (_.toJson))
       }
@@ -92,6 +93,22 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
       complete(version map (normalizeVersion(_)))
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
       path(Remaining) { resource => getFromResource(resource) }
+    }
+
+    private def addrFull(
+      a: lv.addresses.indexer.Address,
+      struct: lv.addresses.indexer.AddressStruct
+    ) = {
+      import struct._
+      AddressFull(a.code, a.address, Option(a.zipCode), a.typ,
+        Option(a.coordX), Option(a.coordY),
+        pilCode, pilName,
+        novCode, novName,
+        pagCode, pagName,
+        cieCode, cieName,
+        ielCode, ielName,
+        nltCode, nltName,
+        dzvCode, dzvName)
     }
 }
 

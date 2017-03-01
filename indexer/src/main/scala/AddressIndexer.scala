@@ -136,7 +136,7 @@ trait AddressIndexer { this: AddressFinder =>
   def normalize(str: String) = str
     .toLowerCase
     .foldLeft(scala.collection.mutable.ArrayBuffer[scala.collection.mutable.StringBuilder]() -> true)(
-      (b, c) => if (c.isWhitespace || "-,/.\"'".contains(c)) (b._1, true)
+      (b, c) => if (c.isWhitespace || "-,/.\"'\n".contains(c)) (b._1, true)
       else {
         if (b._2) b._1.append(new scala.collection.mutable.StringBuilder)
         b._1.last.append(accents.getOrElse(c, c))
@@ -325,7 +325,7 @@ case class AddressStruct(
   ielCode: Option[Int] = None, ielName: Option[String] = None,
   nltCode: Option[Int] = None, nltName: Option[String] = None,
   dzvCode: Option[Int] = None, dzvName: Option[String] = None)
-case class ResolvedAddress(originalAddress: String, address: AddressStruct)
+case class ResolvedAddress(address: String, resolvedAddress: Option[Address])
 
 trait AddressFinder extends AddressIndexer
 with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
@@ -361,7 +361,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
            Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
-  def search(str: String, limit: Int = 20, types: Set[Int] = null) = {
+  def search(str: String, limit: Int = 20, types: Set[Int] = null): Array[Address] = {
     checkIndex
     if (str.trim.length == 0)
       if (types == null || (types -- Set(PIL, NOV, PAG, CIE)) != Set.empty)
@@ -452,8 +452,32 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
   def address(code: Int) = addressOption(code).get
 
+  /** Address format:
+        <IEL> <NLT> - <DZI>, <CIEM>, <PAG>|<PIL>, <NOV>
+        Examples:
+          	Ancīši, Ancene, Asares pag., Aknīstes nov.
+            Vīlandes iela 18 - 1, Rīga
+
+  */
   def resolve(addressString: String): ResolvedAddress = {
-    null
+    case class Basta(resolved: Option[Address]) extends Exception
+    search(addressString, 1) match {
+      case Array(address) if addressString == address.address.replace("\n", ", ") => //exact match
+        ResolvedAddress(addressString, Some(address))
+      case _ => ResolvedAddress(
+        addressString,
+        try addressString.split(",").map(_.trim).foldRight(Option[Address](null)) {
+          case (a, resolvedAddr) =>
+            val resolvable = a + resolvedAddr.map("\n" + _.address).mkString
+            search(resolvable, 1) match {
+              case Array(address) if resolvable == address.address => Some(address)
+              case _ => throw Basta(resolvedAddr)
+            }
+        } catch {
+          case Basta(resolved) => resolved
+        }
+      )
+    }
   }
 
 
