@@ -325,6 +325,7 @@ case class AddressStruct(
   ielCode: Option[Int] = None, ielName: Option[String] = None,
   nltCode: Option[Int] = None, nltName: Option[String] = None,
   dzvCode: Option[Int] = None, dzvName: Option[String] = None)
+case class ResolvedAddress(originalAddress: String, address: AddressStruct)
 
 trait AddressFinder extends AddressIndexer
 with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
@@ -450,6 +451,10 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
       }
 
   def address(code: Int) = addressOption(code).get
+
+  def resolve(addressString: String): ResolvedAddress = {
+    null
+  }
 
 
   //matching starts from the end of array and from the end of address object chain
