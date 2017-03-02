@@ -13,6 +13,7 @@ import com.typesafe.config._
 
 import akka.stream._
 import akka.stream.scaladsl._
+import akka.http.scaladsl.model.{HttpMethods, HttpEntity}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.Http
@@ -56,7 +57,10 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
     }).mapMaterializedValue (actor => subscribe(actor, "version"))
 
   val route =
-    handleWebSocketMessages(wsVersionNofifications) ~ path("") {
+    (options & (path("address") | path("resolve") | path("address-structure"))) {
+      respondWithHeaders(`Access-Control-Allow-Origin`.`*`,
+        `Access-Control-Allow-Methods`(HttpMethods.GET)) { complete(HttpEntity.Empty) }
+    } ~ handleWebSocketMessages(wsVersionNofifications) ~ path("") {
       redirect("/index.html", SeeOther)
     } ~ path("index.html") {
       getFromResource("index.html")
