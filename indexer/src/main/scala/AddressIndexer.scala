@@ -135,13 +135,14 @@ trait AddressIndexer { this: AddressFinder =>
   //better performance, whitespaces are eliminated in the same run as unaccent operation
   def normalize(str: String) = str
     .toLowerCase
-    .foldLeft(scala.collection.mutable.ArrayBuffer[scala.collection.mutable.StringBuilder]() -> true)(
-      (b, c) => if (c.isWhitespace || "-,/.\"'\n".contains(c)) (b._1, true)
-      else {
-        if (b._2) b._1.append(new scala.collection.mutable.StringBuilder)
-        b._1.last.append(accents.getOrElse(c, c))
-        (b._1, false)
-      })._1
+    .foldLeft(scala.collection.mutable.ArrayBuffer[scala.collection.mutable.StringBuilder]() -> true){
+       case ((s, b), c) =>
+         if (c.isWhitespace || "-,/.\"'\n".contains(c)) (s, true) else {
+           if (b) s.append(new scala.collection.mutable.StringBuilder)
+             s.last.append(accents.getOrElse(c, c))
+           (s, false)
+      }
+    }._1
     .map(_.toString)
     .toArray
 
