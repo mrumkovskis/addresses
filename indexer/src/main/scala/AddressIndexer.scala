@@ -339,6 +339,16 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
   val NLT = 108
   val DZI = 109
 
+  val writtenOrder = Map (
+    IEL -> 0,
+    NLT -> 1,
+    DZI -> 2,
+    CIE -> 3,
+    PIL -> 4,
+    PAG -> 5,
+    NOV -> 6
+  )
+
   private[this] var _addressMap: Map[Int, AddrObj] = null
 
   def addressMap = _addressMap
@@ -481,53 +491,41 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
     }
   }
 
-
-  //matching starts from the end of array and from the end of address object chain
-  def seqMatchCount(words: Array[String], code: Int) = {
-    def count(s: Int, n: Vector[String]) = {
-      var i = s
-      var j = n.length - 1
-      while (i >= 0 && j >= 0) {
-        if (n(j).startsWith(words(i))) i -= 1
-        j -= 1
-      }
-      i
-    }
-    def run(s: Int, code: Int): Int =
-      if (s < 0) s else addressMap
-        .get(code)
-        .map(o => run(count(s, o.words), o.superCode))
-        .getOrElse(s)
-    words.length - (run(words.length - 1, code) + 1)
-  }
   /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.
    * 0 is highest ranking meaning all words sequentially have exact match */
   def rank(words: Array[String], code: Int) = {
+    val wl = words.length
     def count(s: Int, n: Vector[String]) = {
-      var seqCount: Int = s >> 16 toShort
-      var exactCount: Int = s & 0x0000FFFF toShort
-      var j = n.length - 1
-      while (seqCount >= 0 && j >= 0) {
+      var seqCount: Int = s >> 16
+      var exactCount: Int = s & 0x0000FFFF
+      var j = 0
+      val nl = n.length
+      while (seqCount < wl && j < nl) {
         if (n(j).startsWith(words(seqCount))) {
-          if (n(j).length == words(seqCount).length) exactCount -= 1
-          seqCount -= 1
+          if (n(j).length == words(seqCount).length) exactCount += 1
+          seqCount += 1
         }
-        j -= 1
+        j += 1
       }
-      seqCount.toShort.toInt << 16 | exactCount.toShort
+      seqCount.toInt << 16 | exactCount
     }
-    def run(s: Int, code: Int): Int =
-      if (s < 0) s else addressMap
-        .get(code)
-        .map(o => run(count(s, o.words), o.superCode))
-        .getOrElse(s)
-    val i = words.length - 1
-    val r = run(i << 16 | i, code)
-    val a = (r >> 16).toByte + 1
-    val b = (r & 0x0000FFFF).toByte + 1
+    val addrObjs = objsInWrittenOrder(addressMap(code))
+    val aol = addrObjs.length
+    def run(matchCount: Int, idxObjs: Int): Int =
+      if (matchCount >> 16 < wl && idxObjs < aol)
+        run(count(matchCount, addrObjs(idxObjs).words), idxObjs + 1)
+      else matchCount
+    val r = run(0, 0)
+    val a = wl - (r >> 16).toByte
+    val b = wl - (r & 0x0000FFFF).toByte
     a << 5 | b
   }
+
+  def objsInWrittenOrder(addrObj: AddrObj) = addrObj.foldLeft(new Array[AddrObj](7)) { (a, o) =>
+    a(writtenOrder(o.typ)) = o
+    a
+  }.filter(_ != null)
 
   def saveIndex = {
     checkIndex
