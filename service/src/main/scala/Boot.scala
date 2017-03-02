@@ -57,9 +57,12 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
     }).mapMaterializedValue (actor => subscribe(actor, "version"))
 
   val route =
-    (options & (path("address") | path("resolve") | path("address-structure"))) {
-      respondWithHeaders(`Access-Control-Allow-Origin`.`*`,
-        `Access-Control-Allow-Methods`(HttpMethods.GET)) { complete(HttpEntity.Empty) }
+    (options & headerValueByType[Origin]() &
+      (path("address") | path("resolve") | path("address-structure"))) { origin =>
+      respondWithHeaders(`Access-Control-Allow-Origin`(origin.origins.head),
+        `Access-Control-Allow-Methods`(HttpMethods.GET)) {
+          complete(HttpEntity.Empty)
+        }
     } ~ handleWebSocketMessages(wsVersionNofifications) ~ path("") {
       redirect("/index.html", SeeOther)
     } ~ path("index.html") {
