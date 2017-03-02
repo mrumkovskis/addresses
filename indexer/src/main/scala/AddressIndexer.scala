@@ -435,7 +435,7 @@ with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
            if (m._2 == null) a.zipCode else m._2,
            a.typ,
            if (m._4 == null) a.coordX else m._4,
-           if (m._5 == null) a.coordX else m._5
+           if (m._5 == null) a.coordY else m._5
           )
         }
       }.map { case (ac, zip, typ, coordX, coordY) =>
