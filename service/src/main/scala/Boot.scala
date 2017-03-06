@@ -59,7 +59,8 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
   val route =
     (options & headerValueByType[Origin]() &
       (path("address") | path("resolve") | path("address-structure"))) { origin =>
-      respondWithHeaders(`Access-Control-Allow-Origin`(origin.origins.head),
+      respondWithHeaders(origin.origins.headOption.map { origin =>
+        `Access-Control-Allow-Origin`(origin) } getOrElse (`Access-Control-Allow-Origin`.`*`),
         `Access-Control-Allow-Methods`(HttpMethods.GET)) {
           complete(HttpEntity.Empty)
         }
