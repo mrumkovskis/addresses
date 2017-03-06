@@ -80,7 +80,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
             case p => search(p, limit, types)
           })
         } yield {
-          s map { a => addrFull(a, f.addressStruct(a.code)) }
+          s map { a => addrFull(a, f.addressStruct(a.code), ", ") }
         }) map { _.toJson })
       }
     } ~ (path("resolve") & get & parameter("address")) { address =>
@@ -89,7 +89,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
           val ra = f.resolve(address)
           ResolvedAddressFull(
             ra.address,
-            ra.resolvedAddress.map(rao => addrFull(rao, f.addressStruct(rao.code)))
+            ra.resolvedAddress.map(rao => addrFull(rao, f.addressStruct(rao.code), "\n"))
           ).toJson
         })
       }
@@ -105,10 +105,11 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
 
     private def addrFull(
       a: lv.addresses.indexer.Address,
-      struct: lv.addresses.indexer.AddressStruct
+      struct: lv.addresses.indexer.AddressStruct,
+      separator: String
     ) = {
       import struct._
-      AddressFull(a.code, a.address, Option(a.zipCode), a.typ,
+      AddressFull(a.code, a.address.replace("\n", separator), Option(a.zipCode), a.typ,
         Option(a.coordX), Option(a.coordY),
         pilCode, pilName,
         novCode, novName,
