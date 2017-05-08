@@ -3,13 +3,13 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.12.1",
+  scalaVersion := "2.12.2",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.4.17"
-  val akkaHttpV = "10.0.4"
+  val akkaV = "2.5.1"
+  val akkaHttpV = "10.0.6"
   Seq(
     "com.typesafe.akka" %% "akka-actor"                        % akkaV,
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
