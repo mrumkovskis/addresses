@@ -3,21 +3,20 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.12.2",
+  scalaVersion := "2.12.3",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.5.1"
-  val akkaHttpV = "10.0.6"
+  val akkaV = "2.4.19" //akka version as used by akka-http, needed for akka-slf4j dependency
+  val akkaHttpV = "10.0.10"
   Seq(
-    "com.typesafe.akka" %% "akka-actor"                        % akkaV,
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
-    "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
     "commons-net"        % "commons-net"                       % "3.3",
-    "ch.qos.logback"     % "logback-classic"                   % "1.1.3",
-    "com.typesafe.akka" %% "akka-testkit"                      % akkaV  % "test")
+    "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
+    "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
+    "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
 }
 
 lazy val indexer = project
@@ -33,7 +32,7 @@ lazy val service = project
     mainClass in Compile := Some("lv.addresses.service.Boot")
   )
   .settings(Revolver.settings: _*)
-  .settings(javaOptions in Revolver.reStart += "-Xmx4G")
+  .settings(javaOptions in reStart += "-Xmx4G")
 
 lazy val addresses = project
   .in(file("."))
@@ -59,9 +58,9 @@ lazy val addresses = project
     }
   )
   .settings(
-    publishTo <<= version { v: String =>
+    publishTo := {
       val nexus = "https://oss.sonatype.org/"
-      if (v.trim.endsWith("SNAPSHOT"))
+      if (version.value.trim.endsWith("SNAPSHOT"))
         Some("snapshots" at nexus + "content/repositories/snapshots")
       else
         Some("releases" at nexus + "service/local/staging/deploy/maven2")
