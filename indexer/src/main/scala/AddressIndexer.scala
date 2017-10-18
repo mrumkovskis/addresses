@@ -349,8 +349,12 @@ case class AddressStruct(
   dzvCode: Option[Int] = None, dzvName: Option[String] = None)
 case class ResolvedAddress(address: String, resolvedAddress: Option[Address])
 
-trait AddressFinder extends AddressIndexer
-with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
+trait AddressFinder
+extends AddressIndexer
+with AddressIndexLoader
+with AddressLoader
+with AddressIndexerConfig
+with SpatialIndexer {
 
   import Constants._
 
