@@ -13,17 +13,24 @@ import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import scala.language.postfixOps
 
-trait AddressIndexer { this: AddressFinder =>
+private object Constants {
+  val PIL = 104
+  val NOV = 113
+  val PAG = 105
+  val CIE = 106
+  val IEL = 107
+  val NLT = 108
+  val DZI = 109
 
-  case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
-      words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null) {
-    def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
-      addressMap.get(superCode).map(ao => ao.foldLeft(o(z, this))(o)).getOrElse(o(z, this))
-    def foldRight[A](z: A)(o: (A, AddrObj) => A): A =
-      addressMap.get(superCode).map(ao => ao.foldRight(z)(o)).map(o(_, this)).getOrElse(o(z, this))
-    def depth = foldLeft(0)((d, _) => d + 1)
-  }
-
+  val writtenOrder = Map (
+    IEL -> 0,
+    NLT -> 1,
+    DZI -> 2,
+    CIE -> 3,
+    PIL -> 4,
+    PAG -> 5,
+    NOV -> 6
+  )
   val typeOrderMap = Map[Int, Int](
     PIL -> 1, //pilsēta
     NOV -> 2, //novads
@@ -33,6 +40,20 @@ trait AddressIndexer { this: AddressFinder =>
     NLT -> 6, //nekustama lieta (māja)
     DZI -> 7 //dzivoklis
   )
+}
+
+trait AddressIndexer { this: AddressFinder =>
+
+  import Constants._
+
+  case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
+      words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null) {
+    def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
+      addressMap.get(superCode).map(ao => ao.foldLeft(o(z, this))(o)).getOrElse(o(z, this))
+    def foldRight[A](z: A)(o: (A, AddrObj) => A): A =
+      addressMap.get(superCode).map(ao => ao.foldRight(z)(o)).map(o(_, this)).getOrElse(o(z, this))
+    def depth = foldLeft(0)((d, _) => d + 1)
+  }
 
   protected var _index: scala.collection.mutable.HashMap[String, Array[Long]] = null
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
@@ -331,23 +352,7 @@ case class ResolvedAddress(address: String, resolvedAddress: Option[Address])
 trait AddressFinder extends AddressIndexer
 with AddressIndexLoader with AddressLoader with AddressIndexerConfig {
 
-  val PIL = 104
-  val NOV = 113
-  val PAG = 105
-  val CIE = 106
-  val IEL = 107
-  val NLT = 108
-  val DZI = 109
-
-  val writtenOrder = Map (
-    IEL -> 0,
-    NLT -> 1,
-    DZI -> 2,
-    CIE -> 3,
-    PIL -> 4,
-    PAG -> 5,
-    NOV -> 6
-  )
+  import Constants._
 
   private[this] var _addressMap: Map[Int, AddrObj] = null
 
