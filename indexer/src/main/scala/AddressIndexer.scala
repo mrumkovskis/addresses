@@ -371,6 +371,7 @@ with SpatialIndexer {
         index(addressMap)
         saveIndex
       }
+      spatialIndex(addressMap)
     }
   }
 
