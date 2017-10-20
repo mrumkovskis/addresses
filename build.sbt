@@ -33,6 +33,9 @@ lazy val service = project
   )
   .settings(Revolver.settings: _*)
   .settings(javaOptions in reStart += "-Xmx4G")
+  .settings(initialCommands in console := s"""
+    |import lv.addresses.service.AddressFinder._
+    """.stripMargin)
 
 lazy val addresses = project
   .in(file("."))

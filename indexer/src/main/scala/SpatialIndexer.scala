@@ -11,7 +11,7 @@ trait SpatialIndexer { this: AddressFinder =>
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int = 1) = {
   }
 
-  def fullScanSearchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int = 1) = {
+  def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal, limit: Int = 1) = {
     val realLimit = Math.min(limit, 20)
     val nearest = SortedSet[(Int, BigDecimal)]()(new Ordering[(Int, BigDecimal)]  {
       def compare(a: (Int, BigDecimal), b: (Int, BigDecimal)) =
@@ -60,6 +60,6 @@ trait SpatialIndexer { this: AddressFinder =>
         .get(c)
         .exists { a => a.coordX != null && a.coordY != null })
       .toIndexedSeq)
-    println(s"Spatial index created ($nodeCount addresses indexed in ${System.currentTimeMillis - start}ms)")
+    println(s"Spatial index created ($nodeCount addresses indexed) in ${System.currentTimeMillis - start}ms")
   }
 }
