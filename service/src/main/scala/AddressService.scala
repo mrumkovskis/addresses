@@ -17,6 +17,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
   private trait Msg
   private case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
+  private case class SearchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int, af: AddressFinder = null) extends Msg
   private case class Struct(code: Int, af: AddressFinder = null) extends Msg
   private case class Address(code: Int, af: AddressFinder = null) extends Msg
   private case class Resolve(address: String, af: AddressFinder = null) extends Msg
@@ -41,6 +42,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
   def search(pattern: String, limit: Int, types: Set[Int]) = proxy
     .ask(Search(pattern, limit, types))(30.second).mapTo[Array[lv.addresses.indexer.Address]]
+  def searchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int) = proxy
+    .ask(SearchNearest(coordX, coordY, limit))(30.second).mapTo[Array[lv.addresses.indexer.Address]]
   def struct(code: Int) = proxy
     .ask(Struct(code))(30.second).mapTo[lv.addresses.indexer.AddressStruct]
   def address(code: Int) = proxy
@@ -109,6 +112,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
     def serve: Receive = {
       case s: Search => server forward s
+      case s: SearchNearest => server forward s
       case s: Struct => server forward s
       case a: Address => server forward a
       case r: Resolve => server forward r
@@ -199,6 +203,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
     def serve: Receive = {
       case s: Search => router.route(s.copy(af = af), sender)
+      case s: SearchNearest => router.route(s.copy(af = af), sender)
       case s: Struct => router.route(s.copy(af = af), sender)
       case a: Address => router.route(a.copy(af = af), sender)
       case r: Resolve => router.route(r.copy(af = af), sender)
@@ -234,6 +239,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   class Worker extends Actor {
     def receive = {
       case Search(pattern, limit, types, af) => process(af.search(pattern)(limit, types))
+      case SearchNearest(coordX, coordY, limit, af) => process(af.searchNearest(coordX, coordY)(limit))
       case Struct(code, af) => process(af.addressStruct(code))
       case Address(code, af) => process(af.addressOption(code))
       case Resolve(address, af) => process(af.resolve(address))

@@ -64,9 +64,6 @@ trait SpatialIndexer { this: AddressFinder =>
     }
   }
 
-  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
-    new Search(limit).searchNearest(coordX, coordY)
-
   def spatialIndex(addressMap: Map[Int, AddrObj]) = {
     val start = System.currentTimeMillis
     var nodeCount = 0

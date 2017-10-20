@@ -71,13 +71,17 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
     } ~ (path("address") & get & parameterMultiMap) { params =>
       val pattern = params.get("search") map (_.head) getOrElse ("")
       val limit = params.get("limit") map (_.head.toInt) getOrElse 20
-      val types = params.get("type").map(_.toSet.map((t: String) => t.toInt)).orNull
+      val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
+      val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
+      val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1
+      val coordY: BigDecimal = params.get("y") map(y => BigDecimal(y.head)) getOrElse -1
       respondWithHeader(`Access-Control-Allow-Origin`.`*`) { complete(
         (for {
           f <- finder
           s <- (pattern match {
             case CODE_PATTERN(code) => address(code.toInt) map (_.toArray)
-            case p => search(p, limit, types)
+            case p if coordX == -1 || coordY == -1 => search(p, limit, types)
+            case _ => searchNearest(coordX, coordY, searchNearestLimit)
           })
         } yield {
           s map { a => addrFull(a, f.addressStruct(a.code), ", ") }

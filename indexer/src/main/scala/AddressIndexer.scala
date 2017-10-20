@@ -424,6 +424,9 @@ with SpatialIndexer {
     }
   }
 
+  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
+    new Search(limit).searchNearest(coordX, coordY).map(result => address(result._1)).toArray
+
   def addressStruct(code: Int) = {
     def s(st: AddressStruct, typ: Int, code: Int, name: String) = typ match {
       case PIL => st.copy(pilCode = Option(code), pilName = Option(name))
@@ -441,37 +444,31 @@ with SpatialIndexer {
     .getOrElse(AddressStruct())
   }
 
-  def addressOption(code: Int) =
-    addressMap
-      .get(code)
-      .map {
-        _.foldLeft((
-            Map[Int, AddrObj](),
-            null: String, //zip code
-            0, //address object type
-            null: BigDecimal, //coordX
-            null: BigDecimal //coordY
-          )) { (m, a) =>
-          (m._1 + (a.typ -> a),
-           if (m._2 == null) a.zipCode else m._2,
-           a.typ,
-           if (m._4 == null) a.coordX else m._4,
-           if (m._5 == null) a.coordY else m._5
-          )
-        }
-      }.map { case (ac, zip, typ, coordX, coordY) =>
-        val as = new scala.collection.mutable.StringBuilder()
-        ac.get(IEL).foreach(iela => as ++= iela.name)
-        ac.get(NLT).foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja.name))
-        ac.get(DZI).foreach(dzivoklis => as ++= (" - " + dzivoklis.name))
-        ac.get(CIE).foreach(ciems => as ++= ((if (as.isEmpty) "" else "\n") + ciems.name))
-        ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
-        ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
-        ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
-        Address(code, as.toString, zip, typ, coordX, coordY)
-      }
-
-  def address(code: Int) = addressOption(code).get
+  def addressOption(code: Int) = addressMap.get(code) map address
+  private def address(addrObj: AddrObj): Address = addrObj.foldLeft((
+    Map[Int, AddrObj](),
+    null: String, //zip code
+    0, //address object type
+    null: BigDecimal, //coordX
+    null: BigDecimal //coordY
+  )) { (m, a) =>
+    (m._1 + (a.typ -> a),
+     if (m._2 == null) a.zipCode else m._2,
+     a.typ,
+     if (m._4 == null) a.coordX else m._4,
+     if (m._5 == null) a.coordY else m._5)
+  } match { case (ac, zip, typ, coordX, coordY) =>
+    val as = new scala.collection.mutable.StringBuilder()
+    ac.get(IEL).foreach(iela => as ++= iela.name)
+    ac.get(NLT).foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja.name))
+    ac.get(DZI).foreach(dzivoklis => as ++= (" - " + dzivoklis.name))
+    ac.get(CIE).foreach(ciems => as ++= ((if (as.isEmpty) "" else "\n") + ciems.name))
+    ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
+    ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
+    ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
+    Address(addrObj.code, as.toString, zip, typ, coordX, coordY)
+  }
+  def address(code: Int): Address = addressOption(code).get
 
   /** Address format:
         <IEL> <NLT> - <DZI>, <CIEM>, <PAG>|<PIL>, <NOV>
