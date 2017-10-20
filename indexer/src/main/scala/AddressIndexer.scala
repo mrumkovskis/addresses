@@ -196,7 +196,7 @@ trait AddressLoader { this: AddressFinder =>
     val f = new java.util.zip.ZipFile(addressZipFile)
     val houseCoords = Option(hcf).flatMap(cf => Option(f.getEntry(cf)))
       .map{e =>
-        println(s"Loading house coordinates...")
+        println(s"Loading house coordinates $hcf ...")
         scala.io.Source.fromInputStream(f.getInputStream(e))
       }.toList
       .flatMap(_.getLines.drop(1))

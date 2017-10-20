@@ -150,7 +150,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         } else {
           if (fn == null && version == null) proxy ! Status.Failure(new RuntimeException(
             s"Unable to load addresses using address file pattern $akFileName!"))
-          as.log.debug(s"Not initializing address file '$fn'. Current version - '$version'")
+          as.log.debug(s"Unable to load addresses using address file pattern $akFileName! Not initializing address file '$fn'. Current version - '$version'")
         }
       case Ready(server) => ready = true
       case Subscribe(subscriber) => context.watch(subscriber)
