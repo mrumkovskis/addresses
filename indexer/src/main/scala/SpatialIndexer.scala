@@ -8,19 +8,20 @@ trait SpatialIndexer { this: AddressFinder =>
 
   protected var _spatialIndex: Node = null
 
-  object Search {
-    def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int) = {
+  class Search(val limit: Int) {
+    private val realLimit = Math.min(limit, 20)
+    private val nearest = SortedSet[(Int, BigDecimal)]()(new Ordering[(Int, BigDecimal)]  {
+      def compare(a: (Int, BigDecimal), b: (Int, BigDecimal)) =
+        if (a._2 < b._2) -1 else if (a._2 > b._2) 1 else 0
+    })
+    private def dist(px: BigDecimal, py: BigDecimal, ax: BigDecimal, ay: BigDecimal) =
+      (px - ax).pow(2) + (py - ay).pow(2)
+
+    def searchNearest(coordX: BigDecimal, coordY: BigDecimal) = {
 
     }
 
-    def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal)(limit: Int) = {
-      val realLimit = Math.min(limit, 20)
-      val nearest = SortedSet[(Int, BigDecimal)]()(new Ordering[(Int, BigDecimal)]  {
-        def compare(a: (Int, BigDecimal), b: (Int, BigDecimal)) =
-          if (a._2 < b._2) -1 else if (a._2 > b._2) 1 else 0
-      })
-      def dist(px: BigDecimal, py: BigDecimal, ax: BigDecimal, ay: BigDecimal) =
-        (px - ax).pow(2) + (py - ay).pow(2)
+    def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal) = {
       addressMap.foreach { case (c, o) =>
         if (o.coordX != null && o.coordY != null) {
           nearest += (c -> dist(coordX, coordY, o.coordX, o.coordY))
@@ -32,7 +33,7 @@ trait SpatialIndexer { this: AddressFinder =>
   }
 
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
-    Search.searchNearest(coordX, coordY)(limit)
+    new Search(limit).searchNearest(coordX, coordY)
 
   def spatialIndex(addressMap: Map[Int, AddrObj]) = {
     val start = System.currentTimeMillis
