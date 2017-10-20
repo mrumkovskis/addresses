@@ -3,7 +3,7 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.12.3",
+  scalaVersion := "2.12.4",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
