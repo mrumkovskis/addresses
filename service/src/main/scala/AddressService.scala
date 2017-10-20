@@ -233,7 +233,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
   class Worker extends Actor {
     def receive = {
-      case Search(pattern, limit, types, af) => process(af.search(pattern, limit, types))
+      case Search(pattern, limit, types, af) => process(af.search(pattern)(limit, types))
       case Struct(code, af) => process(af.addressStruct(code))
       case Address(code, af) => process(af.addressOption(code))
       case Resolve(address, af) => process(af.resolve(address))

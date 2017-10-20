@@ -8,27 +8,31 @@ trait SpatialIndexer { this: AddressFinder =>
 
   protected var _spatialIndex: Node = null
 
-  def searchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int = 1) = {
+  object Search {
+    def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int) = {
+
+    }
+
+    def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal)(limit: Int) = {
+      val realLimit = Math.min(limit, 20)
+      val nearest = SortedSet[(Int, BigDecimal)]()(new Ordering[(Int, BigDecimal)]  {
+        def compare(a: (Int, BigDecimal), b: (Int, BigDecimal)) =
+          if (a._2 < b._2) -1 else if (a._2 > b._2) 1 else 0
+      })
+      def dist(px: BigDecimal, py: BigDecimal, ax: BigDecimal, ay: BigDecimal) =
+        (px - ax).pow(2) + (py - ay).pow(2)
+      addressMap.foreach { case (c, o) =>
+        if (o.coordX != null && o.coordY != null) {
+          nearest += (c -> dist(coordX, coordY, o.coordX, o.coordY))
+          if (nearest.size > realLimit) nearest.lastOption.foreach(nearest -= _)
+        }
+      }
+      nearest.toList
+    }
   }
 
-  def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal, limit: Int = 1) = {
-    val realLimit = Math.min(limit, 20)
-    val nearest = SortedSet[(Int, BigDecimal)]()(new Ordering[(Int, BigDecimal)]  {
-      def compare(a: (Int, BigDecimal), b: (Int, BigDecimal)) =
-        if (a._2 < b._2) -1 else if (a._2 > b._2) 1 else 0
-    })
-    def dist(px: BigDecimal, py: BigDecimal, ax: BigDecimal, ay: BigDecimal) =
-      (px - ax).pow(2) + (py - ay).pow(2)
-    var cnt = 0
-    addressMap.foreach { case (c, o) =>
-      cnt += 1
-      if (o.coordX != null && o.coordY != null) {
-        nearest += (c -> dist(coordX, coordY, o.coordX, o.coordY))
-        if (nearest.size > realLimit) nearest.lastOption.foreach(nearest -= _)
-      }
-    }
-    nearest.toList
-  }
+  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
+    Search.searchNearest(coordX, coordY)(limit)
 
   def spatialIndex(addressMap: Map[Int, AddrObj]) = {
     val start = System.currentTimeMillis

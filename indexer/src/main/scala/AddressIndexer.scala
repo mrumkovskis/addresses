@@ -59,7 +59,7 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  def searchCodes(str: String, limit: Int = 20, types: Set[Int] = null) =
+  def searchCodes(str: String)(limit: Int = 20, types: Set[Int] = null) =
     (searchParams(str)
       .map(_index.getOrElse(_, Array[Long]()))
       .sortWith((a, b) => a.size < b.size) match {
@@ -382,7 +382,7 @@ with SpatialIndexer {
            Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
-  def search(str: String, limit: Int = 20, types: Set[Int] = null): Array[Address] = {
+  def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
     checkIndex
     if (str.trim.length == 0)
       if (types == null || (types -- Set(PIL, NOV, PAG, CIE)) != Set.empty)
@@ -400,7 +400,7 @@ with SpatialIndexer {
         (result map address).toArray
       }
     else {
-      val codes = searchCodes(str, -1, types)
+      val codes = searchCodes(str)(-1, types)
       val words = normalize(str)
       (if (words.length < 2) codes take limit
       else {
@@ -482,7 +482,7 @@ with SpatialIndexer {
   */
   def resolve(addressString: String): ResolvedAddress = {
     case class Basta(resolved: Option[Address]) extends Exception
-    search(addressString, 1) match {
+    search(addressString)(1) match {
       case Array(address) if addressString == address.address.replace("\n", ", ") => //exact match
         ResolvedAddress(addressString, Some(address))
       case _ => ResolvedAddress(
@@ -490,7 +490,7 @@ with SpatialIndexer {
         try addressString.split(",").map(_.trim).foldRight(Option[Address](null)) {
           case (a, resolvedAddr) =>
             val resolvable = a + resolvedAddr.map("\n" + _.address).mkString
-            search(resolvable, 1) match {
+            search(resolvable)(1) match {
               case Array(address) if resolvable == address.address => Some(address)
               case _ => throw Basta(resolvedAddr)
             }
