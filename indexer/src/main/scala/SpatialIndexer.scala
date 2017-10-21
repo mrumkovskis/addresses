@@ -25,11 +25,11 @@ trait SpatialIndexer { this: AddressFinder =>
           register_nearest(addr, null)
           addr
         } else {
-          val nd = dist(coordX, coordY, new_addr.coordX, new_addr.coordY)
           val d = dist(coordX, coordY, addr.coordX, addr.coordY)
-          val (ra, rd) = if (nd < d) (new_addr, nd) else (addr, d)
-          register_nearest(ra, rd)
-          ra
+          val nd = dist(coordX, coordY, new_addr.coordX, new_addr.coordY)
+          register_nearest(addr, d)
+          register_nearest(new_addr, nd)
+          if (nd < d) new_addr else addr
         }
         def register_nearest(addr: AddrObj, d: BigDecimal) = {
           nearest += (addr -> (if (d == null) dist(coordX, coordY, addr.coordX, addr.coordY) else d))
