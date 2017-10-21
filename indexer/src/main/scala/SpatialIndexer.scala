@@ -74,9 +74,9 @@ trait SpatialIndexer { this: AddressFinder =>
         Node(c, null, null)
       case _ =>
         val axis = depth % 2
-        val sorted = addresses.sortWith { (c1, c2) =>
-          val (a1, a2) = (addressMap(c1), addressMap(c2))
-          if (axis == 0) a1.coordX <= a2.coordX else a1.coordY <= a2.coordY
+        val sorted = addresses.sortBy { c =>
+          val a = addressMap(c)
+          if (axis == 0) a.coordX else a.coordY
         }
         val median = sorted.size / 2
         nodeCount += 1
