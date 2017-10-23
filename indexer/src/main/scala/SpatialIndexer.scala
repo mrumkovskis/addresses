@@ -18,26 +18,19 @@ trait SpatialIndexer { this: AddressFinder =>
       (px - ax).pow(2) + (py - ay).pow(2)
 
     def searchNearest(coordX: BigDecimal, coordY: BigDecimal) = {
+      val found = scala.collection.mutable.Set[AddrObj]()
       def search(node: Node, depth: Int = 0): AddrObj = if (node == null) null else {
         import node._
         val curr_addr = addressMap(code)
-        def closest(addr: AddrObj, new_addr: AddrObj) = if (new_addr == null) {
-          register_nearest(addr, null)
-          addr
-        } else {
-          val d = dist(coordX, coordY, addr.coordX, addr.coordY)
-          val nd = dist(coordX, coordY, new_addr.coordX, new_addr.coordY)
-          register_nearest(addr, d)
-          register_nearest(new_addr, nd)
-          if (nd < d) new_addr else addr
-        }
-        def register_nearest(addr: AddrObj, d: BigDecimal) = {
-          nearest += (addr -> (if (d == null) dist(coordX, coordY, addr.coordX, addr.coordY) else d))
-          if (nearest.size > realLimit) nearest.lastOption.foreach(nearest -= _)
-        }
-        def check_x_splitting_pane(addr: AddrObj) =
+        def closest(addr: AddrObj, new_addr: AddrObj) =
+          if (new_addr == null || found(new_addr)) if (found(addr)) null else addr
+          else if (addr == null || found(addr)) new_addr
+          else if (dist(coordX, coordY, addr.coordX, addr.coordY) <
+              dist(coordX, coordY, new_addr.coordX, new_addr.coordY)) addr
+          else new_addr
+        def check_x_splitting_pane(addr: AddrObj) = addr == null ||
           dist(coordX, coordY, addr.coordX, addr.coordY) >= dist(coordX, 0, curr_addr.coordX, 0)
-        def check_y_splitting_pane(addr: AddrObj) =
+        def check_y_splitting_pane(addr: AddrObj) = addr == null ||
           dist(coordX, coordY, addr.coordX, addr.coordY) >= dist(0, coordY, 0, curr_addr.coordY)
         def traverse(left: Node, right: Node, check_splitting_pane_cross: AddrObj => Boolean,
             start_with_left: Boolean) = {
@@ -49,11 +42,17 @@ trait SpatialIndexer { this: AddressFinder =>
         if (depth % 2 == 0) traverse(left, right, check_x_splitting_pane, coordX <= curr_addr.coordX) //x axis
         else traverse(left, right, check_y_splitting_pane, coordY <= curr_addr.coordY) //y axis
       }
-      search(_spatialIndex)
+      nearest.clear
+      1 to limit map { _ =>
+        val nearest_addr = search(_spatialIndex)
+        found += nearest_addr
+        nearest_addr
+      } foreach (a => nearest += (a -> dist(coordX, coordY, a.coordX, a.coordY)))
       nearest.toList
     }
 
     def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal) = {
+      nearest.clear
       addressMap.foreach { case (c, o) =>
         if (o.coordX != null && o.coordY != null) {
           nearest += (o -> dist(coordX, coordY, o.coordX, o.coordY))
