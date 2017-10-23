@@ -425,7 +425,10 @@ with SpatialIndexer {
   }
 
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
-    new Search(limit).searchNearest(coordX, coordY).map(result => address(result._1)).toArray
+    new Search(Math.min(limit, 20))
+      .searchNearest(coordX, coordY)
+      .map(result => address(result._1))
+      .toArray
 
   def addressStruct(code: Int) = {
     def s(st: AddressStruct, typ: Int, code: Int, name: String) = typ match {

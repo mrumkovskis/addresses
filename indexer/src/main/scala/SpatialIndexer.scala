@@ -9,7 +9,6 @@ trait SpatialIndexer { this: AddressFinder =>
   protected var _spatialIndex: Node = null
 
   class Search(val limit: Int) {
-    private val realLimit = Math.min(limit, 20)
     private val nearest = SortedSet[(AddrObj, BigDecimal)]()(new Ordering[(AddrObj, BigDecimal)]  {
       def compare(a: (AddrObj, BigDecimal), b: (AddrObj, BigDecimal)) =
         if (a._2 < b._2) -1 else if (a._2 > b._2) 1 else 0
@@ -56,7 +55,7 @@ trait SpatialIndexer { this: AddressFinder =>
       addressMap.foreach { case (c, o) =>
         if (o.coordX != null && o.coordY != null) {
           nearest += (o -> dist(coordX, coordY, o.coordX, o.coordY))
-          if (nearest.size > realLimit) nearest.lastOption.foreach(nearest -= _)
+          if (nearest.size > limit) nearest.lastOption.foreach(nearest -= _)
         }
       }
       nearest.toList
