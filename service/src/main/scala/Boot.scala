@@ -70,7 +70,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
       getFromResource("index.html")
     } ~ (path("address") & get & parameterMultiMap) { params =>
       val pattern = params.get("search") map (_.head) getOrElse ("")
-      val limit = params.get("limit") map (_.head.toInt) getOrElse 20
+      val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
       val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
       val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
       val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1

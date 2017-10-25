@@ -400,9 +400,9 @@ with SpatialIndexer {
         (result map address).toArray
       }
     else {
-      val codes = searchCodes(str)(-1, types)
       val words = normalize(str)
-      (if (words.length < 2) codes take limit
+      val codes = searchCodes(str)(if (words.length < 2) limit else -1, types)
+      (if (words.length < 2) codes
       else {
         var (perfectRankCount, i) = (0, 0)
         val size = Math.min(codes.length, limit)
