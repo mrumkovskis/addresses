@@ -87,7 +87,7 @@ trait AddressIndexer { this: AddressFinder =>
           }).toArray match { case a if limit == -1 => a case a => a.take(limit) }
       }).map(_ & 0x00000000FFFFFFFFL).map(_.toInt)
 
-  def searchParams(str: String) = wordStat(str)
+  def searchParams(str: String) = wordStatForSearch(str)
     .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
 
   def index(addressMap: Map[Int, AddrObj]) = {
@@ -136,13 +136,19 @@ trait AddressIndexer { this: AddressFinder =>
     this._index = index
   }
 
-  def wordStat(phrase: String) = normalize(phrase)
+  def wordStatForIndex(phrase: String) = normalize(phrase)
     .foldLeft(Map[String, Int]())((stat, w) =>
       (0 until w.length)
         .map(w.dropRight(_))
         .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
 
-  def extractWords(phrase: String) = wordStat(phrase)
+  def wordStatForSearch(phrase: String) = normalize(phrase)
+    .foldLeft(Map[String, Int]())((stat, w) =>
+      (0 until w.length)
+        .map(w.dropRight(_))
+        .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
+
+  def extractWords(phrase: String) = wordStatForIndex(phrase)
     .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
 
   val accents = "ēūīāšģķļžčņ" zip "euiasgklzcn" toMap
