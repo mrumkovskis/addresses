@@ -62,7 +62,7 @@ trait AddressIndexer { this: AddressFinder =>
   def searchCodes(str: String)(limit: Int = 20, types: Set[Int] = null) =
     (searchParams(str)
       .map(_index.getOrElse(_, Array[Long]()))
-      .sortWith((a, b) => a.size < b.size) match {
+      .sortBy(_.size) match {
         case Array() => Array[Long]()
         case Array(a) =>
           (if (types == null) a
