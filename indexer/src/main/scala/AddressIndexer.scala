@@ -492,7 +492,7 @@ with SpatialIndexer {
   def resolve(addressString: String): ResolvedAddress = {
     case class Basta(resolved: Option[Address]) extends Exception
     search(addressString)(1) match {
-      case Array(address) if addressString == address.address.replace("\n", ", ") => //exact match
+      case Array(address) => //one result found, take it
         ResolvedAddress(addressString, Some(address))
       case _ => ResolvedAddress(
         addressString,
