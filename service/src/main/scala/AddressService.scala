@@ -15,8 +15,8 @@ import scala.language.postfixOps
 
 object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
-  private trait Msg
-  private case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
+  private[service] trait Msg
+  private[service] case class Search(pattern: String, limit: Int, types: Set[Int], af: AddressFinder = null) extends Msg
   private case class SearchNearest(coordX: BigDecimal, coordY: BigDecimal, limit: Int, af: AddressFinder = null) extends Msg
   private case class Struct(code: Int, af: AddressFinder = null) extends Msg
   private case class Address(code: Int, af: AddressFinder = null) extends Msg
@@ -36,9 +36,11 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private[service] val as = ActorSystem("uniso-address-service")
   private val proxy = as.actorOf(Props[Proxy])
   private val initializer = as.actorOf(Props[Initializer])
+  private val finderActor = as.actorOf(Props[AddressFinderActor], "AdressFinderActor")
+  private val updaterActor = as.actorOf(Props(classOf[AddressUpdaterActor], finderActor), "AddressUpdaterActor")
   implicit val execCtx = as.dispatcher
 
-  def maybeInit = if (initOnStartup) initializer ! Initialize
+  def maybeInit = if (false) initializer ! Initialize
 
   def search(pattern: String, limit: Int, types: Set[Int]) = proxy
     .ask(Search(pattern, limit, types))(30.second).mapTo[Array[lv.addresses.indexer.Address]]
@@ -50,7 +52,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     .ask(Address(code))(30.second).mapTo[Option[lv.addresses.indexer.Address]]
   def resolve(address: String) = proxy
     .ask(Resolve(address))(30.seconds).mapTo[lv.addresses.indexer.ResolvedAddress]
-  def finder = proxy.ask(Finder)(30.second).mapTo[AddressFinder]
+  def finder = finderActor.ask(Finder)(30.second).mapTo[AddressFinder]
   def shutdown = proxy.ask(Shutdown)(30.second)
   def version = proxy.ask(GetVersion)(30.second).mapTo[Version].map(_.version)
   def initialize = initializer.ask(Initialize)(30.second)
@@ -165,6 +167,48 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
     override def postStop() = initScheduler.cancel
 
+  }
+
+  private[service] object CheckNewVersion extends Msg
+  private[service] case class Finder(af: AddressFinder) extends Msg
+
+  class AddressFinderActor extends Actor {
+    private var af: AddressFinder = null
+    override def receive = {
+      case Finder => sender ! Finder(af)
+      case Finder(af) =>
+        deleteOldIndexes
+        this.af = af
+    }
+    private def deleteOldIndexes = if (af != null) {
+      val (cache, index) = (af.addressCacheFile(af.addressFileName),
+        af.indexFile(af.addressFileName))
+      if (cache.delete) as.log.info(s"Deleted address cache: $cache") else
+        as.log.warning(s"Unable to delete address cache file $cache")
+      if (index.delete) as.log.info(s"Deleted address index: $index") else
+        as.log.warning(s"Unable to delete address index: $index")
+    }
+    override def postStop = af = null
+  }
+
+  class AddressUpdaterActor(addressFinderActor: ActorRef) extends Actor {
+    private val checkScheduler = context.system.scheduler.schedule(
+      initializerRunInterval, initializerRunInterval, self, CheckNewVersion)
+    var currentVersion: String = null
+    private def mayBeInitFinder = {
+      val newVersion = addressFileName
+      if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
+        val af = new AddressFinder(akFileName, blackList, houseCoordFile)
+        af.init
+        currentVersion = newVersion
+        addressFinderActor ! Finder(af)
+      }
+    }
+    override def preStart = mayBeInitFinder
+    override def receive = {
+      case CheckNewVersion => mayBeInitFinder
+    }
+    override def postStop = checkScheduler.cancel
   }
 
   class Server extends Actor {

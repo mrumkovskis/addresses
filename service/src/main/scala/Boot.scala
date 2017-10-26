@@ -133,8 +133,8 @@ object Boot extends scala.App with AddressHttpService {
   implicit val system = ActorSystem("address-service")
   implicit val materializer = ActorMaterializer()
 
-  AddressService.maybeInit
   FTPDownload.initialize
+
   val bindingFuture = Http().bindAndHandle(route, "0.0.0.0",
     scala.util.Try(conf.getInt("address-service-port")).toOption.getOrElse(8082))
 }
