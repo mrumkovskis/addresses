@@ -143,10 +143,13 @@ trait AddressIndexer { this: AddressFinder =>
         .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
 
   def wordStatForSearch(phrase: String) = normalize(phrase)
-    .foldLeft(Map[String, Int]())((stat, w) =>
-      (0 until w.length)
-        .map(w.dropRight(_))
-        .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
+    .foldLeft(Map[String, Int]()) { (stat, w) =>
+      val (new_stat, this_w_count) = stat.foldLeft(stat -> 0) { case ((ns, tc), (cw, cc)) =>
+        if (w startsWith cw) (ns + (cw -> (cc + 1)), tc)
+        else if (cw startsWith w) (ns, tc + 1) else (ns, tc)
+      }
+      if (new_stat.contains(w)) new_stat else new_stat + (w -> (this_w_count + 1))
+    }
 
   def extractWords(phrase: String) = wordStatForIndex(phrase)
     .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
