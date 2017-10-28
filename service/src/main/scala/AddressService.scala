@@ -29,7 +29,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   private val updaterActor = as.actorOf(Props(classOf[AddressUpdaterActor], finderActor), "address-updater-actor")
   implicit val execCtx = as.dispatcher
 
-  def finder = finderActor.ask(Finder)(30.seconds).mapTo[Finder].map(f => Option(f.af))
+  def finder = finderActor.ask(Finder)(1.second).mapTo[Finder].map(f => Option(f.af))
   private[service] def checkNewVersion = updaterActor ! CheckNewVersion
 
   //bus implementation
