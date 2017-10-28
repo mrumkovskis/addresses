@@ -13,7 +13,7 @@ lazy val serviceDependencies = {
   Seq(
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
-    "commons-net"        % "commons-net"                       % "3.3",
+    "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "0.14",
     "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
