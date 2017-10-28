@@ -12,7 +12,7 @@ import AddressService._
 
 object FTPDownload {
 
-  case object Download
+  private case object Download
 
   val config = com.typesafe.config.ConfigFactory.load
 
@@ -105,7 +105,7 @@ class FTPDownload extends Actor {
         as.log.info(s"Deleting old VZD address file: $current")
         new File(addressFileDir + "/" + current).delete()
       }
-      AddressService.initialize
+      AddressService.checkNewVersion
     } else as.log.info(s"Already have the newest VZD address file: $current")
   } finally disconnect
 

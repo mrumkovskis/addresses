@@ -13,12 +13,13 @@ import com.typesafe.config._
 
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpMethods, HttpEntity}
+import akka.http.scaladsl.model.{HttpMethods, HttpEntity, HttpResponse}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
+import akka.http.scaladsl.marshalling.ToResponseMarshallable
 
 object MyJsonProtocol extends DefaultJsonProtocol {
   implicit val f20 = jsonFormat20(AddressFull)
@@ -75,36 +76,44 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
       val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
       val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1
       val coordY: BigDecimal = params.get("y") map(y => BigDecimal(y.head)) getOrElse -1
-      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { complete(
-        (for {
-          f <- finder
-          s <- (pattern match {
-            case CODE_PATTERN(code) => address(code.toInt) map (_.toArray)
-            case p if coordX == -1 || coordY == -1 => search(p, limit, types)
-            case _ => searchNearest(coordX, coordY, searchNearestLimit)
-          })
-        } yield {
-          s map { a => addrFull(a, f.addressStruct(a.code), ", ") }
-        }) map { _.toJson })
+      respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
+        response {
+          finder => (pattern match {
+            case CODE_PATTERN(code) => finder.addressOption(code.toInt).toArray
+            case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types)
+            case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit)
+          }) map { a =>
+            addrFull(a, finder.addressStruct(a.code), ", ").toJson
+          }
+        }
       }
     } ~ (path("resolve") & get & parameter("address")) { address =>
-      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { complete(
-        finder.map { f =>
-          val ra = f.resolve(address)
+      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { response {
+        finder =>
+          val ra = finder.resolve(address)
           ResolvedAddressFull(
             ra.address,
-            ra.resolvedAddress.map(rao => addrFull(rao, f.addressStruct(rao.code), "\n"))
+            ra.resolvedAddress.map(rao => addrFull(rao, finder.addressStruct(rao.code), "\n"))
           ).toJson
-        })
+        }
       }
     } ~ (path("address-structure" / IntNumber) & get) { code =>
       respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-        complete(struct(code) map (_.toJson))
+        response(_.addressStruct(code).toJson)
       }
     } ~ path("version") {
-      complete(version map (normalizeVersion(_)))
+      complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
       path(Remaining) { resource => getFromResource(resource) }
+    }
+
+    private def response(resp: AddressFinder => ToResponseMarshallable) = complete {
+      finder.map(
+        _.map(resp).getOrElse(
+          ToResponseMarshallable(HttpResponse(ServiceUnavailable,
+            entity = "Address service not initialized, try later, please."))
+          )
+        )
     }
 
     private def addrFull(
@@ -123,6 +132,10 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
         nltCode, nltName,
         dzvCode, dzvName)
     }
+
+    //beautification method
+    private def normalizeVersion(version: String) =
+      Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")
 }
 
 object Boot extends scala.App with AddressHttpService {
@@ -133,6 +146,7 @@ object Boot extends scala.App with AddressHttpService {
   implicit val system = ActorSystem("address-service")
   implicit val materializer = ActorMaterializer()
 
+  AddressService
   FTPDownload.initialize
 
   val bindingFuture = Http().bindAndHandle(route, "0.0.0.0",
