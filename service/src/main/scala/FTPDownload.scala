@@ -82,7 +82,7 @@ class FTPDownload extends Actor {
     Ftp.ls(ftpDir, ftpSettings)
       .filter(_.isFile)
       .map(_.name)
-      .mapConcat(FILE_PATTERN.findFirstIn(_).toList)
+      .mapConcat(FILE_PATTERN.findFirstIn(_).filter(_ != current).toList)
       .fold(current)((cur_newest, cur) => if (cur > cur_newest) cur else cur_newest)
       .runForeach { fName =>
         val remoteFile = ftpDir + "/" + fName
