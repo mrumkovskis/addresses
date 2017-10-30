@@ -1,6 +1,6 @@
 package lv.addresses.service
 
-import scala.util.Success
+import scala.util.{Success, Failure}
 
 import akka.stream.IOResult
 import akka.stream.scaladsl.{Source, FileIO}
@@ -69,8 +69,11 @@ object FTPDownload {
               case err =>
                 as.log.info(s"Error downloading file $remoteFile from ftp server to $tmp")
             }
+        }.failed.foreach {
+          case err => as.log.error(err,
+            s"Unable to list remote ftp files: ftp://$username@$host/$ftpDir")
         }
     }
-    as.log.info("FTP downloader started")
+    as.log.info(s"FTP downloader will start after $initializerRunInterval and will run at $initializerRunInterval intervals")
   } else as.log.info("FTP downloader not started due to missing configuration.")
 }
