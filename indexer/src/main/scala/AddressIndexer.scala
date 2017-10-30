@@ -495,6 +495,9 @@ with SpatialIndexer {
       case Array(address) => ResolvedAddress(addressString, Some(address)) //only one match take that
       case Array(address, _) if addressString == address.address.replace("\n", ", ") => //exact match
         ResolvedAddress(addressString, Some(address))
+      case Array(a1, a2) if (a1.address.replace("\n", ", ") startsWith addressString)
+        && !(a2.address.replace("\n", ", ") startsWith addressString) => //first match is better than second, so choose first
+        ResolvedAddress(addressString, Some(a1))
       case _ => ResolvedAddress(
         addressString,
         try addressString.split(",").map(_.trim).foldRight(Option[Address](null)) {
