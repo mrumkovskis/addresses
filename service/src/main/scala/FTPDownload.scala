@@ -67,7 +67,7 @@ object FTPDownload {
                 }
                 AddressService.checkNewVersion
               case err =>
-                as.log.info(s"Error downloading file $remoteFile from ftp server to $tmp")
+                as.log.error(s"Error downloading file $remoteFile from ftp server to $tmp - $err")
             }
         }.failed.foreach {
           case err => as.log.error(err,
