@@ -518,30 +518,32 @@ with SpatialIndexer {
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.
    * 0 is highest ranking meaning all words sequentially have exact match */
   def rank(words: Array[String], code: Int) = {
-    val wl = words.length
+    val wl = Math.min(words.length, 32) //max 32 words can be processed in ranking
     def count(s: Int, n: Vector[String]) = {
-      var seqCount: Int = s >> 16
-      var exactCount: Int = s & 0x0000FFFF
+      var idx = s >> 16 //idx are 16 oldest bits
+      var seqCount: Int = s >> 8 & 0x000000FF // seq match count are 8 oldest bits from 16 youngest bits
+      var exactCount: Int = s & 0x000000FF // exact match count are 8 youngest bits
       var j = 0
       val nl = n.length
-      while (seqCount < wl && j < nl) {
-        if (n(j).startsWith(words(seqCount))) {
-          if (n(j).length == words(seqCount).length) exactCount += 1
+      while (idx < wl && j < nl) {
+        if (n(j).startsWith(words(idx))) {
+          if (n(j).length == words(idx).length) exactCount += 1
           seqCount += 1
         }
+        idx += 1
         j += 1
       }
-      seqCount.toInt << 16 | exactCount
+      (idx << 16) | (seqCount << 8) | exactCount
     }
     val addrObjs = objsInWrittenOrder(addressMap(code))
     val aol = addrObjs.length
-    def run(matchCount: Int, idxObjs: Int): Int =
-      if (matchCount >> 16 < wl && idxObjs < aol)
-        run(count(matchCount, addrObjs(idxObjs).words), idxObjs + 1)
-      else matchCount
+    def run(idx: Int, idxObjs: Int): Int =
+      if (idx >> 16 < wl && idxObjs < aol)
+        run(count(idx, addrObjs(idxObjs).words), idxObjs + 1)
+      else idx
     val r = run(0, 0)
-    val a = wl - (r >> 16).toByte
-    val b = wl - (r & 0x0000FFFF).toByte
+    val a = wl - (r >> 8 & 0x000000FF)
+    val b = wl - (r & 0x000000FF)
     a << 5 | b
   }
 
