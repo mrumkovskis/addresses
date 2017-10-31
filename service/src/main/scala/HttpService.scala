@@ -49,7 +49,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
 
   val wsVersionNofifications =
     Flow.fromGraph(GraphDSL.create(Source.actorRef[Version](0, OverflowStrategy.fail)
-      .map(v => TextMessage.Strict(normalizeVersion(v.version)))) {
+      .map { case v: Version => TextMessage.Strict(normalizeVersion(v.version))}) {
       import GraphDSL.Implicits._
       implicit builder => src =>
         val M = builder.add(Merge[Message](2))
@@ -146,7 +146,7 @@ object Boot extends scala.App with AddressHttpService {
   implicit val system = ActorSystem("address-service")
   implicit val materializer = ActorMaterializer()
 
-  AddressService
+  AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
   FTPDownload.initialize
 
   val bindingFuture = Http().bindAndHandle(route, "0.0.0.0",

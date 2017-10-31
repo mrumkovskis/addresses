@@ -65,7 +65,7 @@ object FTPDownload {
                   as.log.info(s"Deleting old VZD address file: $current")
                   new File(addressFileDir + "/" + current).delete()
                 }
-                AddressService.checkNewVersion
+                AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
               case err =>
                 as.log.error(s"Error downloading file $remoteFile from ftp server to $tmp - $err")
             }
