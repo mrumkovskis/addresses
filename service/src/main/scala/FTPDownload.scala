@@ -42,10 +42,12 @@ object FTPDownload {
       passiveMode = true
     )
     import Boot._ //make available actor system and materializer
-    Source.tick(initializerRunInterval, initializerRunInterval, Download).runForeach { _ =>
+    import scala.concurrent.duration._
+    Source.tick(1.minute, initializerRunInterval, Download).runForeach { _ =>
       val current = Option(addressFileName)
         .map(fn => fn.substring(fn.lastIndexOf('/') + 1))
         .getOrElse("")
+      as.log.info(s"Checking for new address file on ftp server. Current address file: $current")
       Ftp.ls(ftpDir, ftpSettings)
         .filter(_.isFile)
         .map(_.name)
