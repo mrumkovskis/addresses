@@ -97,9 +97,11 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   import Boot._
   //address updater job as stream
   Source
-    .tick(initializerRunInterval, initializerRunInterval, CheckNewVersion)
-    .mergeMat(Source.actorRef(2, OverflowStrategy.dropHead))((_, actor) => subscribe(actor, "check-new-version"))
-    .fold(null: String) { (currentVersion, _) =>
+    .tick(initializerRunInterval, initializerRunInterval, CheckNewVersion) //periodical check
+    .mergeMat(
+      Source.actorRef(2, OverflowStrategy.dropHead))(
+      (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
+    ).fold(null: String) { (currentVersion, _) =>
       val newVersion = addressFileName
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
         val af = new AddressFinder(newVersion, blackList, houseCoordFile)
