@@ -360,6 +360,7 @@ case class ResolvedAddress(address: String, resolvedAddress: Option[Address])
 
 trait AddressFinder
 extends AddressIndexer
+with AddressResolver
 with AddressIndexLoader
 with AddressLoader
 with AddressIndexerConfig
@@ -481,39 +482,6 @@ with SpatialIndexer {
     Address(addrObj.code, as.toString, zip, typ, coordX, coordY)
   }
   def address(code: Int): Address = addressOption(code).get
-
-  /** Address format:
-        <IEL> <NLT> - <DZI>, <CIEM>, <PAG>|<PIL>, <NOV>
-        Examples:
-          	Ancīši, Ancene, Asares pag., Aknīstes nov.
-            Vīlandes iela 18 - 1, Rīga
-
-  */
-  def resolve(addressString: String): ResolvedAddress = {
-    case class Basta(resolved: Option[Address]) extends Exception
-    search(addressString)(2) match {
-      case Array(address) if address.address.replace("\n", ", ") startsWith addressString =>
-        ResolvedAddress(addressString, Some(address)) //only one match take that
-      case Array(address, _) if addressString == address.address.replace("\n", ", ") => //exact match
-        ResolvedAddress(addressString, Some(address))
-      case Array(a1, a2) if (a1.address.replace("\n", ", ") startsWith addressString)
-        && !(a2.address.replace("\n", ", ") startsWith addressString) => //first match is better than second, so choose first
-        ResolvedAddress(addressString, Some(a1))
-      case _ => ResolvedAddress(
-        addressString,
-        try addressString.split(",").map(_.trim).foldRight(Option[Address](null)) {
-          case (a, resolvedAddr) =>
-            val resolvable = a + resolvedAddr.map("\n" + _.address).mkString
-            search(resolvable)(1) match {
-              case Array(address) if resolvable == address.address => Some(address)
-              case _ => throw Basta(resolvedAddr)
-            }
-        } catch {
-          case Basta(resolved) => resolved
-        }
-      )
-    }
-  }
 
   /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.
