@@ -43,7 +43,8 @@ object FTPDownload {
     )
     import Boot._ //make available actor system and materializer
     import scala.concurrent.duration._
-    Source.tick(1.minute, initializerRunInterval, Download).runForeach { _ =>
+    val initialDelay = 1.minute
+    Source.tick(initialDelay, initializerRunInterval, Download).runForeach { _ =>
       val current = Option(addressFileName)
         .map(fn => fn.substring(fn.lastIndexOf('/') + 1))
         .getOrElse("")
@@ -76,6 +77,6 @@ object FTPDownload {
             s"Unable to list remote ftp files: ftp://$username@$host/$ftpDir")
         }
     }
-    as.log.info(s"FTP downloader will start after $initializerRunInterval and will run at $initializerRunInterval intervals")
+    as.log.info(s"FTP downloader will start after $initialDelay and will run at $initializerRunInterval intervals")
   } else as.log.info("FTP downloader not started due to missing configuration.")
 }
