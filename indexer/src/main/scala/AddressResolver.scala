@@ -10,28 +10,36 @@ trait AddressResolver { this: AddressFinder =>
   */
   def resolve(resolvable: String): ResolvedAddress = {
     case class Basta(resolved: Option[Address]) extends Exception
-    val addressString = resolvable.toLowerCase
-    search(addressString)(2) match {
+    def full_resolve(addressString: String): Option[Address] = search(addressString)(2) match {
       case Array(address) if address.address.toLowerCase.replace("\n", ", ") startsWith addressString =>
-        ResolvedAddress(resolvable, Some(address)) //only one match take that
-      case Array(address, _) if addressString == address.address.toLowerCase.replace("\n", ", ") => //exact match
-        ResolvedAddress(resolvable, Some(address))
+        Some(address) //only one match take that if beginning matches
+      case Array(address, _) if addressString == address.address.toLowerCase.replace("\n", ", ") =>
+        Some(address) //exact match
       case Array(a1, a2) if (a1.address.toLowerCase.replace("\n", ", ") startsWith addressString)
-        && !(a2.address.toLowerCase.replace("\n", ", ") startsWith addressString) => //first match is better than second, so choose first
-        ResolvedAddress(resolvable, Some(a1))
-      case _ => ResolvedAddress(
-        resolvable,
-        try addressString.split(",").map(_.trim).foldRight(Option[Address](null)) {
-          case (a, resolvedAddr) =>
-            val resolvable = a + resolvedAddr.map("\n" + _.address).mkString
-            search(resolvable)(1) match {
-              case Array(address) if resolvable == address.address.toLowerCase => Some(address)
-              case _ => throw Basta(resolvedAddr)
-            }
-        } catch {
+          && !(a2.address.toLowerCase.replace("\n", ", ") startsWith addressString) =>
+        Some(a1) //first match is better than second, so choose first
+      case _ =>
+        None
+    }
+    val addressString = resolvable.toLowerCase
+    ResolvedAddress(
+      resolvable,
+      full_resolve(addressString).orElse {
+        try addressString
+          .split(",")
+          .map(_.trim)
+          .foldRight(None: Option[Address]) { (a, resolvedAddr) =>
+            //println("!!!" + a + resolvedAddr.map("\n" + _.address).mkString)
+            full_resolve(a + resolvedAddr
+              .map(", " + _.address.replace("\n", ", "))
+              .mkString
+              .toLowerCase
+            ).orElse(throw Basta(resolvedAddr))
+          }
+        catch {
           case Basta(resolved) => resolved
         }
-      )
-    }
+      }
+    )
   }
 }
