@@ -12,6 +12,7 @@ import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import scala.language.postfixOps
+import scala.collection.mutable.{ArrayBuffer => AB}
 
 private object Constants {
   val PIL = 104
@@ -40,6 +41,7 @@ private object Constants {
     NLT -> 6, //nekustama lieta (māja)
     DZI -> 7 //dzivoklis
   )
+  val big_unit_types = Set(PIL, NOV, PAG, CIE)
 }
 
 trait AddressIndexer { this: AddressFinder =>
@@ -59,32 +61,36 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  def searchCodes(str: String)(limit: Int = 20, types: Set[Int] = null) =
+  private def address_from_idx_key(k: Long) = addressMap((k & 0x00000000FFFFFFFFL).asInstanceOf[Int])
+
+  private def merge(codes1: AB[Long], codes2: Array[Long], types: Set[Int]): AB[Long] = {
+    val nr = AB[Long]()
+    var (i, j) = (0, 0)
+    while (i < codes1.length && j < codes2.length) {
+      var rv = codes1(i)
+      var av = codes2(j)
+      if (rv == av) {
+        i += 1
+        j += 1
+        if (types == null || types.contains(address_from_idx_key(rv).typ)) nr.append(rv)
+      } else if (rv < av) i += 1 else j += 1
+    }
+    nr
+  }
+
+  def searchCodes(str: String)(types: Set[Int] = null) =
     (searchParams(str)
       .map(_index.getOrElse(_, Array[Long]()))
       .sortBy(_.size) match {
         case Array() => Array[Long]()
         case Array(a) =>
-          (if (types == null) a
-          else a.filter(c => types.contains(addressMap((c & 0x00000000FFFFFFFFL).asInstanceOf[Int]).typ)))
-          .take (if (limit == -1) a.length else limit)
-        case a: Array[Array[Long]] => a.tail.foldLeft(scala.collection.mutable.ArrayBuffer[Long]() ++ a.head)(
-          (r, a) => {
-            val nr = scala.collection.mutable.ArrayBuffer[Long]()
-            var (i, j) = (0, 0)
-            while (i < r.length && j < a.length) {
-              var rv = r(i)
-              var av = a(j)
-              if (rv == av) {
-                i += 1
-                j += 1
-                if (types == null ||
-                    types.contains(addressMap((rv & 0x00000000FFFFFFFFL).asInstanceOf[Int]).typ))
-                  nr.append(rv)
-              } else if (rv < av) i += 1 else j += 1
-            }
-            nr
-          }).toArray match { case a if limit == -1 => a case a => a.take(limit) }
+          //for one word search take only big address units which are at the beginning of array
+          a.takeWhile(c => big_unit_types.contains(address_from_idx_key(c).typ))
+        //case Array(codes1, codes2) =>
+          //also for two word search take only big address units which are at the beginning of array
+          //merge(AB[Long]() ++ codes1, codes2, big_unit_types).toArray
+        case a: Array[Array[Long]] =>
+          a.tail.foldLeft(AB[Long]() ++ a.head)(merge(_, _, types)).toArray
       }).map(_ & 0x00000000FFFFFFFFL).map(_.toInt)
 
   def searchParams(str: String) = wordStatForSearch(str)
@@ -98,22 +104,25 @@ trait AddressIndexer { this: AddressFinder =>
     println(s"Sorting ${addressMap.size} addresses...")
     val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
-    addressMap.foreach(a => {
-      addresses(idx) = (a._1, a._2.depth * 100 + typeOrderMap(a._2.typ),
-          a._2.foldRight(new scala.collection.mutable.StringBuilder())((b, o) =>
+    addressMap.foreach { case (code, addr) =>
+      addresses(idx) = (code, typeOrderMap(addr.typ) * 100 + addr.depth,
+          addr.foldRight(new scala.collection.mutable.StringBuilder())((b, o) =>
             b.append(" ").append(unaccent(o.name))).toString)
       idx += 1
-    })
+    }
     val sortedAddresses = addresses.sortWith((a1, a2) => a1._2 < a2._2 || (a1._2 == a2._2 &&
         (a1._3.length < a2._3.length || (a1._3.length == a2._3.length && a1._3 < a2._3))))
 
-    _sortedPilsNovPagCiem = sortedAddresses.filter(_._2 % 100 < 5).map(_._1).toVector
+    _sortedPilsNovPagCiem =
+      sortedAddresses
+        .collect { case (a, _, _) if big_unit_types.contains(addressMap(a).typ) => a }
+        .toVector
     println(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
 
     println("Creating index...")
     idx = 0
     val index = sortedAddresses
-      .foldLeft(scala.collection.mutable.HashMap[String, scala.collection.mutable.ArrayBuffer[Long]]())(
+      .foldLeft(scala.collection.mutable.HashMap[String, AB[Long]]())(
         (index, addrTuple) => {
           def ref(idx: Long, code: Long) = (idx << 32) | code
           val o = addressMap(addrTuple._1)
@@ -121,7 +130,7 @@ trait AddressIndexer { this: AddressFinder =>
           val words = extractWords(addrTuple._3)
           words foreach (w => {
             if (index contains w) index(w).append(r)
-            else index(w) = scala.collection.mutable.ArrayBuffer(r)
+            else index(w) = AB(r)
           })
           idx += 1
           if (idx % 5000 == 0) println(s"Addresses processed: $idx; word cache size: ${index.size}")
@@ -165,7 +174,7 @@ trait AddressIndexer { this: AddressFinder =>
   //better performance, whitespaces are eliminated in the same run as unaccent operation
   def normalize(str: String) = str
     .toLowerCase
-    .foldLeft(scala.collection.mutable.ArrayBuffer[scala.collection.mutable.StringBuilder]() -> true){
+    .foldLeft(AB[scala.collection.mutable.StringBuilder]() -> true){
        case ((s, b), c) =>
          if (c.isWhitespace || "-,/.\"'\n".contains(c)) (s, true) else {
            if (b) s.append(new scala.collection.mutable.StringBuilder)
@@ -394,11 +403,11 @@ with SpatialIndexer {
 
   def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
     checkIndex
-    if (str.trim.length == 0)
-      if (types == null || (types -- Set(PIL, NOV, PAG, CIE)) != Set.empty)
+    if (str.trim.length == 0) //search string empty, search only big units - PIL, NOV, PAG, CIE
+      if (types == null || (types -- big_unit_types) != Set.empty)
         Array[Address]()
       else {
-        val result = new scala.collection.mutable.ArrayBuffer[Int]()
+        val result = new AB[Int]()
         var (s, i) = (0, 0)
         while (i < _sortedPilsNovPagCiem.size && s < limit) {
           if(types contains _addressMap(_sortedPilsNovPagCiem(i)).typ) {
@@ -411,26 +420,25 @@ with SpatialIndexer {
       }
     else {
       val words = normalize(str)
-      val codes = searchCodes(str)(if (words.length < 2) limit else -1, types)
-      (if (words.length < 2) codes
-      else {
-        var (perfectRankCount, i) = (0, 0)
-        val size = Math.min(codes.length, limit)
-
-        val result = new scala.collection.mutable.ArrayBuffer[Long](size)
-        while (perfectRankCount < size && i < codes.length) {
-          val code = codes(i)
-          val r = rank(words, code)
-          if (r == 0) perfectRankCount += 1
-          val key = r.toLong << 53 | i.toLong << 32 | code
-          insertIntoHeap(result, key)
-          i += 1
-        }
-        (if (size < result.size / 2) heap_topx(result, size)
-          else (if (size < result.size) result.take(size) else result).sorted.toArray)
-          .map(_ & 0x00000000FFFFFFFFL)
-          .map(_.toInt)
-      }) map address
+      val codes = searchCodes(str)(types)
+      var (perfectRankCount, i) = (0, 0)
+      val size = Math.min(codes.length, limit)
+      val result = new AB[Long](size)
+      while (perfectRankCount < size && i < codes.length) {
+        val code = codes(i)
+        val r = rank(words, code)
+        if (r == 0) perfectRankCount += 1
+        val key = r.toLong << 53 | i.toLong << 32 | code
+        insertIntoHeap(result, key)
+        i += 1
+      }
+      (
+        if (size < result.size / 2) heap_topx(result, size)
+        else (if (size < result.size) result.take(size) else result).sorted.toArray
+      )
+      .map(_ & 0x00000000FFFFFFFFL)
+      .map(_.toInt)
+      .map(address)
     }
   }
 
@@ -533,7 +541,7 @@ with SpatialIndexer {
     _sortedPilsNovPagCiem = r._3
   }
 
-  def insertIntoHeap(h: scala.collection.mutable.ArrayBuffer[Long], el: Long) {
+  def insertIntoHeap(h: AB[Long], el: Long) {
     var i = h.size
     var j = 0
     h += el
@@ -547,7 +555,7 @@ with SpatialIndexer {
       i = j
     } while (j > 0)
   }
-  def heap_topx(h: scala.collection.mutable.ArrayBuffer[Long], x: Int) = {
+  def heap_topx(h: AB[Long], x: Int) = {
     def swap(i: Int, j: Int) = {
       val x = h(j)
       h(j) = h(i)
@@ -587,7 +595,7 @@ with SpatialIndexer {
     na
   }
 
-  def heapsortx(a: scala.collection.mutable.ArrayBuffer[Long], x: Int) = {
+  def heapsortx(a: AB[Long], x: Int) = {
     def swap(i: Int, j: Int) = {
       val x = a(j)
       a(j) = a(i)
