@@ -442,7 +442,7 @@ with SpatialIndexer {
       }
       (
         if (size < result.size / 2) heap_topx(result, size)
-        else (if (size < result.size) result.take(size) else result).sorted.toArray
+        else (if (size < result.size) result.sorted.take(size) else result.sorted).toArray
       )
       .map(_ & 0x00000000FFFFFFFFL)
       .map(_.toInt)
