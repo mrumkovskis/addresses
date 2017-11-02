@@ -29,7 +29,6 @@ trait AddressResolver { this: AddressFinder =>
           .split(",")
           .map(_.trim)
           .foldRight(None: Option[Address]) { (a, resolvedAddr) =>
-            //println("!!!" + a + resolvedAddr.map("\n" + _.address).mkString)
             full_resolve(a + resolvedAddr
               .map(", " + _.address.replace("\n", ", "))
               .mkString
