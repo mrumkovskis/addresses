@@ -61,40 +61,49 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  private def address_from_idx_key(k: Long) = addressMap((k & 0x00000000FFFFFFFFL).asInstanceOf[Int])
-
-  private def merge(codes1: AB[Long], codes2: Array[Long], types: Set[Int]): AB[Long] = {
-    val nr = AB[Long]()
-    var (i, j) = (0, 0)
-    while (i < codes1.length && j < codes2.length) {
-      var rv = codes1(i)
-      var av = codes2(j)
-      if (rv == av) {
-        i += 1
-        j += 1
-        if (types == null || types.contains(address_from_idx_key(rv).typ)) nr.append(rv)
-      } else if (rv < av) i += 1 else j += 1
+  def searchCodes(words: Array[String])(types: Set[Int] = null) = {
+    def searchParams(words: Array[String]) = wordStatForSearch(words)
+      .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
+    def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
+    def address_from_idx_key(k: Long) = addressMap((k & 0x00000000FFFFFFFFL).asInstanceOf[Int])
+    def big_units(word: String) =
+      idx_vals(word).takeWhile(c => big_unit_types.contains(address_from_idx_key(c).typ))
+    def merge(codes1: AB[Long], codes2: Array[Long], types: Set[Int]): AB[Long] = {
+      val nr = AB[Long]()
+      var (i, j) = (0, 0)
+      while (i < codes1.length && j < codes2.length) {
+        var rv = codes1(i)
+        var av = codes2(j)
+        if (rv == av) {
+          i += 1
+          j += 1
+          if (types == null || types.contains(address_from_idx_key(rv).typ)) nr.append(rv)
+        } else if (rv < av) i += 1 else j += 1
+      }
+      nr
     }
-    nr
+
+    (words match {
+      case Array() =>
+        Array[Long]()
+      case Array(word) =>
+        //for one word search take only big address units which are at the beginning of array
+        big_units(word)
+      case Array(w1, w2) if w1.length < 2 || w2.length < 2 =>
+        //two word search with any of words of one letter take only big address units
+        (searchParams(words) map big_units sortBy(_.size)) match {
+          case Array() => Array[Long]()
+          case Array(codes) => codes
+          case Array(codes1, codes2) => merge(AB[Long]() ++ codes1, codes2, null).toArray
+        }
+      case words: Array[String] =>
+        (searchParams(words) map idx_vals sortBy(_.size)) match {
+          case Array() => Array[Long]()
+          case Array(codes) => codes
+          case codes => codes.tail.foldLeft(AB[Long]() ++ codes.head)(merge(_, _, types)).toArray
+        }
+    }).map(_ & 0x00000000FFFFFFFFL).map(_.toInt)
   }
-
-  def searchCodes(str: String)(types: Set[Int] = null) =
-    (searchParams(str)
-      .map(_index.getOrElse(_, Array[Long]()))
-      .sortBy(_.size) match {
-        case Array() => Array[Long]()
-        case Array(a) =>
-          //for one word search take only big address units which are at the beginning of array
-          a.takeWhile(c => big_unit_types.contains(address_from_idx_key(c).typ))
-        //case Array(codes1, codes2) =>
-          //also for two word search take only big address units which are at the beginning of array
-          //merge(AB[Long]() ++ codes1, codes2, big_unit_types).toArray
-        case a: Array[Array[Long]] =>
-          a.tail.foldLeft(AB[Long]() ++ a.head)(merge(_, _, types)).toArray
-      }).map(_ & 0x00000000FFFFFFFFL).map(_.toInt)
-
-  def searchParams(str: String) = wordStatForSearch(str)
-    .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
 
   def index(addressMap: Map[Int, AddrObj]) = {
 
@@ -145,24 +154,6 @@ trait AddressIndexer { this: AddressFinder =>
     this._index = index
   }
 
-  def wordStatForIndex(phrase: String) = normalize(phrase)
-    .foldLeft(Map[String, Int]())((stat, w) =>
-      (0 until w.length)
-        .map(w.dropRight(_))
-        .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
-
-  def wordStatForSearch(phrase: String) = normalize(phrase)
-    .foldLeft(Map[String, Int]()) { (stat, w) =>
-      val (new_stat, this_w_count) = stat.foldLeft(stat -> 0) { case ((ns, tc), (cw, cc)) =>
-        if (w startsWith cw) (ns + (cw -> (cc + 1)), tc)
-        else if (cw startsWith w) (ns, tc + 1) else (ns, tc)
-      }
-      if (new_stat.contains(w)) new_stat else new_stat + (w -> (this_w_count + 1))
-    }
-
-  def extractWords(phrase: String) = wordStatForIndex(phrase)
-    .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
-
   val accents = "ēūīāšģķļžčņ" zip "euiasgklzcn" toMap
 
   def unaccent(str: String) = str
@@ -185,6 +176,23 @@ trait AddressIndexer { this: AddressFinder =>
     .map(_.toString)
     .toArray
 
+  def wordStatForSearch(words: Array[String]) = words
+    .foldLeft(Map[String, Int]()) { (stat, w) =>
+      val (new_stat, this_w_count) = stat.foldLeft(stat -> 0) { case ((ns, tc), (cw, cc)) =>
+        if (w startsWith cw) (ns + (cw -> (cc + 1)), tc)
+        else if (cw startsWith w) (ns, tc + 1) else (ns, tc)
+      }
+      if (new_stat.contains(w)) new_stat else new_stat + (w -> (this_w_count + 1))
+    }
+
+  def wordStatForIndex(phrase: String) = normalize(phrase)
+    .foldLeft(Map[String, Int]())((stat, w) =>
+      (0 until w.length)
+        .map(w.dropRight(_))
+        .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
+
+  def extractWords(phrase: String) = wordStatForIndex(phrase)
+    .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
 }
 
 trait AddressLoader { this: AddressFinder =>
@@ -420,7 +428,7 @@ with SpatialIndexer {
       }
     else {
       val words = normalize(str)
-      val codes = searchCodes(str)(types)
+      val codes = searchCodes(words)(types)
       var (perfectRankCount, i) = (0, 0)
       val size = Math.min(codes.length, limit)
       val result = new AB[Long](size)
