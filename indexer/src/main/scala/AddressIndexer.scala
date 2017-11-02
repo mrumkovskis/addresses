@@ -42,6 +42,8 @@ private object Constants {
     DZI -> 7 //dzivoklis
   )
   val big_unit_types = Set(PIL, NOV, PAG, CIE)
+
+  val SEPARATOR_REGEXP = """[\s-,/\."'\n]"""
 }
 
 trait AddressIndexer { this: AddressFinder =>
@@ -162,12 +164,14 @@ trait AddressIndexer { this: AddressFinder =>
       (b, c) => b.append(accents.getOrElse(c, c)))
     .toString
 
+  def isWhitespaceOrSeparator(c: Char) = c.isWhitespace || "-,/.\"'\n".contains(c)
+
   //better performance, whitespaces are eliminated in the same run as unaccent operation
   def normalize(str: String) = str
     .toLowerCase
     .foldLeft(AB[scala.collection.mutable.StringBuilder]() -> true){
        case ((s, b), c) =>
-         if (c.isWhitespace || "-,/.\"'\n".contains(c)) (s, true) else {
+         if (isWhitespaceOrSeparator(c)) (s, true) else {
            if (b) s.append(new scala.collection.mutable.StringBuilder)
              s.last.append(accents.getOrElse(c, c))
            (s, false)
