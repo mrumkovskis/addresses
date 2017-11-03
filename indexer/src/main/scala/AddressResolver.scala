@@ -13,7 +13,7 @@ trait AddressResolver { this: AddressFinder =>
     case class Basta(resolved: Option[Address]) extends Exception
     def to_str(addr: Address) = addr.address.toLowerCase.replace("\n", ", ").replace("\"", "")
     def all_words_match(str: String, addr: Address) =
-      (str.split(SEPARATOR_REGEXP) zip addr.address.toLowerCase.split(SEPARATOR_REGEXP))
+      (str.split(SEPARATOR_REGEXP).filter(_ != "") zip addr.address.toLowerCase.split(SEPARATOR_REGEXP))
         .forall {case (s1, s2) => s1 == s2}
     def full_resolve(addressString: String): Option[Address] = search(addressString)(2) match {
       case Array(address) if to_str(address) startsWith addressString =>
