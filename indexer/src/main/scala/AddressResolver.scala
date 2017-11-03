@@ -22,8 +22,6 @@ trait AddressResolver { this: AddressFinder =>
     def full_resolve(addressString: String): Option[Address] = search(addressString)(2) match {
       case Array(address) if all_words_match(addressString, address) =>
         Some(address) //only one match take that if all words matches
-      case Array(address, _) if addressString == to_str(address) =>
-        Some(address) //exact match
       case Array(a1, a2) if addressString == to_str(a1) ||
           (all_words_match(addressString, a1) && !all_words_match(addressString, a2)) =>
         Some(a1) //first match is better than second, so choose first
