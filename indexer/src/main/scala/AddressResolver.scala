@@ -11,16 +11,21 @@ trait AddressResolver { this: AddressFinder =>
   def resolve(resolvable: String): ResolvedAddress = {
     import Constants._
     case class Basta(resolved: Option[Address]) extends Exception
-    def to_str(addr: Address) = addr.address.toLowerCase.replace("\n", ", ").replace("\"", "")
+    def to_str(addr: Address) = addr.address.toLowerCase
+      .replace("\n", ", ")
+      .replace("\"", "")
     def all_words_match(str: String, addr: Address) =
-      (str.split(SEPARATOR_REGEXP).filter(_ != "") zip addr.address.toLowerCase.split(SEPARATOR_REGEXP))
+      (str
+        .split(SEPARATOR_REGEXP)
+        .filter(_ != "") zip addr.address.toLowerCase.split(SEPARATOR_REGEXP).filter(_ != ""))
         .forall {case (s1, s2) => s1 == s2}
     def full_resolve(addressString: String): Option[Address] = search(addressString)(2) match {
-      case Array(address) if to_str(address) startsWith addressString =>
-        Some(address) //only one match take that if beginning matches
+      case Array(address) if all_words_match(addressString, address) =>
+        Some(address) //only one match take that if all words matches
       case Array(address, _) if addressString == to_str(address) =>
         Some(address) //exact match
-      case Array(a1, a2) if all_words_match(addressString, a1) && !all_words_match(addressString, a2) =>
+      case Array(a1, a2) if addressString == to_str(a1) ||
+          (all_words_match(addressString, a1) && !all_words_match(addressString, a2)) =>
         Some(a1) //first match is better than second, so choose first
       case _ =>
         None
