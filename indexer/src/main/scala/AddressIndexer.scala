@@ -63,13 +63,24 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  def searchCodes(words: Array[String])(types: Set[Int] = null) = {
+  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null) = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
     def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
     def address_from_idx_key(k: Long) = addressMap((k & 0x00000000FFFFFFFFL).asInstanceOf[Int])
     def big_units(word: String) =
       idx_vals(word).takeWhile(c => big_unit_types.contains(address_from_idx_key(c).typ))
+    def find_equal(a: Array[Long], b: Array[Long], a_pos: Int, b_pos: Int, idxs: Array[Int]) = {
+      val al = a.length
+      val bl = b.length
+      var ai = idxs(a_pos)
+      var bi = idxs(b_pos)
+      while (ai < al && bi < bl && a(ai) != b(bi)) {
+        if (a(ai) < b(bi)) ai += 1 else bi += 1
+      }
+      idxs(a_pos) = ai
+      idxs(b_pos) = bi
+    }
     def merge(codes1: AB[Long], codes2: Array[Long], types: Set[Int]): AB[Long] = {
       val nr = AB[Long]()
       var (i, j) = (0, 0)
@@ -90,14 +101,8 @@ trait AddressIndexer { this: AddressFinder =>
         Array[Long]()
       case Array(word) =>
         //for one word search take only big address units which are at the beginning of array
-        big_units(word)
-      case Array(w1, w2) if w1.length < 2 || w2.length < 2 =>
-        //two word search with any of words of one letter take only big address units
-        (searchParams(words) map big_units sortBy(_.size)) match {
-          case Array() => Array[Long]()
-          case Array(codes) => codes
-          case Array(codes1, codes2) => merge(AB[Long]() ++ codes1, codes2, null).toArray
-        }
+        val result = idx_vals(word)
+        if (result.length > limit) result take limit else result
       case words: Array[String] =>
         (searchParams(words) map idx_vals sortBy(_.size)) match {
           case Array() => Array[Long]()
@@ -432,7 +437,7 @@ with SpatialIndexer {
       }
     else {
       val words = normalize(str)
-      val codes = searchCodes(words)(types)
+      val codes = searchCodes(words)(1024, types)
       var (perfectRankCount, i) = (0, 0)
       val size = Math.min(codes.length, limit)
       val result = new AB[Long](size)
