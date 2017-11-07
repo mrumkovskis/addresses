@@ -68,47 +68,56 @@ trait AddressIndexer { this: AddressFinder =>
       .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
     def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
     def address_from_idx_key(k: Long) = addressMap((k & 0x00000000FFFFFFFFL).asInstanceOf[Int])
-    def big_units(word: String) =
-      idx_vals(word).takeWhile(c => big_unit_types.contains(address_from_idx_key(c).typ))
-    def find_equal(a: Array[Long], b: Array[Long], a_pos: Int, b_pos: Int, idxs: Array[Int]) = {
-      val al = a.length
-      val bl = b.length
-      var ai = idxs(a_pos)
-      var bi = idxs(b_pos)
-      while (ai < al && bi < bl && a(ai) != b(bi)) {
-        if (a(ai) < b(bi)) ai += 1 else bi += 1
+    def intersect(idx: Array[Array[Long]], limit: Int): Array[Long] = {
+      val result = AB[Long]()
+      val pos = Array.fill(idx.length)(0)
+      def check_register {
+        val v = idx(0)(pos(0))
+        val l = pos.length
+        var i = 1
+        while (i < l && v == idx(i)(pos(i))) i += 1
+        if (i == l) {
+          if (types == null || types.contains(address_from_idx_key(v).typ)) result.append(v)
+          i = 0
+          while (i < l) {
+            pos(i) += 1
+            i += 1
+          }
+        }
       }
-      idxs(a_pos) = ai
-      idxs(b_pos) = bi
-    }
-    def merge(codes1: AB[Long], codes2: Array[Long], types: Set[Int]): AB[Long] = {
-      val nr = AB[Long]()
-      var (i, j) = (0, 0)
-      while (i < codes1.length && j < codes2.length) {
-        var rv = codes1(i)
-        var av = codes2(j)
-        if (rv == av) {
+      def find_equal(a_pos: Int, b_pos: Int) {
+        val a: Array[Long] = idx(a_pos)
+        val b: Array[Long] = idx(b_pos)
+        val al = a.length
+        val bl = b.length
+        var ai = pos(a_pos)
+        var bi = pos(b_pos)
+        while (ai < al && bi < bl && a(ai) != b(bi)) if (a(ai) < b(bi)) ai += 1 else bi += 1
+        pos(a_pos) = ai
+        pos(b_pos) = bi
+      }
+      def continue = {
+        var i = 0
+        var l = pos.length
+        while (i < l && pos(i) < idx(i).length) i += 1
+        i == l
+      }
+      while (result.length < limit && continue) {
+        check_register
+        var i = 0
+        var l = pos.length - 1
+        while(i < l) {
+          find_equal(i, i + 1)
           i += 1
-          j += 1
-          if (types == null || types.contains(address_from_idx_key(rv).typ)) nr.append(rv)
-        } else if (rv < av) i += 1 else j += 1
+        }
       }
-      nr
+      result.toArray
     }
 
-    (words match {
-      case Array() =>
-        Array[Long]()
-      case Array(word) =>
-        //for one word search take only big address units which are at the beginning of array
-        val result = idx_vals(word)
-        if (result.length > limit) result take limit else result
-      case words: Array[String] =>
-        (searchParams(words) map idx_vals sortBy(_.size)) match {
-          case Array() => Array[Long]()
-          case Array(codes) => codes
-          case codes => codes.tail.foldLeft(AB[Long]() ++ codes.head)(merge(_, _, types)).toArray
-        }
+    ((searchParams(words) map idx_vals sortBy(_.size)) match {
+      case Array() => Array[Long]()
+      case Array(result) => if (result.length > limit) result take limit else result
+      case result => intersect(result, limit)
     }).map(_ & 0x00000000FFFFFFFFL).map(_.toInt)
   }
 
