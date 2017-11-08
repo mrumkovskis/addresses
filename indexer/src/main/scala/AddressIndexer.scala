@@ -117,12 +117,6 @@ trait AddressIndexer { this: AddressFinder =>
 
     (searchParams(words) map idx_vals sortBy(_.size)) match {
       case Array() => Array[Int]()
-      case Array(result) =>
-        if (types == null) (if (result.length > limit) result take limit else result) map addr_code
-        else {
-          val res = result withFilter has_type map addr_code
-          if (res.length > limit) res take limit else res
-        }
       case result => intersect(result, limit)
     }
   }
