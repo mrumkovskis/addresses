@@ -141,8 +141,9 @@ trait AddressIndexer { this: AddressFinder =>
             b.append(" ").append(unaccent(o.name))).toString)
       idx += 1
     }
-    val sortedAddresses = addresses.sortWith((a1, a2) => a1._2 < a2._2 || (a1._2 == a2._2 &&
-        (a1._3.length < a2._3.length || (a1._3.length == a2._3.length && a1._3 < a2._3))))
+    val sortedAddresses = addresses.sortWith { case ((_, ord1, a1), (_, ord2, a2)) =>
+      ord1 < ord2 || (ord1 == ord2 && (a1.length < a2.length || (a1.length == a2.length && a1 < a2)))
+    }
 
     _sortedPilsNovPagCiem =
       sortedAddresses
