@@ -65,7 +65,7 @@ trait AddressIndexer { this: AddressFinder =>
 
   def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): Array[Int] = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
-      .map(t => if (t._2 == 1) t._1 else t._2 + "*" + t._1).toArray
+      .map { case (w, c) => if (c == 1) w else c + "*" + w }.toArray
     def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
     def has_type(code: Long) = types(addressMap((code & 0x00000000FFFFFFFFL).asInstanceOf[Int]).typ)
     def intersect(idx: Array[Array[Long]], limit: Int): Array[Int] = {
@@ -200,14 +200,15 @@ trait AddressIndexer { this: AddressFinder =>
     .map(_.toString)
     .toArray
 
-  def wordStatForSearch(words: Array[String]) = words
-    .foldLeft(Map[String, Int]()) { (stat, w) =>
-      val (new_stat, this_w_count) = stat.foldLeft(stat -> 0) { case ((ns, tc), (cw, cc)) =>
-        if (w startsWith cw) (ns + (cw -> (cc + 1)), tc)
-        else if (cw startsWith w) (ns, tc + 1) else (ns, tc)
+  def wordStatForSearch(words: Array[String]) =
+    ((words groupBy identity map {case (k, a) => (k -> a.length)} toArray) sortBy (_._1.length))
+      .unzip match {
+        case (w, c) =>
+          0 until w.length foreach { i =>
+            (i + 1) until w.length foreach { j => if (w(j) startsWith w(i)) c(i) += c(j) }
+          }
+          (w zip c) toMap
       }
-      if (new_stat.contains(w)) new_stat else new_stat + (w -> (this_w_count + 1))
-    }
 
   def wordStatForIndex(phrase: String) = normalize(phrase)
     .foldLeft(Map[String, Int]())((stat, w) =>
