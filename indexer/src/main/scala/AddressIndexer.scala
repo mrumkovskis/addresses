@@ -33,9 +33,9 @@ private object Constants {
     NOV -> 6
   )
   val typeOrderMap = Map[Int, Int](
-    PIL -> 1, //pilsēta
-    NOV -> 2, //novads
-    PAG -> 3, //pagasts
+    NOV -> 1, //novads
+    PAG -> 2, //pagasts
+    PIL -> 3, //pilsēta
     CIE -> 4, //ciems
     IEL -> 5, //iela
     NLT -> 6, //nekustama lieta (māja)
@@ -539,8 +539,8 @@ with SpatialIndexer {
         if (n(j).startsWith(words(idx))) {
           if (n(j).length == words(idx).length) exactCount += 1
           seqCount += 1
+          idx += 1
         }
-        idx += 1
         j += 1
       }
       (idx << 16) | (seqCount << 8) | exactCount
