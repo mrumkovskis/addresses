@@ -67,7 +67,8 @@ trait AddressIndexer { this: AddressFinder =>
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map { case (w, c) => if (c == 1) w else c + "*" + w }.toArray
     def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
-    def has_type(code: Long) = types(addressMap((code & 0x00000000FFFFFFFFL).asInstanceOf[Int]).typ)
+    def addr_code(code: Long) = (code & 0x00000000FFFFFFFFL).toInt
+    def has_type(code: Long) = types(addressMap(addr_code(code)).typ)
     def intersect(idx: Array[Array[Long]], limit: Int): Array[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
@@ -77,7 +78,7 @@ trait AddressIndexer { this: AddressFinder =>
         var i = 1
         while (i < l && v == idx(i)(pos(i))) i += 1
         if (i == l) {
-          if (types == null || has_type(v)) result.append((v & 0x00000000FFFFFFFFL).toInt)
+          if (types == null || has_type(v)) result append addr_code(v)
           i = 0
           while (i < l) {
             pos(i) += 1
@@ -117,10 +118,9 @@ trait AddressIndexer { this: AddressFinder =>
     (searchParams(words) map idx_vals sortBy(_.size)) match {
       case Array() => Array[Int]()
       case Array(result) =>
-        if (types == null) (if (result.length > limit) result take limit else result)
-          .map(c => (c & 0x00000000FFFFFFFFL).toInt)
+        if (types == null) (if (result.length > limit) result take limit else result) map addr_code
         else {
-          val res = result.withFilter(has_type).map(c => (c & 0x00000000FFFFFFFFL).toInt)
+          val res = result withFilter has_type map addr_code
           if (res.length > limit) res take limit else res
         }
       case result => intersect(result, limit)
