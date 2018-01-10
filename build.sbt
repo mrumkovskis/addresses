@@ -8,12 +8,12 @@ lazy val commonSettings = Seq(
 )
 
 lazy val serviceDependencies = {
-  val akkaV = "2.4.19" //akka version as used by akka-http, needed for akka-slf4j dependency
+  val akkaV = "2.4.19"
   val akkaHttpV = "10.0.10"
   Seq(
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
-    "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "0.14",
+    "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "0.15.1",
     "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
@@ -71,8 +71,7 @@ lazy val addresses = project
     publishMavenStyle := true,
     publishArtifact in Test := false,
     pomIncludeRepository := { x => false },
-    pomExtra := (
-      <url>https://github.com/mrumkovskis/addresses</url>
+    pomExtra := <url>https://github.com/mrumkovskis/addresses</url>
       <licenses>
         <license>
           <name>MIT</name>
@@ -91,5 +90,4 @@ lazy val addresses = project
           <url>https://github.com/mrumkovskis/</url>
         </developer>
       </developers>
-    )
   )
