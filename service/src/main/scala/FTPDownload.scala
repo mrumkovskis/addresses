@@ -54,6 +54,7 @@ object FTPDownload {
         .map(_.name)
         .mapConcat(FILE_PATTERN.findFirstIn(_).filter(_ != current).toList)
         .fold(current)((cur_newest, cur) => if (cur > cur_newest) cur else cur_newest)
+        .filter(_ != current)
         .runForeach { fName =>
           val remoteFile = ftpDir + "/" + fName
           val tmp = System.getProperty("java.io.tmpdir") + "/" + fName
