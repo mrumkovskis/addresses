@@ -513,8 +513,8 @@ with SpatialIndexer {
     null: BigDecimal //coordY
   )) { (m, a) =>
     (m._1 + (a.typ -> a),
-     if (m._2 == null) a.zipCode else m._2,
-     a.typ,
+     if (m._2 == null) a.zipCode else m._2, 
+     if (m._3 == 0) a.typ else m._3,
      if (m._4 == null) a.coordX else m._4,
      if (m._5 == null) a.coordY else m._5)
   } match { case (ac, zip, typ, coordX, coordY) =>
