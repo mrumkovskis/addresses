@@ -11,6 +11,10 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+
+import akka.NotUsed
+import akka.stream.scaladsl.Source
+
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
 
@@ -493,6 +497,13 @@ with SpatialIndexer {
     .getOrElse(AddressStruct())
   }
 
+  def getAddressSource(types: Option[Set[Int]]) : Source[Address, NotUsed] = {
+    Source(addressMap)
+      .map(_._2)
+      .filter(a => types.isEmpty || types.get.contains(a.typ))
+      .map(address(_))
+  }
+
   def addressOption(code: Int) = addressMap.get(code) map address
   private def address(addrObj: AddrObj): Address = addrObj.foldLeft((
     Map[Int, AddrObj](),
@@ -502,8 +513,8 @@ with SpatialIndexer {
     null: BigDecimal //coordY
   )) { (m, a) =>
     (m._1 + (a.typ -> a),
-     if (m._2 == null) a.zipCode else m._2,
-     a.typ,
+     if (m._2 == null) a.zipCode else m._2, 
+     if (m._3 == 0) a.typ else m._3,
      if (m._4 == null) a.coordX else m._4,
      if (m._5 == null) a.coordY else m._5)
   } match { case (ac, zip, typ, coordX, coordY) =>

@@ -7,9 +7,10 @@ lazy val commonSettings = Seq(
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
+val akkaV = "2.4.19"
+val akkaHttpV = "10.0.10"
+
 lazy val serviceDependencies = {
-  val akkaV = "2.4.19"
-  val akkaHttpV = "10.0.10"
   Seq(
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
@@ -19,9 +20,17 @@ lazy val serviceDependencies = {
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
 }
 
+lazy val indexerDependencies = {
+  Seq(
+    "com.typesafe.akka" %% "akka-stream"                       % akkaV)
+}
+
 lazy val indexer = project
   .in(file("indexer"))
   .settings(commonSettings: _*)
+  .settings(
+    libraryDependencies ++= indexerDependencies
+  )
 
 lazy val service = project
   .in(file("service"))

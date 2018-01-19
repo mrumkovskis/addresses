@@ -1,25 +1,25 @@
 package lv.addresses.service
 
-import akka.actor.{ ActorSystem, Props, ActorRef, Actor, ActorLogging }
+import akka.NotUsed
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 
 import scala.util.Try
 import scala.language.postfixOps
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
-
 import spray.json._
-
 import com.typesafe.config._
-
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpMethods, HttpEntity, HttpResponse}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpResponse}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.common.EntityStreamingSupport
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
-import akka.http.scaladsl.marshalling.ToResponseMarshallable
+import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
+import akka.util.ByteString
 
 object MyJsonProtocol extends DefaultJsonProtocol {
   implicit val f20 = jsonFormat20(AddressFull)
@@ -56,6 +56,15 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
         src ~> M
         FlowShape(M.in(1), M.out)
     }).mapMaterializedValue (actor => subscribe(actor, "version"))
+
+  // Address to CSV marshaller
+  implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.Address, ByteString] { a =>
+    Marshalling.WithFixedContentType(ContentTypes.`text/csv(UTF-8)`, () => {
+      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.coordX, a.coordY).mkString(";"))
+    })
+  }
+  // enable csv streaming:
+  implicit val csvStreaming = EntityStreamingSupport.csv()
 
   val route =
     (options & headerValueByType[Origin](()) &
@@ -105,6 +114,12 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
       }
     } ~ path("version") {
       complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
+    } ~ (path("dump.csv") & get & parameterMultiMap) { params => {
+        val types = params.get("type") map(_.toSet.map((t: String) => t.toInt))
+        response {
+          finder => finder.getAddressSource(types)
+        }
+      }
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
       path(Remaining) { resource => getFromResource(resource) }
     }
