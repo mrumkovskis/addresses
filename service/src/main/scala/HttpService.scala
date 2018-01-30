@@ -60,7 +60,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
   // Address to CSV marshaller
   implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.Address, ByteString] { a =>
     Marshalling.WithFixedContentType(ContentTypes.`text/csv(UTF-8)`, () => {
-      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.coordX, a.coordY).mkString(";"))
+      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.coordX, a.coordY, a.name.replaceAll("[;]",",")).mkString(";"))
     })
   }
   // enable csv streaming:
