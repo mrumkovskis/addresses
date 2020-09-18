@@ -1,14 +1,9 @@
 package lv.addresses.service
 
-import akka.NotUsed
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import akka.actor.ActorSystem
 
-import scala.util.Try
 import scala.language.postfixOps
-import scala.concurrent.duration._
-import scala.collection.JavaConversions._
 import spray.json._
-import com.typesafe.config._
 import akka.stream._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpResponse}

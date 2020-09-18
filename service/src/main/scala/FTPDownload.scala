@@ -1,13 +1,10 @@
 package lv.addresses.service
 
-import scala.util.{Success, Failure}
-
+import scala.util.Success
 import akka.stream.IOResult
-import akka.stream.scaladsl.{Source, FileIO}
+import akka.stream.scaladsl.{FileIO, Source}
 import akka.stream.alpakka.ftp.scaladsl.Ftp
-import akka.stream.alpakka.ftp.FtpSettings
-import akka.stream.alpakka.ftp.FtpCredentials.NonAnonFtpCredentials
-
+import akka.stream.alpakka.ftp.{FtpCredentials, FtpSettings}
 import java.io.File
 import java.net.InetAddress
 
@@ -35,12 +32,10 @@ object FTPDownload {
   def isFTPConfigured = !(Set(host, username, password, ftpDir, addressFileDir) contains null)
   def initialize = if (isFTPConfigured) {
     val FILE_PATTERN = new scala.util.matching.Regex(akFileNamePattern)
-    val ftpSettings = FtpSettings(
-      InetAddress.getByName(host),
-      credentials = NonAnonFtpCredentials(username, password),
-      binary = true,
-      passiveMode = true
-    )
+    val ftpSettings = FtpSettings(InetAddress.getByName(host))
+      .withCredentials(FtpCredentials.create(username, password))
+      .withBinary(true)
+      .withPassiveMode(true)
     import Boot._ //make available actor system and materializer
     import scala.concurrent.duration._
     val initialDelay = 1.minute

@@ -80,8 +80,8 @@ trait SpatialIndexer { this: AddressFinder =>
         nodeCount += 1
         Node(
           sorted(median),
-          kdtree(sorted.view(0, median), depth + 1),
-          kdtree(sorted.view(median, sorted.size), depth + 1)
+          kdtree(sorted.slice(0, median), depth + 1),
+          kdtree(sorted.slice(median, sorted.size), depth + 1)
         )
     }
 

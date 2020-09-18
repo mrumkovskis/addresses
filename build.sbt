@@ -3,18 +3,18 @@ import Keys._
 
 lazy val commonSettings = Seq(
   organization := "lv.addresses",
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.13.3",
   scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 )
 
-val akkaV = "2.4.19"
-val akkaHttpV = "10.0.10"
+val akkaHttpV = "10.2.0"
+val akkaV = "2.6.8"
 
 lazy val serviceDependencies = {
   Seq(
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
-    "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "0.15.1",
+    "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "2.0.2",
     "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
@@ -79,7 +79,7 @@ lazy val addresses = project
     },
     publishMavenStyle := true,
     publishArtifact in Test := false,
-    pomIncludeRepository := { x => false },
+    pomIncludeRepository := { _ => false },
     pomExtra := <url>https://github.com/mrumkovskis/addresses</url>
       <licenses>
         <license>
