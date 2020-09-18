@@ -17,6 +17,7 @@ lazy val serviceDependencies = {
     "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "2.0.2",
     "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
+    "org.tresql" %% "tresql"                                   % "10.0.0",
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
 }
 
