@@ -386,9 +386,8 @@ trait AddressIndexLoader { this: AddressIndexer =>
     new File(akFile.getParent, filePrefix + s".$extension")
   }
 }
-
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
-  coordX: BigDecimal, coordY: BigDecimal)
+                       coordX: BigDecimal, coordY: BigDecimal, name: String)
 case class AddressStruct(
   pilCode: Option[Int] = None, pilName: Option[String] = None,
   novCode: Option[Int] = None, novName: Option[String] = None,
@@ -510,14 +509,16 @@ with SpatialIndexer {
     null: String, //zip code
     0, //address object type
     null: BigDecimal, //coordX
-    null: BigDecimal //coordY
+    null: BigDecimal, //coordY
+    null: String //address name (last part)
   )) { (m, a) =>
     (m._1 + (a.typ -> a),
      if (m._2 == null) a.zipCode else m._2, 
      if (m._3 == 0) a.typ else m._3,
      if (m._4 == null) a.coordX else m._4,
-     if (m._5 == null) a.coordY else m._5)
-  } match { case (ac, zip, typ, coordX, coordY) =>
+     if (m._5 == null) a.coordY else m._5,
+     if (m._6 == null) a.name else m._6)
+  } match { case (ac, zip, typ, coordX, coordY, name) =>
     val as = new scala.collection.mutable.StringBuilder()
     ac.get(IEL).foreach(iela => as ++= iela.name)
     ac.get(NLT).foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja.name))
@@ -526,7 +527,7 @@ with SpatialIndexer {
     ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
     ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
     ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
-    Address(addrObj.code, as.toString, zip, typ, coordX, coordY)
+    Address(addrObj.code, as.toString, zip, typ, coordX, coordY, name)
   }
   def address(code: Int): Address = addressOption(code).get
 
