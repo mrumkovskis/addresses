@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# make jar
+
+java -Xmx2g -cp .:lib/ojdbc6.jar:lib/postgresql.jar:lib/scala-library.jar:vzd-receive.jar lv.addresses.Updater $@
