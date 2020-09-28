@@ -8,7 +8,6 @@ Izveido `vzd-receive.jar`:
 
     % make jar
 
-
 ## DB struktūra
 
 Importētājs pats izveidos nepieciešamās tabulas ar Updater.scala norādīto struktūru, ja tās netiks atrastas.
