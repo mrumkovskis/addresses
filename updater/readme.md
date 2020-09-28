@@ -7,7 +7,7 @@ Buildojas ar `sbt`, pakojas ar `sbt-assembly`.
 ## Builds
 
     % sbt clean assembly
-    ... target/scala-2.13/updater-assembly-0.1.0-SNAPSHOT.jar
+    ... target/scala-2.13/vzd-receive-assembly-0.1.1.jar
 
 
 ## DB struktūra
@@ -19,7 +19,7 @@ Referencei, tabulu izveides skripts ir atrodams arī failā `../db/create.sql`, 
 
 ## Darbināšana
 
-    % java -jar updater-assembly.jar --help
+    % java -jar sbt-receive-assembly-0.1.1.jar --help
     % alternatīvi, sbt 'run --help'
 
     Updater retrieves up-to-date address data from VZD address register.
