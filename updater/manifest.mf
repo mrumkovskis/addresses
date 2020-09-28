@@ -1,3 +1,0 @@
-Main-Class: lv.addresses.Updater
-Class-Path: scala-library.jar postgresql.jar ojdbc6.jar lib/postgresql.jar lib/ojdbc6.jar lib/scala-library.jar
-

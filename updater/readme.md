@@ -2,11 +2,13 @@
 
 Šobrīd — nekā neintegrēts ar sbt vai pārējo aplikāciju, bet pilnīgi standalone jars.
 
+Buildojas ar `sbt`, pakojas ar `sbt-assembly`.
+
 ## Builds
 
-Izveido `vzd-receive.jar`:
+    % sbt clean assembly
+    ... target/scala-2.13/updater-assembly-0.1.0-SNAPSHOT.jar
 
-    % make jar
 
 ## DB struktūra
 
@@ -14,14 +16,11 @@ Importētājs pats izveidos nepieciešamās tabulas ar Updater.scala norādīto 
 
 Referencei, tabulu izveides skripts ir atrodams arī failā `../db/create.sql`, bet tā manuāla laišana nav nepieciešama:
 
-    % psql adreses < db/create.sql
 
 ## Darbināšana
 
-Jars draudzējas ar `lib` mapīti, kurā jau ir scala bibliotēkas, un postgres un oracle jdbc draiveri, 
-tapēc `java -jar vzd-receive.jar` darbosies as expected:
-
-    % java -jar vzd-receive.jar --help
+    % java -jar updater-assembly.jar --help
+    % alternatīvi, sbt 'run --help'
 
     Updater retrieves up-to-date address data from VZD address register.
 
@@ -75,6 +74,6 @@ Konfigurācija tiek jaram nodota komandrindā. Noklusētie iestatījumi:
 
 Tipiskajam lietojumam pietiek vien norādīt lietotāja `vraa_amk_izstr` paroli,
 
-    % java -jar vzd-receive.jar --vzd-password XXXX
+    % sbt 'run --vzd-password XXXX'
 
 
