@@ -60,7 +60,6 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     }
   }
 
-  /*
   def createTableSql = {
     val defs = fieldDef.map( fd => {
 
@@ -96,56 +95,52 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       ps.close
       write.commit
     }
+  /*
     if (truncate) {
       val ps = write.prepareStatement(s"truncate table $localDest cascade")
       ps.executeUpdate
       ps.close
       write.commit
     }
+    */
 
   }
-  */
 
   def getWhere(vzd: Connection, local: Connection, opts: OptMap) = {
-
-    if (full_sync_always) {
-      ""
-    } else {
-      val n_existing = Sql.get_int(local, s"select count(*) from $localDest")
-      if (n_existing == 0) {
-        ""
-      } else {
-        val dt_max = Sql.get_string(local, s"select max(${datetag_local}) from $localDest").substring(0, 19)
-        Printer.msg(s"Fetching new records since $dt_max")
-        s"where ${datetag_remote} > to_date('$dt_max', '$orafmt')"
-      }
-    }
-
+    val dt_max = Sql.get_string(local, s"select max(${datetag_local}) from $localDest").substring(0, 19)
+    Printer.msg(s"Fetching new records since $dt_max")
+    s"where ${datetag_remote} > to_date('$dt_max', '$orafmt')"
   }
 
   def migrate(read: Connection, write: Connection, opts: OptMap) : Unit = {
+
+    val n_existing = Sql.get_int(write, s"select count(*) from $localDest")
+
     if (opts("verify") == "true") {
-        migrateFullSlurpstein(read, write)
+      migrateFullSlurpstein(read, write)
+    } else if (n_existing == 0) {
+      // pārdzenam 1:1 optimizētā režīmā (straight_inserts = true)
+      Printer.msg(s"Destination empty, running fast copy")
+      migrateClassic(read, write, "", true)
     } else {
+      if (full_sync_always) {
+        // full sync — izbrauc cauri visiem ierakstiem ar kursoru
+        migrateFullSlurpstein(read, write)
+      } else {
         val where = getWhere(read, write, opts)
-        if (full_sync_always && where != "") {
-          // pat, ja full_sync_always, ja mums nav ierakstu, tad iet klasiskā migrācija
-          migrateClassic(read, write, where)
-        } else if (full_sync_always) {
-          // full sync — izbrauc cauri visiem ierakstiem ar kursoru
-          migrateFullSlurpstein(read, write)
-        } else {
-          migrateClassic(read, write, where)
-        }
+        migrateClassic(read, write, where, false)
+      }
     }
   }
 
-  def migrateClassic(read: Connection, write: Connection, where: String): Long = {
-    val n_total = Sql.get_int(read, s"select count(*) from $remoteSource $where")
-    doMigrateClassic(read, write, where, pk_field._3, n_total, true, 0L)
-  }
+  def migrateClassic(read: Connection, write: Connection, where: String, straight_inserts: Boolean): Long = {
+    // pārdzen $read -> $write ierakstus, kas atbilst $where parametriem
+    // $straight_inserts: optimizācija, ja zināms, ka drīkst ierakstus insertot bez eksistences pārbaudīšanas
+    //   normāli vajag $straight_inserts = false
 
-  def doMigrateClassic(read: Connection, write: Connection, where: String, order: String, n_total: Long, has_updates: Boolean, batchsize: Long): Long = {
+    val order = pk_field._3
+    val n_total = Sql.get_int(read, s"select count(*) from $remoteSource $where")
+    val batchsize = 0L // tickeris nosaka dinamisku batchsize, lai būtu ~20 sekundēs viens tikšķis
 
     val ins = new NamedStatement(write, insertSql)
     val upd = new NamedStatement(write, updateSql)
@@ -161,7 +156,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
       while (rs.next) {
 
-        val mod = if ( ! has_updates) ins else {
+        val mod = if (straight_inserts) ins else {
           var is_new_rec = true
           val ss = write.createStatement
           val pk = rs.getLong(pk_field._1)
@@ -273,7 +268,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
           to_insert.grouped(1000).foreach( elts => {
             val where = s"where ${pk_field._3} in (${elts.mkString(", ")})"
             Sql.commit_disable()
-            migrateClassic(vzd, local, where)
+            migrateClassic(vzd, local, where, true)
             Sql.commit_enable()
           } )
           to_insert.clear()
@@ -319,7 +314,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       to_insert.grouped(1000).foreach( elts => {
         val where = s"where ${pk_field._3} in (${elts.mkString(", ")})"
         Sql.commit_disable()
-        migrateClassic(vzd, local, where)
+        migrateClassic(vzd, local, where, true)
         Sql.commit_enable()
       } )
     }

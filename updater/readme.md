@@ -11,9 +11,9 @@ Izveido `vzd-receive.jar`:
 
 ## DB struktūra
 
-VZD importētājs sagaida jau gatavas tabulas datu bāzē, kurā tas importēs datus.
+Importētājs pats izveidos nepieciešamās tabulas ar Updater.scala norādīto struktūru, ja tās netiks atrastas.
 
-Tam ir skripts `db/create.sql`,
+Referencei, tabulu izveides skripts ir atrodams arī failā `../db/create.sql`, bet tā manuāla laišana nav nepieciešama:
 
     % psql adreses < db/create.sql
 
@@ -74,7 +74,7 @@ Konfigurācija tiek jaram nodota komandrindā. Noklusētie iestatījumi:
 - local: postgres zem 127.0.0.1, datu bāze "adreses", lietotājs "postgres", parole tukša,
 - vzd: oracle ar proxy zem 127.0.0.1:1630, lietotājs vraa_amk_izstr, parole tukša.
 
-Tipiskajam lietojumam pietiek vien norādīt lietotāja vraa_amk_izstr paroli,
+Tipiskajam lietojumam pietiek vien norādīt lietotāja `vraa_amk_izstr` paroli,
 
     % java -jar vzd-receive.jar --vzd-password XXXX
 

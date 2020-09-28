@@ -133,7 +133,6 @@ object Updater {
     "vzd.password"   -> "",
     "lockfile"        -> "/tmp/addresses-vzd-receive.lock",
 
-    "reset-slikts"  -> "false",
     "verify" -> "false"
   )
 
@@ -276,6 +275,7 @@ Examples:
       ms.foreach( mig => {
         Printer.msg(s"Migrate ${mig.source} -> ${mig.target}")
         // mig.rebuild( local.get, opts("truncate") == "true" ) 
+        mig.rebuild(local.get, false)
         mig.migrate(vzd.get, local.get, opts)
       })
 
