@@ -5,9 +5,9 @@ import java.nio.file._
 
 class Lock (file_name: String) {
 
-  val fc = FileChannel.open(Paths.get(file_name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)
+  val fc: FileChannel = FileChannel.open(Paths.get(file_name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)
 
-  def acquire () = {
+  def acquire (): FileLock = {
     val lock = fc.tryLock(0, 1, false)
     if (lock == null) {
       Printer.msg(s"Another instance is already running (lockfile $file_name)")
@@ -16,10 +16,10 @@ class Lock (file_name: String) {
     lock
   }
 
-  def release () = {
+  def release (): Unit = {
     fc.close()
   }
 
-  val lck = acquire ()
+  val lck: FileLock = acquire ()
 
 }

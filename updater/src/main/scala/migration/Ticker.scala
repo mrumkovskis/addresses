@@ -6,7 +6,7 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
   var started = 0L
   var extra = ""
 
-  var batchsize = default_batchsize
+  var batchsize: Long = default_batchsize
 
   def tick : Boolean = {
     n += 1
@@ -23,7 +23,7 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
       false
 
     } else if (n % batchsize == 0) {
-      stats
+      stats()
       true
     } else {
       false
@@ -35,13 +35,13 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
     tick
   }
 
-  def tick_force_stats = {
+  def tick_force_stats: Boolean = {
     n += 1
-    stats
+    stats()
     true
   }
 
-  def stats = {
+  def stats(): Unit = {
       val s_elapsed = System.currentTimeMillis / 1000 - started
       val remaining = (count * s_elapsed / n) - s_elapsed
       val remaining_h = remaining / 3600
@@ -65,7 +65,7 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
   }
 
 
-  def startupBanner = {
+  def startupBanner(): Unit = {
     if (count == 0) {
       Printer.msg(s"$text: nothing to do")
     } else {
@@ -73,7 +73,7 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
     }
   }
 
-  startupBanner
+  startupBanner()
 
 
 }

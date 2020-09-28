@@ -2,10 +2,12 @@ package lv.addresses
 
 import java.sql.Connection
 import java.sql.DriverManager
-import scala.util.{Try, Success, Failure}
-import scala.collection.immutable.ListMap
 
-import lv.uniso.migration.{Printer, Migrator, Lock}
+import scala.util.{Failure, Success, Try}
+import scala.collection.immutable.ListMap
+import lv.uniso.migration.{Lock, Migrator, Printer}
+
+import scala.annotation.tailrec
 
 object M {
   val migrations = List(
@@ -139,7 +141,7 @@ object Updater {
   var local: Option[Connection] = None
   var vzd: Option[Connection] = None
 
-  def usage : Unit = {
+  def usage() : Unit = {
     val supported = M.migrations.map(_._2).mkString(", ")
 
   System.err.println(s"""
@@ -190,6 +192,7 @@ Examples:
 
   var custom_mode = false
 
+  @tailrec
   def gatherOpts(opts: OptMap, args: List[String]) : Option[OptMap] = {
     args match {
       case Nil => Some(opts)
@@ -234,7 +237,7 @@ Examples:
 
   def fatal(text: String) = new Exception(text)
 
-  def connect(opts: OptMap, base: String) = {
+  def connect(opts: OptMap, base: String): Option[Connection] = {
 
     val driver = opts(s"$base.driver")
     val connection = opts(s"$base.connection")
@@ -275,7 +278,7 @@ Examples:
       ms.foreach( mig => {
         Printer.msg(s"Migrate ${mig.source} -> ${mig.target}")
         // mig.rebuild( local.get, opts("truncate") == "true" ) 
-        mig.rebuild(local.get, false)
+        mig.rebuild(local.get, truncate = false)
         mig.migrate(vzd.get, local.get, opts)
       })
 
@@ -289,9 +292,9 @@ Examples:
     gatherOpts(default_opts, args.toList) match {
       case Some(opts) => Try(importWith(opts)) match {
         case Success(_) => ()
-        case Failure(e) => Printer.msg(e.getMessage); e.printStackTrace
+        case Failure(e) => Printer.msg(e.getMessage); e.printStackTrace()
       }
-      case None => usage
+      case None => usage()
     }
 
   }

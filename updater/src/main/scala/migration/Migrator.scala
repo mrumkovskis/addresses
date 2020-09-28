@@ -1,6 +1,5 @@
 package lv.uniso.migration
 
-import scala.collection.mutable.HashMap
 import java.sql.Connection
 
 class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[String, String, String]]) {
@@ -10,25 +9,25 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
   type OptMap = Map[String, String]
 
-  def source = remoteSource
-  def target = localDest
+  def source: String = remoteSource
+  def target: String = localDest
 
   val orafmt = "YYYY-MM-DD HH24:MI:SS"
 
-  lazy val pk_field = fieldDef.find(_._2 == "pk").get
+  lazy val pk_field: (String, String, String) = fieldDef.find(_._2 == "pk").get
 
-  def full_sync_always = {
+  def full_sync_always: Boolean = {
     fieldDef.find( s => (s._2 == "datetag")) == None
   }
 
-  def datetag_local = {
+  def datetag_local: String = {
     (fieldDef.find( s => (s._2 == "datetag")).get)._1
   }
-  def datetag_remote = {
+  def datetag_remote: String = {
     (fieldDef.find( s => (s._2 == "datetag")).get)._3
   }
 
-  def insertSql = {
+  def insertSql(): String = {
 
     val fields = fieldDef.filter(fd => fd._2 != "pk")
     val fds = s"${pk_field._1}, sync_synced, " + fields.map(_._1).mkString(", ")
@@ -40,7 +39,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
   }
 
-  def updateSql = {
+  def updateSql(): String = {
 
     val fields = fieldDef.filter(fd => fd._2 != "pk")
     val upds = fields.map(fd => s"${fd._1}=:${fd._1}").mkString(", ")
@@ -49,7 +48,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
   }
 
-  def remoteFieldsNeeded = {
+  def remoteFieldsNeeded: List[String] = {
     fieldDef.map{
       case (local, t, fd) => 
         if (t == "datetag" || t == "datetime") {
@@ -60,7 +59,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     }
   }
 
-  def createTableSql = {
+  def createTableSql: String = {
     val defs = fieldDef.map( fd => {
 
       val sqlType = fd._2 match {
@@ -92,8 +91,8 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     {
       val ps = write.prepareStatement(createTableSql)
       ps.executeUpdate
-      ps.close
-      write.commit
+      ps.close()
+      write.commit()
     }
   /*
     if (truncate) {
@@ -106,7 +105,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
   }
 
-  def getWhere(vzd: Connection, local: Connection, opts: OptMap) = {
+  def getWhere(vzd: Connection, local: Connection, opts: OptMap): String = {
     val dt_max = Sql.get_string(local, s"select max(${datetag_local}) from $localDest").substring(0, 19)
     Printer.msg(s"Fetching new records since $dt_max")
     s"where ${datetag_remote} > to_date('$dt_max', '$orafmt')"
@@ -121,14 +120,14 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     } else if (n_existing == 0) {
       // pārdzenam 1:1 optimizētā režīmā (straight_inserts = true)
       Printer.msg(s"Destination empty, running fast copy")
-      migrateClassic(read, write, "", true)
+      migrateClassic(read, write, "", straight_inserts = true)
     } else {
       if (full_sync_always) {
         // full sync — izbrauc cauri visiem ierakstiem ar kursoru
         migrateFullSlurpstein(read, write)
       } else {
         val where = getWhere(read, write, opts)
-        migrateClassic(read, write, where, false)
+        migrateClassic(read, write, where, straight_inserts = false)
       }
     }
   }
@@ -142,8 +141,8 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     val n_total = Sql.get_int(read, s"select count(*) from $remoteSource $where")
     val batchsize = 0L // tickeris nosaka dinamisku batchsize, lai būtu ~20 sekundēs viens tikšķis
 
-    val ins = new NamedStatement(write, insertSql)
-    val upd = new NamedStatement(write, updateSql)
+    val ins = new NamedStatement(write, insertSql())
+    val upd = new NamedStatement(write, updateSql())
     // Printer.msg(s"select count(*) from $remoteSource $where")
 
     val ticker = new Ticker(s"Migrating $remoteSource -> $localDest", n_total, batchsize)
@@ -164,29 +163,27 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
           if (rss.next) {
             is_new_rec = false
           }
-          rss.close
-          ss.close
+          rss.close()
+          ss.close()
           if (is_new_rec) ins else upd
         }
 
         {
           fieldDef.foreach {
-            case (f, fieldType, remoteField) => {
+            case (f, fieldType, remoteField) =>
               fieldType match {
                 case "pk" => mod.setLong("sync_id", rs.getLong(f))
-                case "int" => {
+                case "int" =>
                   val v = rs.getLong(f)
                   if (rs.wasNull) {
                     mod.setLongNull(f)
                   } else {
                     mod.setLong(f, v)
                   }
-
-                }
                 case "string" => mod.setString(f, rs.getString(f))
                 case "date" => mod.setDate(f, rs.getDate(f))
                 case "decimal" => mod.setDecimal(f, rs.getBigDecimal(f))
-                case "vertiba" => 
+                case "vertiba" =>
                   val bd:java.math.BigDecimal = rs.getBigDecimal(f)
                   if (rs.wasNull) {
                     mod.setLongNull(f)
@@ -204,26 +201,25 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
                 case "datetime" => mod.setTimestamp(f, Util.riga2utc(rs.getString(f)))
                 case default => throw new Exception(s"Unsupported field type $fieldType")
               }
-            }
           }
-          mod.addBatch
+          mod.addBatch()
         }
 
         if (ticker.tick) {
-          ins.runBatch
-          upd.runBatch
+          ins.runBatch()
+          upd.runBatch()
           Sql.commit(write)
         }
 
       }
 
-      ins.runBatch
-      upd.runBatch
+      ins.runBatch()
+      upd.runBatch()
       Sql.commit(write)
 
-      ins.close
-      upd.close
-      rs.close
+      ins.close()
+      upd.close()
+      rs.close()
 
       Printer.msg(s"Migrating $remoteSource -> $localDest: done ($n_total)")
     }
@@ -261,20 +257,20 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       if (n % 1_000_000 == 0) {
 
         Printer.msg(s"Read ${n}, +${to_insert.size} -${to_delete.size}...")
-        if (to_insert.size > 0) {
+        if (to_insert.nonEmpty) {
 
           
           // migrate missing records in small batches
           to_insert.grouped(1000).foreach( elts => {
             val where = s"where ${pk_field._3} in (${elts.mkString(", ")})"
             Sql.commit_disable()
-            migrateClassic(vzd, local, where, true)
+            migrateClassic(vzd, local, where, straight_inserts = true)
             Sql.commit_enable()
           } )
           to_insert.clear()
         }
 
-        if (to_delete.size > 0) {
+        if (to_delete.nonEmpty) {
           Sql.run(local, s"delete from $localDest where ${pk_field._1} in (${to_delete.mkString(", ")})")
           to_delete.clear()
         }
@@ -301,32 +297,32 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
     }
 
-    if (ours == None && theirs != None) {
+    if (ours.isEmpty && theirs != None) {
       // viņiem vēl ir extra ieraksti
       while (remote_rs.next) to_insert += remote_rs.getLong(1)
     }
-    if (ours != None && theirs == None) {
+    if (ours != None && theirs.isEmpty) {
       // mums vēl ir extra ieraksti
       while (local_rs.next) to_delete += local_rs.getLong(1)
     }
 
-    if (to_insert.size > 0) {
+    if (to_insert.nonEmpty) {
       to_insert.grouped(1000).foreach( elts => {
         val where = s"where ${pk_field._3} in (${elts.mkString(", ")})"
         Sql.commit_disable()
-        migrateClassic(vzd, local, where, true)
+        migrateClassic(vzd, local, where, straight_inserts = true)
         Sql.commit_enable()
       } )
     }
 
-    if (to_delete.size > 0) {
+    if (to_delete.nonEmpty) {
       Sql.run(local, s"delete from $localDest where ${pk_field._1} in (${to_delete.mkString(", ")})")
     }
 
     Sql.commit(local)
 
-    local_rs.close
-    remote_rs.close
+    local_rs.close()
+    remote_rs.close()
 
   }
 

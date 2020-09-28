@@ -1,15 +1,16 @@
 package lv.uniso.migration
 
-import java.time.{ZonedDateTime, ZoneId}
+import java.sql.Timestamp
+import java.time.{ZoneId, ZonedDateTime}
 
 object Util {
 
-  val tz = ZoneId.of("Europe/Riga")
+  val tz: ZoneId = ZoneId.of("Europe/Riga")
 
 
   // iekšā: yyyy-mm-dd hh:mm:ss, europe/riga formātā
   // ārā: proper java.sql.timestamps (essentially unixtime)
-  def riga2utc(ymdhs: String) = {
+  def riga2utc(ymdhs: String): Timestamp = {
     if (ymdhs == null || ymdhs == "") {
       null
     } else {
