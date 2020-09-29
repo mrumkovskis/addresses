@@ -17,12 +17,12 @@ object M {
 
       // local_name,  datatype,   remote_name
       ("adr_cd",       "pk",       "adr_cd"),   // Adreses kods - ārējā saite uz tabulu ART_VIETA, ART_NLIETA vai ART_DZIV, atkarībā no lauka TIPS_CD
-      ("tips_cd",      "int",      "tips_cd"),  // Adresācijas objekta tips - ārējā saite uz tabulu ART_KONST
+      ("tips_cd",      "fk",       "tips_cd"),  // Adresācijas objekta tips - ārējā saite uz tabulu ART_KONST
       ("statuss",      "string",   "statuss"),  // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
       ("apstipr",      "string",   "apstipr"),  // Adresācijas objekta apstiprinājuma pakāpe (Y - apstiprināta; N - neapstiprināta)
       ("apst_pak",     "int",      "apst_pak"), // Apstiprinājuma pakāpe
       ("std",          "string",   "std"),      // Adreses standarta pieraksts
-      ("vkur_cd",      "int",      "vkur_cd"),  // Adresācijas objekta, kur ietilpst, kods
+      ("vkur_cd",      "fk",      "vkur_cd"),  // Adresācijas objekta, kur ietilpst, kods
       ("t1",           "string",   "t1"),       // Adreses standarta pieraksta fragments
       ("t2",           "string",   "t2"),       // -"-
       ("t3",           "string",   "t3"),       // -"-
@@ -39,13 +39,13 @@ object M {
     ("AK.ARG_ADRESE_ARH", "arg_adrese_arh", List(
       // 3m recs
       ("id",           "pk",       "id"),
-      ("adr_cd",       "int",      "adr_cd"),
-      ("tips_cd",      "int",      "tips_cd"),
+      ("adr_cd",       "fk",       "adr_cd"),
+      ("tips_cd",      "fk",       "tips_cd"),
       ("statuss",      "string",   "statuss"),
       ("apstipr",      "string",   "apstipr"),
       ("apst_pak",     "int",      "apst_pak"),
       ("std",          "string",   "std"),
-      ("vkur_cd",      "int",      "vkur_cd"),
+      ("vkur_cd",      "fk",       "vkur_cd"),
       ("t1",           "string",   "t1"),
       ("t2",           "string",   "t2"),
       ("t3",           "string",   "t3"),
@@ -62,11 +62,11 @@ object M {
     ("AK.ART_VIETA", "art_vieta", List(
       // 30k recs
       ("kods",         "pk",        "kods"),      // Vietas kods (sekvence - VIETA_SEQ)
-      ("tips_cd",      "int",       "tips_cd"),   // Adresācijas objekta tipa kods - ārējā atslēga uz tabulu ART_KONST
+      ("tips_cd",      "fk",        "tips_cd"),   // Adresācijas objekta tipa kods - ārējā atslēga uz tabulu ART_KONST
       ("apstipr",      "string",    "apstipr"),   // Nosaka vai informācija par vietu ir apstiprināta, vērtības (null; not null)
       ("apst_pak",     "int",       "apst_pak"),  // Datu apstiprinājuma pakāpe (ticamība)
       ("statuss",      "string",    "statuss"),   // Nosaka vietas statusu (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
-      ("vkur_cd",      "int",       "vkur_cd"),   // Denormalizētais lauks - norāda uz vietu, kurā dotā vieta tieši ietilpst - ārējā atslēga uz tabulu ART_VIETA
+      ("vkur_cd",      "fk",        "vkur_cd"),   // Denormalizētais lauks - norāda uz vietu, kurā dotā vieta tieši ietilpst - ārējā atslēga uz tabulu ART_VIETA
       ("vkur_tips",    "int",       "vkur_tips"), // Denormalizētais lauks - norāda uz vietas, kurā dotā vieta tieši ietilpst, tipu - ārējā atslēga uz tabulu ART_KONST
       ("nosaukums",    "string",    "nosaukums"), // Denormalizētais lauks - vietas pilnais nosaukums (pamatnosaukums + nomenklatūras vārds)
       ("sort_nos",     "string",    "sort_nos"),  // Denormalizētais lauks - vietas pamatnosaukuma kārtošanas nosaukums
@@ -81,16 +81,16 @@ object M {
     ("AK.ART_NLIETA", "art_nlieta", List(
       // 500k recs
       ("kods",         "pk",        "kods"),      // Nekustamās lietas kods (sekvence - VIETA_SEQ)
-      ("tips_cd",      "int",       "tips_cd"),   // Adresācijas objekta tips - nekustama lieta (ārējā saite uz tabulu ART_KONST)
+      ("tips_cd",      "fk",        "tips_cd"),   // Adresācijas objekta tips - nekustama lieta (ārējā saite uz tabulu ART_KONST)
       ("statuss",      "string",    "statuss"),   // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
       ("apstipr",      "string",    "apstipr"),   // Vai adresācijas objekta adrese ir apstiprināta (Y; null)
       ("apst_pak",     "int",       "apst_pak"),  // Datu apstiprinājuma pakāpe (ticamība)
-      ("vkur_cd",      "int",       "vkur_cd"),   // Vietas, kur ietilpst nekustamā lieta, kods - ārējā saite uz tabulu ART_VIETA. Denormalizētais lauks no tabulas ART_NLSAITE
+      ("vkur_cd",      "fk",        "vkur_cd"),   // Vietas, kur ietilpst nekustamā lieta, kods - ārējā saite uz tabulu ART_VIETA. Denormalizētais lauks no tabulas ART_NLSAITE
       ("vkur_tips",    "int",       "vkur_tips"), // Vietas, kur ietilpst nekustamā lieta, tipa kods - ārējā saite uz datni ART_KODIFIKATORS. Denormalizētais lauks no tabulas ART_NLSAITE
       ("nosaukums",    "string",    "nosaukums"), // Nekustamās lietas nosaukums (denormalizētais lauks no tabulām ART_NOM_VARDS un ART_PNOS)
       ("sort_nos",     "string",    "sort_nos"),  // Nekustamās lietas kārtošanas nosaukums (denormalizētais lauks no datnēm ART_NOM_VARDS un ART_PNOS)
       ("atrib",        "string",    "atrib"),     // Pasta indekss - denormalizētais lauks no tabulas ART_VIETA (ATRIB) p.n. apk. terit.
-      ("pnod_cd",      "int",       "pnod_cd"),   // Pasta nod. apk. terit. Kods - denormalizētais lauks, saite uz tabulu ART_VIETA
+      ("pnod_cd",      "fk",        "pnod_cd"),   // Pasta nod. apk. terit. Kods - denormalizētais lauks, saite uz tabulu ART_VIETA
 
       ("for_build",    "string",    "for_build"), // Apbūvei paredzēts zemes gabals
 
@@ -103,7 +103,7 @@ object M {
     ("AK.ART_EKA_GEO", "art_eka_geo", List(
       // 500k recs
       ("mslink",       "pk",        "mslink"),    // Sasaiste ar grafisko objektu L50_LINES
-      ("vieta_cd",     "int",       "vieta_cd"),  // Saite uz tabulu ART_NLIETA
+      ("vieta_cd",     "fk",        "vieta_cd"),  // Saite uz tabulu ART_NLIETA
       ("koord_x",      "decimal",   "koord_x"),   // Adreses X koordināte
       ("koord_y",      "decimal",   "koord_y"),   // Adreses Y koordināte
     )),
@@ -111,11 +111,11 @@ object M {
     ("AK.ART_DZIV",    "art_dziv", List(
       // 1m recs
       ("kods",         "pk",        "kods"),      // Adresācijas objekta kods (sekvence - VIETA_SEQ)    
-      ("tips_cd",      "int",       "tips_cd"),   // Adresācijas objekta tips - dzīvoklis. Ārējā saite uz tabulu ART_KONST
-      ("statuss",      "string",   "statuss"),    // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
-      ("apstipr",      "string",   "apstipr"),    // Vai dzīvoklis ir apstiprināts (Y; null)
-      ("apst_pak",     "int",      "apst_pak"),   // Datu apstiprinājuma pakāpe (ticamība)
-      ("vkur_cd",      "int",       "vkur_cd"),   // Nekustamās lietas, kurā ietilpst dzīvoklis, kods - ārējā saite uz tabulu ART_NLIETA (denormalizētais lauks no tabulas ART_NLSAITE)
+      ("tips_cd",      "fk",        "tips_cd"),   // Adresācijas objekta tips - dzīvoklis. Ārējā saite uz tabulu ART_KONST
+      ("statuss",      "string",    "statuss"),    // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
+      ("apstipr",      "string",    "apstipr"),    // Vai dzīvoklis ir apstiprināts (Y; null)
+      ("apst_pak",     "int",       "apst_pak"),   // Datu apstiprinājuma pakāpe (ticamība)
+      ("vkur_cd",      "fk",        "vkur_cd"),   // Nekustamās lietas, kurā ietilpst dzīvoklis, kods - ārējā saite uz tabulu ART_NLIETA (denormalizētais lauks no tabulas ART_NLSAITE)
       ("vkur_tips",    "int",       "vkur_tips"), // Adresācijas objekts, kurā ietilpst dzīvoklis, tips - nekustamā lieta
       ("nosaukums",    "string",    "nosaukums"), // Numurs (nosaukums) - denormalizētais lauks no datnes ART_NUM
       ("sort_nos",     "string",    "sort_nos"),  // Kārtošanas numurs (nosaukums) - denormalizētais lauks no datnes ART_NUM

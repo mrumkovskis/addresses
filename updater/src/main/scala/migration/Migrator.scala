@@ -64,7 +64,8 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
       val sqlType = fd._2 match {
         case "pk" => "bigint primary key"
-        case "int" => "bigint"
+        case "fk" => "bigint"
+        case "int" => "int"
         case "string" => "varchar"
         case "yn" => "boolean"
         case "01" => "boolean"
@@ -173,13 +174,10 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
             case (f, fieldType, remoteField) =>
               fieldType match {
                 case "pk" => mod.setLong("sync_id", rs.getLong(f))
-                case "int" =>
+                case "fk" | "int" =>
                   val v = rs.getLong(f)
-                  if (rs.wasNull) {
-                    mod.setLongNull(f)
-                  } else {
-                    mod.setLong(f, v)
-                  }
+                  if (rs.wasNull) mod.setLongNull(f)
+                  else mod.setLong(f, v)
                 case "string" => mod.setString(f, rs.getString(f))
                 case "date" => mod.setDate(f, rs.getDate(f))
                 case "decimal" => mod.setDecimal(f, rs.getBigDecimal(f))
