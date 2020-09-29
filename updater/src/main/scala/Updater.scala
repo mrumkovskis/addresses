@@ -263,34 +263,36 @@ Examples:
     }
   }
 
-  def importWith(opts: OptMap) : Unit = {
+  def importWith(opts: OptMap) : Try[Unit] = {
 
     val lock = new Lock(opts("lockfile"))
 
-    local = connect(opts, "local")
-    vzd = connect(opts, "vzd")
+    val r = Try {
 
+      local = connect(opts, "local")
+      vzd = connect(opts, "vzd")
 
-    {
+      migrations.reverseIterator.foreach { m =>
 
-      val ms = migrations.reverseIterator.map( m => migrator(m, opts) )
+        val mig = migrator(m, opts)
 
-      ms.foreach( mig => {
         Printer.msg(s"Migrate ${mig.source} -> ${mig.target}")
         // mig.rebuild( local.get, opts("truncate") == "true" ) 
         mig.rebuild(local.get, truncate = false)
         mig.migrate(vzd.get, local.get, opts)
-      })
 
+      }
     }
 
     lock.release()
+
+    r
   }
 
   def main(args: Array[String]) : Unit = {
 
     gatherOpts(default_opts, args.toList) match {
-      case Some(opts) => Try(importWith(opts)) match {
+      case Some(opts) => importWith(opts) match {
         case Success(_) => ()
         case Failure(e) => Printer.msg(e.getMessage); e.printStackTrace()
       }
