@@ -107,6 +107,25 @@ object M {
       ("koord_x",      "decimal",   "koord_x"),   // Adreses X koordināte
       ("koord_y",      "decimal",   "koord_y"),   // Adreses Y koordināte
     )),
+
+    ("AK.ART_DZIV",    "art_dziv", List(
+      // 1m recs
+      ("kods",         "pk",        "kods"),      // Adresācijas objekta kods (sekvence - VIETA_SEQ)    
+      ("tips_cd",      "int",       "tips_cd"),   // Adresācijas objekta tips - dzīvoklis. Ārējā saite uz tabulu ART_KONST
+      ("statuss",      "string",   "statuss"),    // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
+      ("apstipr",      "string",   "apstipr"),    // Vai dzīvoklis ir apstiprināts (Y; null)
+      ("apst_pak",     "int",      "apst_pak"),   // Datu apstiprinājuma pakāpe (ticamība)
+      ("vkur_cd",      "int",       "vkur_cd"),   // Nekustamās lietas, kurā ietilpst dzīvoklis, kods - ārējā saite uz tabulu ART_NLIETA (denormalizētais lauks no tabulas ART_NLSAITE)
+      ("vkur_tips",    "int",       "vkur_tips"), // Adresācijas objekts, kurā ietilpst dzīvoklis, tips - nekustamā lieta
+      ("nosaukums",    "string",    "nosaukums"), // Numurs (nosaukums) - denormalizētais lauks no datnes ART_NUM
+      ("sort_nos",     "string",    "sort_nos"),  // Kārtošanas numurs (nosaukums) - denormalizētais lauks no datnes ART_NUM
+      ("atrib",        "string",    "atrib"),     // Neizmanto
+
+      ("dat_sak",      "datetime", "dat_sak"),    // No kura datuma dzīvoklis eksistē
+      ("dat_beig",     "datetime", "dat_beig"),   // Dzīvokļa atribūtu pēdējās modifikācijas datums
+
+      ("dat_mod",      "datetag",  "dat_mod"),    // Līdz kuram datumam dzīvoklis eksistēja
+    )),
   )
 }
 

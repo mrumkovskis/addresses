@@ -3,6 +3,7 @@ drop table if exists arg_adrese_arh;
 drop table if exists art_vieta;
 drop table if exists art_nlieta;
 drop table if exists art_eka_geo;
+drop table if exists art_dziv;
 
 create table arg_adrese (
   adr_cd        bigint primary key,
@@ -100,4 +101,22 @@ create table art_eka_geo (
   koord_y       decimal(9, 3),
   sync_synced   timestamp with time zone
 
+);
+
+create table art_dziv (
+  kods bigint primary key,
+  tips_cd bigint,
+  statuss text,
+  apstipr text,
+  apst_pak int,
+  vkur_cd bigint,
+  vkur_tips int,
+  nosaukums text,
+  sort_nos text,
+  atrib text,
+
+  dat_sak timestamp with time zone,
+  dat_beig timestamp with time zone,
+
+  dat_mod timestamp with time zone
 );
