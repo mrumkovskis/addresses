@@ -15,15 +15,19 @@ lazy val serviceDependencies = {
     "com.typesafe.akka" %% "akka-http"                         % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
     "com.lightbend.akka" %% "akka-stream-alpakka-ftp"          % "2.0.2",
-    "ch.qos.logback"     % "logback-classic"                   % "1.2.3",
     "com.typesafe.akka" %% "akka-slf4j"                        % akkaV,
-    "org.tresql" %% "tresql"                                   % "10.0.0",
     "com.typesafe.akka" %% "akka-http-testkit"                 % akkaHttpV  % "test")
 }
 
 lazy val indexerDependencies = {
   Seq(
-    "com.typesafe.akka" %% "akka-stream"                       % akkaV)
+    "com.typesafe.akka" %% "akka-stream"                       % akkaV,
+    "ch.qos.logback" % "logback-classic"                       % "1.2.3",
+    "com.typesafe.scala-logging" %% "scala-logging"            % "3.9.2",
+    "org.tresql" %% "tresql"                                   % "10.0.0",
+    "org.postgresql" % "postgresql"                            % "42.2.16",
+    "com.zaxxer" % "HikariCP"                                  % "3.4.2",
+  )
 }
 
 lazy val indexer = project

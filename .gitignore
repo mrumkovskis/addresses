@@ -23,4 +23,4 @@ setenv*
 bin/*.jar
 
 application.conf
-
+logback.xml

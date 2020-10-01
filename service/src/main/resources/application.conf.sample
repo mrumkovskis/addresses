@@ -22,4 +22,12 @@ VZD {
   }
 }
 
+# database configuration for actual and historic addresses
+db {
+  driver = org.postgresql.Driver
+  url = <url>
+  user = <user>
+  password = <password>
+}
+
 port = 8082

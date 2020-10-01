@@ -1,6 +1,5 @@
 package lv.addresses.indexer
 
-import scala.collection.JavaConverters._
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.BufferedWriter
@@ -217,65 +216,6 @@ trait AddressIndexer { this: AddressFinder =>
 
   def extractWords(phrase: String) = wordStatForIndex(phrase)
     .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
-}
-
-trait AddressLoader { this: AddressFinder =>
-
-  val files: Map[String, (Array[String]) => AddrObj] =
-    Map("AW_CIEMS.CSV" -> conv _,
-      "AW_DZIV.CSV" -> conv_dziv _,
-      "AW_IELA.CSV" -> conv _,
-      "AW_NLIETA.CSV" -> conv_nlt _,
-      "AW_NOVADS.CSV" -> conv _,
-      "AW_PAGASTS.CSV" -> conv _,
-      "AW_PILSETA.CSV" -> conv _,
-      "AW_RAJONS.CSV" -> conv _).filter(t => !(blackList contains t._1))
-
-  def conv(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(2), line(3).toInt, null,
-      normalize(line(2)).toVector)
-  def conv_nlt(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(7), line(5).toInt, line(9),
-      normalize(line(7)).toVector)
-  def conv_dziv(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(7), line(5).toInt, null,
-      normalize(line(7)).toVector)
-
-  def loadAddresses(addressZipFile: String = addressFileName, hcf: String = houseCoordFile) = {
-    println(s"Loading addreses from file $addressZipFile, house coordinates from file $houseCoordFile...")
-    val start = System.currentTimeMillis
-    var currentFile: String = null
-    var converter: Array[String] => AddrObj = null
-    val f = new java.util.zip.ZipFile(addressZipFile)
-    val houseCoords = Option(hcf).flatMap(cf => Option(f.getEntry(cf)))
-      .map{e =>
-        println(s"Loading house coordinates $hcf ...")
-        scala.io.Source.fromInputStream(f.getInputStream(e))
-      }.toList
-      .flatMap(_.getLines.drop(1))
-      .map{r =>
-        val coords = r.split(";").map(_.drop(1).dropRight(1))
-        coords(1).toInt -> (BigDecimal(coords(2)) -> BigDecimal(coords(3)))
-      }.toMap
-    val addressMap = f.entries.asScala
-      .filter(files contains _.getName)
-      .map(f => { println(s"loading file: $f"); converter = files(f.getName); currentFile = f.getName; f })
-      .map(f.getInputStream(_))
-      .map(scala.io.Source.fromInputStream(_, "Cp1257"))
-      .flatMap(_.getLines.drop(1))
-      .filter(l => {
-        val r = l.split(";")
-        //use only existing addresses - status: EKS
-        (if (Set("AW_NLIETA.CSV", "AW_DZIV.CSV") contains currentFile) r(2) else r(7)) == "#EKS#"
-      })
-      .map(r => converter(r.split(";").map(_.drop(1).dropRight(1))))
-      .map(o => o.code -> houseCoords
-        .get(o.code)
-        .map(coords => o.copy(coordX = coords._1).copy(coordY = coords._2))
-        .getOrElse(o))
-      .toMap
-    f.close
-    println(s"${addressMap.size} addresses loaded in ${System.currentTimeMillis - start}ms")
-    addressMap
-  }
-
 }
 
 trait AddressIndexLoader { this: AddressIndexer =>
