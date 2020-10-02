@@ -11,12 +11,13 @@ import akka.pattern.ask
 import akka.event.EventBus
 import akka.event.LookupClassification
 
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
 import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Source, Sink}
+import akka.stream.scaladsl.{Sink, Source}
+import com.typesafe.scalalogging.Logger
+import org.slf4j.LoggerFactory
 
 object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
@@ -116,9 +117,11 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 }
 
 trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
+  //conflicting variable name with logger from AddressFinder
+  protected val configLogger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
   def conf = com.typesafe.config.ConfigFactory.load
   def akFileName = if (conf.hasPath("VZD.ak-file")) conf.getString("VZD.ak-file") else {
-    println("ERROR: address file setting 'VZD.ak-file' not found")
+    configLogger.error("address file setting 'VZD.ak-file' not found")
     null
   }
   def akDirName = {
@@ -150,6 +153,14 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
       }.orNull
   }
   def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
+
+  override def dbConfig: Option[DbConfig] =
+    if (conf.hasPath("db")) {
+      val dbConf = conf.getConfig("db")
+      Some(DbConfig(dbConf.getString("driver"),
+        dbConf.getString("url"),
+        dbConf.getString("user"), dbConf.getString("password")))
+    } else None
 }
 
 class AddressFinder(val addressFileName: String, val blackList: Set[String],

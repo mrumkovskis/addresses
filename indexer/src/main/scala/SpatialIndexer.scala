@@ -41,7 +41,7 @@ trait SpatialIndexer { this: AddressFinder =>
         if (depth % 2 == 0) traverse(left, right, check_x_splitting_pane, coordX <= curr_addr.coordX) //x axis
         else traverse(left, right, check_y_splitting_pane, coordY <= curr_addr.coordY) //y axis
       }
-      nearest.clear
+      nearest.clear()
       1 to limit map { _ =>
         val nearest_addr = search(_spatialIndex)
         found += nearest_addr
@@ -51,7 +51,7 @@ trait SpatialIndexer { this: AddressFinder =>
     }
 
     def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal) = {
-      nearest.clear
+      nearest.clear()
       addressMap.foreach { case (c, o) =>
         if (o.coordX != null && o.coordY != null) {
           nearest += (o -> dist(coordX, coordY, o.coordX, o.coordY))
@@ -63,7 +63,6 @@ trait SpatialIndexer { this: AddressFinder =>
   }
 
   def spatialIndex(addressMap: Map[Int, AddrObj]) = {
-    val start = System.currentTimeMillis
     var nodeCount = 0
     def kdtree(addresses: Seq[Int], depth: Int = 0): Node = addresses match {
       case Seq() => null
@@ -85,13 +84,13 @@ trait SpatialIndexer { this: AddressFinder =>
         )
     }
 
-    println("Creating spatial index ... ")
+    logger.info("Creating spatial index ... ")
     _spatialIndex = kdtree(addressMap
       .keysIterator
       .filter(c => addressMap
         .get(c)
         .exists { a => a.coordX != null && a.coordY != null })
       .toIndexedSeq)
-    println(s"Spatial index created ($nodeCount addresses indexed) in ${System.currentTimeMillis - start}ms")
+    logger.info(s"Spatial index created ($nodeCount addresses indexed).")
   }
 }

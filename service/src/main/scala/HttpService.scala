@@ -17,14 +17,14 @@ import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarsha
 import akka.util.ByteString
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f20 = jsonFormat20(AddressFull)
+  implicit val f20 = jsonFormat21(AddressFull)
   implicit val f02 = jsonFormat2(ResolvedAddressFull)
   implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
 }
 
 case class AddressFull(
   code: Int, address: String, zipCode: Option[String], typ: Int,
-  coordX: Option[BigDecimal], coordY: Option[BigDecimal],
+  coordX: Option[BigDecimal], coordY: Option[BigDecimal], history: List[String],
   pilCode: Option[Int] = None, pilName: Option[String] = None,
   novCode: Option[Int] = None, novName: Option[String] = None,
   pagCode: Option[Int] = None, pagName: Option[String] = None,
@@ -135,7 +135,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
     ) = {
       import struct._
       AddressFull(a.code, a.address.replace("\n", separator), Option(a.zipCode), a.typ,
-        Option(a.coordX), Option(a.coordY),
+        Option(a.coordX), Option(a.coordY), a.history,
         pilCode, pilName,
         novCode, novName,
         pagCode, pagName,

@@ -1,21 +1,13 @@
 package lv.addresses.indexer
 
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.BufferedWriter
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.OutputStreamWriter
-import java.io.PrintWriter
-
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import com.typesafe.scalalogging.Logger
+import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
+import scala.sys.error
 
 private object Constants {
   val PIL = 104
@@ -68,14 +60,14 @@ trait AddressIndexer { this: AddressFinder =>
 
   def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): Array[Int] = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
-      .map { case (w, c) => if (c == 1) w else c + "*" + w }.toArray
+      .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
     def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
     def addr_code(code: Long) = (code & 0x00000000FFFFFFFFL).toInt
     def has_type(code: Long) = types(addressMap(addr_code(code)).typ)
     def intersect(idx: Array[Array[Long]], limit: Int): Array[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
-      def check_register {
+      def check_register = {
         val v = idx(0)(pos(0))
         val l = pos.length
         var i = 1
@@ -89,7 +81,7 @@ trait AddressIndexer { this: AddressFinder =>
           }
         }
       }
-      def find_equal(a_pos: Int, b_pos: Int) {
+      def find_equal(a_pos: Int, b_pos: Int) = {
         val a: Array[Long] = idx(a_pos)
         val b: Array[Long] = idx(b_pos)
         val al = a.length
@@ -124,12 +116,11 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
 
-  def index(addressMap: Map[Int, AddrObj]) = {
+  def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {
 
-    println("Starting address indexing...")
-    val start = System.currentTimeMillis
+    logger.info("Starting address indexing...")
+    logger.info(s"Sorting ${addressMap.size} addresses...")
 
-    println(s"Sorting ${addressMap.size} addresses...")
     val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
     addressMap.foreach { case (code, addr) =>
@@ -146,30 +137,33 @@ trait AddressIndexer { this: AddressFinder =>
       sortedAddresses
         .collect { case (a, _, _) if big_unit_types.contains(addressMap(a).typ) => a }
         .toVector
-    println(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
+    logger.info(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
 
-    println("Creating index...")
+    logger.info("Creating index...")
     idx = 0
     val index = sortedAddresses
-      .foldLeft(scala.collection.mutable.HashMap[String, AB[Long]]())(
-        (index, addrTuple) => {
-          def ref(idx: Long, code: Long) = (idx << 32) | code
-          val o = addressMap(addrTuple._1)
-          val r = ref(idx, o.code)
-          val words = extractWords(addrTuple._3)
-          words foreach (w => {
-            if (index contains w) index(w).append(r)
-            else index(w) = AB(r)
-          })
+      .foldLeft(scala.collection.mutable.HashMap[String, AB[Long]]()) {
+        case (index, (code, _, name)) =>
+          val wordsLists = extractWords(name) ::
+            history.getOrElse(code, Nil).map(extractWords)
+          val existingWords = scala.collection.mutable.Set[String]()
+          val idxWithCode = (idx.toLong << 32) | code
+          wordsLists foreach { words =>
+            words foreach { w =>
+              if (!existingWords(w)) {
+                existingWords += w
+                if (index contains w) index(w).append(idxWithCode)
+                else index(w) = AB(idxWithCode)
+              }
+            }
+          }
           idx += 1
-          if (idx % 5000 == 0) println(s"Addresses processed: $idx; word cache size: ${index.size}")
+          if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx; word cache size: ${index.size}")
           index
-        })
-      .map(t => t._1 -> t._2.toArray)
+      }.map(t => t._1 -> t._2.toArray)
 
     val refCount = index.foldLeft(0L)((c, t) => c + t._2.size)
-    val end = System.currentTimeMillis
-    println(s"Address objects processed: $idx; word cache size: ${index.size}; ref count: $refCount, ${end - start}ms")
+    logger.info(s"Address objects processed: $idx; word cache size: ${index.size}; ref count: $refCount")
 
     this._index = index
   }
@@ -191,9 +185,9 @@ trait AddressIndexer { this: AddressFinder =>
        case ((s, b), c) =>
          if (isWhitespaceOrSeparator(c)) (s, true) else {
            if (b) s.append(new scala.collection.mutable.StringBuilder)
-             s.last.append(accents.getOrElse(c, c))
+           s.last.append(accents.getOrElse(c, c))
            (s, false)
-      }
+         }
     }._1
     .map(_.toString)
     .toArray
@@ -215,120 +209,11 @@ trait AddressIndexer { this: AddressFinder =>
         .foldLeft(stat)((stat, w) => stat + (w -> stat.get(w).map(_ + 1).getOrElse(1))))
 
   def extractWords(phrase: String) = wordStatForIndex(phrase)
-    .flatMap(t => List(t._1) ++ (2 to t._2).map(_ + "*" + t._1))
-}
-
-trait AddressIndexLoader { this: AddressIndexer =>
-  import java.io._
-  def save(addressMap: Map[Int, AddrObj],
-    index: scala.collection.mutable.Map[String, Array[Long]],
-    sortedPilNovPagCiem: Vector[Int],
-    akFileName: String) = {
-
-    println(s"Saving address index for $akFileName...")
-    val start = System.currentTimeMillis
-    val idxFile = indexFile(akFileName)
-    if (idxFile.exists) sys.error(s"Cannot save address index file. File $idxFile already exists")
-    val maxRefArray = index.maxBy(_._2.length)
-    val maxRefArrayLength = maxRefArray._2.length
-    println(s"Max. reference array length for the word '${maxRefArray._1}': ${maxRefArray._2.length}")
-    val os = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))
-    try {
-      os.writeInt(sortedPilNovPagCiem.size)
-      sortedPilNovPagCiem foreach os.writeInt
-      os.writeInt(maxRefArrayLength)
-      index.foreach(i => {
-        os.writeUTF(i._1)
-        os.writeInt(i._2.length)
-        i._2 foreach os.writeLong
-      })
-    } finally os.close
-
-    val addrFile = addressCacheFile(akFileName)
-    if (addrFile.exists) sys.error(s"Cannot save address file. File $addrFile already exists")
-    val w = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
-      new FileOutputStream(addrFile), "UTF-8")))
-    try {
-      addressMap.foreach(a => {
-        import a._2._
-        w.println(s"$code;$typ;$name;$superCode;${
-          Option(zipCode).getOrElse("")};${
-          Option(coordX).getOrElse("")};${
-          Option(coordY).getOrElse("")}")
-      })
-    } finally w.close
-    println(s"Address index saved in ${System.currentTimeMillis - start}ms")
-  }
-  def load(akFileName: String) = {
-    println(s"Loading address index for $akFileName...")
-    val start = System.currentTimeMillis
-    val idxFile = indexFile(akFileName)
-    if (!idxFile.exists) sys.error(s"Index file $idxFile not found")
-    val in = new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))
-    val index = scala.collection.mutable.HashMap[String, Array[Long]]()
-    var c = 0
-    var spnpc = new Array[Int](in.readInt)
-    //load pilseta, novads, pagasts, ciems
-    var i = 0
-    while(i < spnpc.length) {
-      spnpc(i) = in.readInt
-      i += 1
-    }
-    var a = new Array[Long](in.readInt)
-    try {
-      while (in.available > 0) {
-        i = 0
-        val w = in.readUTF
-        val l = in.readInt
-        if (a.length < l) a = new Array[Long](l)
-        //(0 until l) foreach (a(_) = in.readLong) this is slow
-        i = 0
-        while (i < l) {
-          a(i) = in.readLong
-          i += 1
-        }
-        index += (w -> (a take l))
-        c += 1
-      }
-    } finally in.close
-    println(s"Total words loaded: $c")
-    val addrFile = addressCacheFile(akFileName)
-    if (!addrFile.exists) sys.error(s"Address file $addrFile not found")
-    var addressMap = Map[Int, AddrObj]()
-    var ac = 0
-    scala.io.Source.fromInputStream(new BufferedInputStream(new FileInputStream(addrFile)), "UTF-8")
-      .getLines
-      .foreach { l =>
-        ac += 1
-        val a = l.split(";").padTo(7, null)
-        val o =
-          try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
-            normalize(a(2)).toVector,
-            Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-            Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull)
-          catch {
-            case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
-          }
-        addressMap += (o.code -> o)
-      }
-    println(s"Address index loaded (words - $c, addresses - $ac) in ${System.currentTimeMillis - start}ms")
-    (addressMap, index, spnpc.toVector)
-  }
-
-  def hasIndex(akFileName: String) = addressCacheFile(akFileName).exists && indexFile(akFileName).exists
-
-  def addressCacheFile(akFileName: String) = cacheFile(akFileName, "addresses")
-  def indexFile(akFileName: String) = cacheFile(akFileName, "index")
-
-  private def cacheFile(akFileName: String, extension: String) = {
-    val akFile = new File(akFileName)
-    val filePrefix = akFile.getName.split("\\.").head
-    new File(akFile.getParent, filePrefix + s".$extension")
-  }
+    .flatMap(t => List(t._1) ++ (2 to t._2).map(s => s"$s*${t._1}"))
 }
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
-  coordX: BigDecimal, coordY: BigDecimal)
+  coordX: BigDecimal, coordY: BigDecimal, history: List[String])
 case class AddressStruct(
   pilCode: Option[Int] = None, pilName: Option[String] = None,
   novCode: Option[Int] = None, novName: Option[String] = None,
@@ -349,17 +234,27 @@ with SpatialIndexer {
 
   import Constants._
 
+  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
+
+
   private[this] var _addressMap: Map[Int, AddrObj] = null
+  private[this] var _addressHistory: Map[Int, List[String]] = Map()
 
   def addressMap = _addressMap
+  def addressHistory = _addressHistory
 
   def init: Unit = {
     if (ready) return
-    if (addressFileName == null) println("Address file not set")
+    if (addressFileName == null || dbConfig.isEmpty)
+      logger.error("Address file not set nor database connection parameters specified")
     else {
       if (hasIndex(addressFileName)) loadIndex else {
-        _addressMap = loadAddresses()
-        index(addressMap)
+        val (am, ah) = dbConfig
+          .map(db => loadAddressesFromDb(db.url, db.user, db.password, db.driver)) //load from db
+          .getOrElse(loadAddresses() -> Map[Int, List[String]]()) //load from file
+        _addressMap = am
+        _addressHistory = ah
+        index(am, ah)
         saveIndex
       }
       spatialIndex(addressMap)
@@ -466,7 +361,8 @@ with SpatialIndexer {
     ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
     ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
     ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
-    Address(addrObj.code, as.toString, zip, typ, coordX, coordY)
+    Address(addrObj.code, as.toString, zip, typ, coordX, coordY,
+      addressHistory.getOrElse(addrObj.code, Nil))
   }
   def address(code: Int): Address = addressOption(code).get
 
@@ -510,17 +406,18 @@ with SpatialIndexer {
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _index, _sortedPilsNovPagCiem, addressFileName)
+    save(addressMap, _index, _sortedPilsNovPagCiem)
   }
 
   def loadIndex = {
-    val r = load(addressFileName)
-    _addressMap = r._1
-    _index = r._2
-    _sortedPilsNovPagCiem = r._3
+    val idx = load()
+    _addressMap = idx.addresses
+    _index = idx.index
+    _sortedPilsNovPagCiem = idx.sortedBigObjs
+    _addressHistory = idx.history
   }
 
-  def insertIntoHeap(h: AB[Long], el: Long) {
+  def insertIntoHeap(h: AB[Long], el: Long) = {
     var i = h.size
     var j = 0
     h += el
@@ -605,7 +502,9 @@ with SpatialIndexer {
 }
 
 trait AddressIndexerConfig {
+  case class DbConfig(driver: String, url: String, user: String, password: String)
   def addressFileName: String
   def blackList: Set[String]
   def houseCoordFile: String
+  def dbConfig: Option[DbConfig] = None
 }
