@@ -14,7 +14,8 @@ import java.sql.DriverManager
 
 trait AddressIndexLoader { this: AddressFinder =>
   def save(addressMap: Map[Int, AddrObj],
-           index: scala.collection.mutable.Map[String, Array[Long]],
+           idxCode: scala.collection.mutable.HashMap[Int, Int],
+           index: scala.collection.mutable.Map[String, Array[Int]],
            sortedPilNovPagCiem: Vector[Int]) = {
 
     logger.info(s"Saving address index for $addressFileName...")
@@ -25,13 +26,23 @@ trait AddressIndexLoader { this: AddressFinder =>
     logger.info(s"Max. reference array length for the word '${maxRefArray._1}': ${maxRefArray._2.length}")
     val os = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))
     try {
+      //write big object count
       os.writeInt(sortedPilNovPagCiem.size)
+      //write big objects
       sortedPilNovPagCiem foreach os.writeInt
+      //write address count
+      os.writeInt(idxCode.size)
+      //write addr_idx->addr_code map
+      idxCode foreach { case (i, c) =>
+        os.writeInt(i)
+        os.writeInt(c)
+      }
       os.writeInt(maxRefArrayLength)
+      //write word->addr_indexes map
       index.foreach(i => {
         os.writeUTF(i._1)
         os.writeInt(i._2.length)
-        i._2 foreach os.writeLong
+        i._2 foreach os.writeInt
       })
     } finally os.close
 
@@ -52,7 +63,8 @@ trait AddressIndexLoader { this: AddressFinder =>
   }
 
   case class Index(addresses: Map[Int, AddrObj],
-                   index: scala.collection.mutable.HashMap[String, Array[Long]],
+                   idxCode: scala.collection.mutable.HashMap[Int, Int],
+                   index: scala.collection.mutable.HashMap[String, Array[Int]],
                    sortedBigObjs: Vector[Int],
                    history: Map[Int, List[String]])
 
@@ -61,7 +73,8 @@ trait AddressIndexLoader { this: AddressFinder =>
     val idxFile = indexFile(addressFileName)
     if (!idxFile.exists) sys.error(s"Index file $idxFile not found")
     val in = new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))
-    val index = scala.collection.mutable.HashMap[String, Array[Long]]()
+    val idx_code = scala.collection.mutable.HashMap[Int, Int]()
+    val index = scala.collection.mutable.HashMap[String, Array[Int]]()
     var c = 0
     val spnpc = new Array[Int](in.readInt)
     //load pilseta, novads, pagasts, ciems
@@ -70,17 +83,25 @@ trait AddressIndexLoader { this: AddressFinder =>
       spnpc(i) = in.readInt
       i += 1
     }
-    var a = new Array[Long](in.readInt)
+    //load addr_idx->addr_code map
+    val count = in.readInt
+    i = 0
+    while (i < count) {
+      idx_code += (in.readInt -> in.readInt)
+      i += 1
+    }
+    //load index
+    var a = new Array[Int](in.readInt)
     try {
       while (in.available > 0) {
         i = 0
         val w = in.readUTF
         val l = in.readInt
-        if (a.length < l) a = new Array[Long](l)
+        if (a.length < l) a = new Array[Int](l)
         //(0 until l) foreach (a(_) = in.readLong) this is slow
         i = 0
         while (i < l) {
-          a(i) = in.readLong
+          a(i) = in.readInt
           i += 1
         }
         index += (w -> (a take l))
@@ -117,7 +138,7 @@ trait AddressIndexLoader { this: AddressFinder =>
     }.getOrElse(Map())
 
     logger.info(s"Address index loaded (words - $c, addresses - $ac, historical addresses - ${history.size}).")
-    Index(addressMap, index, spnpc.toVector, history)
+    Index(addressMap, idx_code, index, spnpc.toVector, history)
   }
 
   def hasIndex(akFileName: String) = addressCacheFile(akFileName).exists && indexFile(akFileName).exists

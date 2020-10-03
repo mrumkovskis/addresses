@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
-import scala.sys.error
 
 private object Constants {
   val PIL = 104
@@ -54,17 +53,17 @@ trait AddressIndexer { this: AddressFinder =>
     def depth = foldLeft(0)((d, _) => d + 1)
   }
 
-  protected var _index: scala.collection.mutable.HashMap[String, Array[Long]] = null
+  protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
+  protected var _index: scala.collection.mutable.HashMap[String, Array[Int]] = null
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
   def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): Array[Int] = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
-    def idx_vals(word: String) = _index.getOrElse(word, Array[Long]())
-    def addr_code(code: Long) = (code & 0x00000000FFFFFFFFL).toInt
-    def has_type(code: Long) = types(addressMap(addr_code(code)).typ)
-    def intersect(idx: Array[Array[Long]], limit: Int): Array[Int] = {
+    def idx_vals(word: String) = _index.getOrElse(word, Array[Int]())
+    def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
+    def intersect(idx: Array[Array[Int]], limit: Int): Array[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
       def check_register = {
@@ -73,7 +72,7 @@ trait AddressIndexer { this: AddressFinder =>
         var i = 1
         while (i < l && v == idx(i)(pos(i))) i += 1
         if (i == l) {
-          if (types == null || has_type(v)) result append addr_code(v)
+          if (types == null || has_type(v)) result append v
           i = 0
           while (i < l) {
             pos(i) += 1
@@ -82,8 +81,8 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
       def find_equal(a_pos: Int, b_pos: Int) = {
-        val a: Array[Long] = idx(a_pos)
-        val b: Array[Long] = idx(b_pos)
+        val a: Array[Int] = idx(a_pos)
+        val b: Array[Int] = idx(b_pos)
         val al = a.length
         val bl = b.length
         var ai = pos(a_pos)
@@ -94,20 +93,20 @@ trait AddressIndexer { this: AddressFinder =>
       }
       def continue = {
         var i = 0
-        var l = pos.length
+        val l = pos.length
         while (i < l && pos(i) < idx(i).length) i += 1
         i == l
       }
       while (result.length < limit && continue) {
         check_register
         var i = 0
-        var l = pos.length - 1
+        val l = pos.length - 1
         while(i < l) {
           find_equal(i, i + 1)
           i += 1
         }
       }
-      result.toArray
+      result.map(_idxCode(_)).toArray
     }
 
     (searchParams(words) map idx_vals sortBy(_.size)) match {
@@ -121,6 +120,7 @@ trait AddressIndexer { this: AddressFinder =>
     logger.info("Starting address indexing...")
     logger.info(s"Sorting ${addressMap.size} addresses...")
 
+    //(addressCode, ordering weight, full space separated unnaccented address)
     val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
     addressMap.foreach { case (code, addr) =>
@@ -140,23 +140,24 @@ trait AddressIndexer { this: AddressFinder =>
     logger.info(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
 
     logger.info("Creating index...")
+    val idx_code = scala.collection.mutable.HashMap[Int, Int]()
     idx = 0
     val index = sortedAddresses
-      .foldLeft(scala.collection.mutable.HashMap[String, AB[Long]]()) {
+      .foldLeft(scala.collection.mutable.HashMap[String, AB[Int]]()) {
         case (index, (code, _, name)) =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
           val existingWords = scala.collection.mutable.Set[String]()
-          val idxWithCode = (idx.toLong << 32) | code
           wordsLists foreach { words =>
             words foreach { w =>
               if (!existingWords(w)) {
                 existingWords += w
-                if (index contains w) index(w).append(idxWithCode)
-                else index(w) = AB(idxWithCode)
+                if (index contains w) index(w).append(idx)
+                else index(w) = AB(idx)
               }
             }
           }
+          idx_code += (idx -> code)
           idx += 1
           if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx; word cache size: ${index.size}")
           index
@@ -165,6 +166,7 @@ trait AddressIndexer { this: AddressFinder =>
     val refCount = index.foldLeft(0L)((c, t) => c + t._2.size)
     logger.info(s"Address objects processed: $idx; word cache size: ${index.size}; ref count: $refCount")
 
+    this._idxCode = idx_code
     this._index = index
   }
 
@@ -406,12 +408,13 @@ with SpatialIndexer {
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _index, _sortedPilsNovPagCiem)
+    save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
   }
 
   def loadIndex = {
     val idx = load()
     _addressMap = idx.addresses
+    _idxCode = idx.idxCode
     _index = idx.index
     _sortedPilsNovPagCiem = idx.sortedBigObjs
     _addressHistory = idx.history
