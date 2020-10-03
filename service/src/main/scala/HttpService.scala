@@ -17,7 +17,7 @@ import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarsha
 import akka.util.ByteString
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f20 = jsonFormat21(AddressFull)
+  implicit val f21 = jsonFormat21(AddressFull)
   implicit val f02 = jsonFormat2(ResolvedAddressFull)
   implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
 }
@@ -43,7 +43,9 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
   val CODE_PATTERN = "(\\d{9,})"r
 
   val wsVersionNofifications =
-    Flow.fromGraph(GraphDSL.create(Source.actorRef[Version](0, OverflowStrategy.fail)
+    Flow.fromGraph(
+      GraphDSL.create(
+        Source.actorRef[Version](PartialFunction.empty, PartialFunction.empty, 0, OverflowStrategy.fail)
       .map { case v: Version => TextMessage.Strict(normalizeVersion(v.version))}) {
       import GraphDSL.Implicits._
       implicit builder => src =>
@@ -156,7 +158,6 @@ object Boot extends scala.App with AddressHttpService {
 
   // we need an ActorSystem to host our application in
   implicit val system = ActorSystem("address-service")
-  implicit val materializer = ActorMaterializer()
 
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
   FTPDownload.initialize

@@ -28,6 +28,7 @@ db {
   url = <url>
   user = <user>
   password = <password>
+  index-dir = <directory where to store address index>
 }
 
 port = 8082

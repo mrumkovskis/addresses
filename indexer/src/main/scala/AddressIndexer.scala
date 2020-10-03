@@ -247,7 +247,7 @@ with SpatialIndexer {
 
   def init: Unit = {
     if (ready) return
-    if (addressFileName == null || dbConfig.isEmpty)
+    if (addressFileName == null && dbConfig.isEmpty)
       logger.error("Address file not set nor database connection parameters specified")
     else {
       if (hasIndex(addressFileName)) loadIndex else {
@@ -504,10 +504,12 @@ with SpatialIndexer {
 
 }
 
+case class DbConfig(driver: String, url: String, user: String, password: String, indexDir: String)
+
 trait AddressIndexerConfig {
-  case class DbConfig(driver: String, url: String, user: String, password: String)
+  protected val DbDataFilePrefix = "VZD_AR_"
   def addressFileName: String
   def blackList: Set[String]
   def houseCoordFile: String
-  def dbConfig: Option[DbConfig] = None
+  def dbConfig: Option[DbConfig]
 }

@@ -18,8 +18,16 @@ trait AddressIndexLoader { this: AddressFinder =>
            index: scala.collection.mutable.Map[String, Array[Int]],
            sortedPilNovPagCiem: Vector[Int]) = {
 
-    logger.info(s"Saving address index for $addressFileName...")
-    val idxFile = indexFile(addressFileName)
+    logger.info(s"Saving address index for ${dbConfig.map(_.url).getOrElse(addressFileName)}...")
+    val dbIdxFileNamePrefix =
+      DbDataFilePrefix + java.time.LocalDateTime.now().toString.replace(':', '_')
+    val idxFile =
+      dbConfig.map(_.indexDir).map { dir =>
+        if (!new File(dir).isDirectory) sys.error(s"$dir not a directory, cannot store index file." +
+          s"Please check that setting 'db.index-dir' points to existing directory")
+        indexFile(new File(dir, dbIdxFileNamePrefix).getPath)
+      }.getOrElse(indexFile(addressFileName))
+
     if (idxFile.exists) sys.error(s"Cannot save address index file. File $idxFile already exists")
     val maxRefArray = index.maxBy(_._2.length)
     val maxRefArrayLength = maxRefArray._2.length
@@ -46,7 +54,10 @@ trait AddressIndexLoader { this: AddressFinder =>
       })
     } finally os.close
 
-    val addrFile = addressCacheFile(addressFileName)
+    val addrFile =
+      addressCacheFile(dbConfig
+        .map(c => new File(c.indexDir, dbIdxFileNamePrefix).getPath)
+        .getOrElse(addressFileName))
     if (addrFile.exists) sys.error(s"Cannot save address file. File $addrFile already exists")
     val w = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
       new FileOutputStream(addrFile), "UTF-8")))
@@ -69,7 +80,7 @@ trait AddressIndexLoader { this: AddressFinder =>
                    history: Map[Int, List[String]])
 
   def load(): Index = {
-    logger.info(s"Loading address index for $addressFileName...")
+    logger.info(s"Loading address index from $addressFileName...")
     val idxFile = indexFile(addressFileName)
     if (!idxFile.exists) sys.error(s"Index file $idxFile not found")
     val in = new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))
@@ -129,7 +140,7 @@ trait AddressIndexLoader { this: AddressFinder =>
         addressMap += (o.code -> o)
       }
 
-    val history = dbConfig.map { case DbConfig(driver, url, user, pwd) =>
+    val history = dbConfig.map { case DbConfig(driver, url, user, pwd, _) =>
       Class.forName(driver)
       val conn = DriverManager.getConnection(url, user, pwd)
       try {
@@ -141,14 +152,15 @@ trait AddressIndexLoader { this: AddressFinder =>
     Index(addressMap, idx_code, index, spnpc.toVector, history)
   }
 
-  def hasIndex(akFileName: String) = addressCacheFile(akFileName).exists && indexFile(akFileName).exists
+  def hasIndex(akFileName: String) =
+    akFileName != null && addressCacheFile(akFileName).exists && indexFile(akFileName).exists
 
   def addressCacheFile(akFileName: String) = cacheFile(akFileName, "addresses")
   def indexFile(akFileName: String) = cacheFile(akFileName, "index")
 
   private def cacheFile(akFileName: String, extension: String) = {
     val akFile = new File(akFileName)
-    val filePrefix = akFile.getName.split("\\.").head
+    val filePrefix = akFile.getName.substring(0, akFile.getName.lastIndexOf("."))
     new File(akFile.getParent, filePrefix + s".$extension")
   }
 }
