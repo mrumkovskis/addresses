@@ -6,8 +6,6 @@ import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
 import akka.actor.Props
-import akka.actor.Status
-import akka.actor.Stash
 import akka.actor.Terminated
 import akka.pattern.ask
 import akka.event.EventBus

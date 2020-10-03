@@ -64,7 +64,7 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
   implicit val csvStreaming = EntityStreamingSupport.csv()
 
   val route =
-    (options & headerValueByType[Origin](()) &
+    (options & headerValueByType(Origin) &
       (path("address") | path("resolve") | path("address-structure"))) { origin =>
       respondWithHeaders(origin.origins.headOption.map { origin =>
         `Access-Control-Allow-Origin`(origin) } getOrElse (`Access-Control-Allow-Origin`.`*`),
