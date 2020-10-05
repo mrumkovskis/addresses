@@ -9,6 +9,7 @@ akka {
   }
 }
 
+# Configuration for address file. This is valid only if 'db' section is not present.
 VZD {
   ak-file = "tmp/AK\\d{8}\\.zip"
   blacklist = "AW_VIETA_GEO.CSV, AW_IELA_GEO.CSV, AW_VIETA_CENTROID_GEO.CSV, AW_EKA_GEO.CSV"
@@ -22,7 +23,7 @@ VZD {
   }
 }
 
-# database configuration for actual and historic addresses
+# Address database configuration for actual and historic addresses. This takes precedence over 'VZD' setting.
 db {
   driver = org.postgresql.Driver
   url = <url>
