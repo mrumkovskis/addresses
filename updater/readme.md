@@ -1,26 +1,25 @@
 # VZD adrešu reģistra importētājs
 
-Šobrīd — nekā neintegrēts ar sbt vai pārējo aplikāciju, bet pilnīgi standalone jars.
-
-Buildojas ar `sbt`, pakojas ar `sbt-assembly`.
+Integrēts ar pārējo adrešu reģistra aplikāciju, buildojas ar sbt.
 
 ## Builds
 
     % sbt clean assembly
-    ... target/scala-2.13/vzd-receive-assembly-0.1.1.jar
+    ... target/scala-2.13/addresses-assembly-2.0.jar
 
 
 ## DB struktūra
 
 Importētājs pats izveidos nepieciešamās tabulas ar Updater.scala norādīto struktūru, ja tās netiks atrastas.
 
-Referencei, tabulu izveides skripts ir atrodams arī failā `../db/create.sql`, bet tā manuāla laišana nav nepieciešama:
+Referencei, tabulu izveides skripts ir atrodams arī failā `db/create.sql`, bet tā manuāla laišana nav nepieciešama:
 
 
 ## Darbināšana
 
-    % java -jar sbt-receive-assembly-0.1.1.jar --help
-    % alternatīvi, sbt 'run --help'
+Sinhronizācija tiek iedarbināta, rezultējošajam jaram kā pirmo parametru norādot "sync":
+
+    % java -jar addresses-assembly-2.0.jar sync --help
 
     Updater retrieves up-to-date address data from VZD address register.
 
@@ -61,9 +60,6 @@ Referencei, tabulu izveides skripts ir atrodams arī failā `../db/create.sql`, 
 
       Update arg_adrese only:
       % ./vzd-receive arg_adrese
-
-
-      
 
 ## Konfigurācija
 
