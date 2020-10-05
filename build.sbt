@@ -83,7 +83,8 @@ lazy val addresses = project
   .settings(
     aggregate in assembly := false,
     // mainClass in assembly := Some("lv.addresses.service.Boot"),
-    mainClass in assembly := Some("lv.addresses.BootDispatcher"),
+    Compile / run / mainClass := Some("lv.addresses.BootDispatcher"),
+    assembly / mainClass := Some("lv.addresses.BootDispatcher"),
     assemblyMergeStrategy in assembly := {
       case "application.conf" => MergeStrategy.concat
       case x =>
