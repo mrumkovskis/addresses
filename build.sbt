@@ -30,6 +30,21 @@ lazy val indexerDependencies = {
   )
 }
 
+lazy val updaterDependencies = {
+  Seq(
+    "com.oracle.ojdbc" % "ojdbc8" % "19.3.0.0",
+    "com.oracle.ojdbc" % "orai18n" % "19.3.0.0",
+    "org.postgresql" % "postgresql" % "42.2.16",
+  )
+}
+
+lazy val updater = project
+  .in(file("updater"))
+  .settings(commonSettings: _*)
+  .settings(
+    libraryDependencies ++= updaterDependencies
+  )
+
 lazy val indexer = project
   .in(file("indexer"))
   .settings(commonSettings: _*)
@@ -40,6 +55,7 @@ lazy val indexer = project
 lazy val service = project
   .in(file("service"))
   .dependsOn(indexer)
+  .dependsOn(updater)
   .settings(commonSettings: _*)
   .settings(
     libraryDependencies ++= serviceDependencies,
@@ -66,7 +82,8 @@ lazy val addresses = project
     |//implicit val materializer = ActorMaterializer()""".stripMargin)
   .settings(
     aggregate in assembly := false,
-    mainClass in assembly := Some("lv.addresses.service.Boot"),
+    // mainClass in assembly := Some("lv.addresses.service.Boot"),
+    mainClass in assembly := Some("lv.addresses.BootDispatcher"),
     assemblyMergeStrategy in assembly := {
       case "application.conf" => MergeStrategy.concat
       case x =>
