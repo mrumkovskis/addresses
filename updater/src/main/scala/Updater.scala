@@ -110,7 +110,7 @@ object M {
 
     ("AK.ART_DZIV",    "art_dziv", List(
       // 1m recs
-      ("kods",         "pk",        "kods"),      // Adresācijas objekta kods (sekvence - VIETA_SEQ)    
+      ("kods",         "pk",        "kods"),      // Adresācijas objekta kods (sekvence - VIETA_SEQ)
       ("tips_cd",      "fk",        "tips_cd"),   // Adresācijas objekta tips - dzīvoklis. Ārējā saite uz tabulu ART_KONST
       ("statuss",      "string",    "statuss"),    // Adresācijas objekta statuss (EKS - eksistē; DEL - likvidēta; ERR - kļūdaina)
       ("apstipr",      "string",    "apstipr"),    // Vai dzīvoklis ir apstiprināts (Y; null)
@@ -137,24 +137,28 @@ object Updater {
 
   var migrations = M.migrations
 
-  val default_opts = Map(
-    "local.driver"     -> "org.postgresql.Driver",
-    "local.connection" -> "jdbc:postgresql://127.0.0.1:5432/adreses?rewriteBatchedStatements=true",
-    "local.username" -> "postgres",
-    "local.password" -> "",
+  val conf = com.typesafe.config.ConfigFactory.load
 
-    "vzd.driver"     -> "oracle.jdbc.OracleDriver",
-    "vzd.connection" -> """jdbc:oracle:thin:@(
+  def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
+
+  val default_opts = Map(
+    "local.driver"     -> c("db.driver",   "org.postgresql.Driver"),
+    "local.connection" -> c("db.url",      "jdbc:postgresql://127.0.0.1:5432/adreses?rewriteBatchedStatements=true"),
+    "local.username" ->   c("db.user",     "postgres"),
+    "local.password" ->   c("db.password", ""),
+
+    "vzd.driver"     -> c("VZD.driver", "oracle.jdbc.OracleDriver"),
+    "vzd.connection" -> c("VZD.url",    """jdbc:oracle:thin:@(
       DESCRIPTION=(ADDRESS_LIST=
         (ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=1630))
         (ADDRESS=(PROTOCOL=TCP)(HOST=10.195.10.6)(PORT=1521))
       )(SOURCE_ROUTE=yes)(CONNECT_DATA=(SERVICE_NAME=KRRITEST.VZD.GOV.LV))
-    )""",
-    "vzd.username"   -> "vraa_amk_izstr",
-    "vzd.password"   -> "",
-    "lockfile"        -> "/tmp/addresses-vzd-receive.lock",
+    )"""),
+    "vzd.username"   -> c("VZD.user",     "vraa_amk_izstr"),
+    "vzd.password"   -> c("VZD.password", ""),
 
-    "verify" -> "false"
+    "lockfile" -> "/tmp/addresses-vzd-receive.lock",
+    "verify"   -> "false",
   )
 
   var local: Option[Connection] = None
@@ -237,17 +241,17 @@ Examples:
       case "--lock"    :: lockfile :: rest => gatherOpts(opts + ("lockfile" -> lockfile), rest)
       case "--verify"              :: rest => gatherOpts(opts + ("verify" -> "true"), rest)
 
-      case other :: rest => 
+      case other :: rest =>
         val elem = M.migrations.find(s => s._2 == other)
         elem match {
-          case Some(e) => 
+          case Some(e) =>
             if (custom_mode == false) {
               custom_mode = true
               migrations = Nil
             }
             migrations = e :: migrations
             gatherOpts(opts, rest)
-          case None => 
+          case None =>
             Printer.msg(s"Unknown option ${other}.\n")
             None
         }
@@ -266,10 +270,10 @@ Examples:
     Printer.msg(s"Connecting to $connection...")
 
     Try(Class.forName(driver)) match {
-      case Failure(s) => 
+      case Failure(s) =>
         throw fatal(s"Unable to load driver $driver")
       case default => ()
-    } 
+    }
 
     Try(DriverManager.getConnection(connection, username, password)) match {
       case Failure(s) =>
@@ -296,7 +300,7 @@ Examples:
         val mig = migrator(m, opts)
 
         Printer.msg(s"Migrate ${mig.source} -> ${mig.target}")
-        // mig.rebuild( local.get, opts("truncate") == "true" ) 
+        // mig.rebuild( local.get, opts("truncate") == "true" )
         mig.rebuild(local.get, truncate = false)
         mig.migrate(vzd.get, local.get, opts)
 
@@ -304,6 +308,9 @@ Examples:
     }
 
     lock.release()
+
+    local.get.close()
+    vzd.get.close()
 
     r
   }

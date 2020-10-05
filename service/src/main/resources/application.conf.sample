@@ -21,14 +21,19 @@ VZD {
     #password = ""
     #dir = "VAR_EXPORT/AREXPORT/"
   }
+
+  driver = oracle.jdbc.OracleDriver
+  # url =  jdbc:oracle:thin:...
+  user = vraa_amk_izstr
+  password = "***"
 }
 
 # Address database configuration for actual and historic addresses. This takes precedence over 'VZD' setting.
 db {
   driver = org.postgresql.Driver
-  url = <url>
-  user = <user>
-  password = <password>
+  url = "jdbc:postgresql://127.0.0.1:5432/adreses?rewriteBatchedStatements=true"
+  user = postgres
+  password = "***"
   index-dir = <directory where to store address index>
 }
 

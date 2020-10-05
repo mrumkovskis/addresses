@@ -35,6 +35,7 @@ lazy val updaterDependencies = {
     "com.oracle.ojdbc" % "ojdbc8" % "19.3.0.0",
     "com.oracle.ojdbc" % "orai18n" % "19.3.0.0",
     "org.postgresql" % "postgresql" % "42.2.16",
+    "com.typesafe.akka" %% "akka-slf4j" % akkaV,
   )
 }
 
