@@ -1,9 +1,13 @@
 package lv.addresses.indexer
 
+import java.sql.DriverManager
+import java.time.LocalDateTime
+
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
+import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
@@ -252,7 +256,7 @@ with SpatialIndexer {
     else {
       if (hasIndex(addressFileName)) loadIndex else {
         val (am, ah) = dbConfig
-          .map(db => loadAddressesFromDb(db.url, db.user, db.password, db.driver)) //load from db
+          .map(loadAddressesFromDb) //load from db
           .getOrElse(loadAddresses() -> Map[Int, List[String]]()) //load from file
         _addressMap = am
         _addressHistory = ah
@@ -504,7 +508,46 @@ with SpatialIndexer {
 
 }
 
-case class DbConfig(driver: String, url: String, user: String, password: String, indexDir: String)
+case class DbConfig(driver: String, url: String, user: String, password: String, indexDir: String) {
+  lazy val tresqlResources = new Resources {
+    val infoLogger = Logger(LoggerFactory.getLogger("org.tresql"))
+    val tresqlLogger = Logger(LoggerFactory.getLogger("org.tresql.tresql"))
+    val sqlLogger = Logger(LoggerFactory.getLogger("org.tresql.db.sql"))
+    val varsLogger = Logger(LoggerFactory.getLogger("org.tresql.db.vars"))
+    val sqlWithParamsLogger = Logger(LoggerFactory.getLogger("org.tresql.sql_with_params"))
+
+    override val logger = (m, params, topic) => topic match {
+      case LogTopic.sql => sqlLogger.debug(m)
+      case LogTopic.tresql => tresqlLogger.debug(m)
+      case LogTopic.params => varsLogger.debug(m)
+      case LogTopic.sql_with_params => sqlWithParamsLogger.debug(sqlWithParams(m, params))
+      case LogTopic.info => infoLogger.debug(m)
+      case _ => infoLogger.debug(m)
+    }
+
+    override val cache = new SimpleCache(4096)
+
+    def sqlWithParams(sql: String, params: Map[String, Any]) = params.foldLeft(sql) {
+      case (sql, (name, value)) => sql.replace(s"?/*$name*/", value match {
+        case _: Int | _: Long | _: Double | _: BigDecimal | _: BigInt | _: Boolean => value.toString
+        case _: String | _: java.sql.Date | _: java.sql.Timestamp => s"'$value'"
+        case null => "null"
+        case _ => value.toString
+      })
+    }
+  }
+
+  def lastSyncTime: LocalDateTime = {
+    Class.forName(driver)
+    val conn = DriverManager.getConnection(url, user, password)
+    try {
+      implicit val res = tresqlResources withConn conn
+      Query("(art_vieta { max (sync_synced) d } +" +
+        "art_nlieta { max (sync_synced) d } +" +
+        "art_dziv { max (sync_synced) d }) { max(d) }").unique[LocalDateTime]
+    } finally conn.close()
+  }
+}
 
 trait AddressIndexerConfig {
   protected val DbDataFilePrefix = "VZD_AR_"
@@ -512,4 +555,11 @@ trait AddressIndexerConfig {
   def blackList: Set[String]
   def houseCoordFile: String
   def dbConfig: Option[DbConfig]
+
+  def dbDataVersion: String =
+    dbConfig
+      .map(_.lastSyncTime)
+      .flatMap(Option(_))
+      .map(DbDataFilePrefix + _.toString.replace(':', '_'))
+      .orNull
 }

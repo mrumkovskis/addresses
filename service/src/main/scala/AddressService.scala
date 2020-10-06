@@ -30,6 +30,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   case class Version(version: String) extends Msg
   private case class WatchVersionSubscriber(subscriber: Subscriber) extends Msg
   private[service] case object CheckNewVersion extends Msg
+  private [service] case object Sync extends Msg
 
   case class MsgEnvelope(topic: String, payload: Msg)
 
@@ -106,7 +107,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       Source.actorRef(PartialFunction.empty, PartialFunction.empty,2, OverflowStrategy.dropHead))(
       (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
     ).fold(null: String) { (currentVersion, _) =>
-      val newVersion = addressFileName
+      val newVersion = Option(dbDataVersion).getOrElse(addressFileName)
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
         val af = new AddressFinder(newVersion, blackList, houseCoordFile, dbConfig)
         af.init

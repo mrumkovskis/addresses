@@ -19,8 +19,7 @@ trait AddressIndexLoader { this: AddressFinder =>
            sortedPilNovPagCiem: Vector[Int]) = {
 
     logger.info(s"Saving address index for ${dbConfig.map(_.url).getOrElse(addressFileName)}...")
-    val dbIdxFileNamePrefix =
-      DbDataFilePrefix + java.time.LocalDateTime.now().toString.replace(':', '_')
+    val dbIdxFileNamePrefix = dbDataVersion
     val idxFile =
       dbConfig.map(_.indexDir).map { dir =>
         if (!new File(dir).isDirectory) sys.error(s"$dir not a directory, cannot store index file." +
@@ -140,11 +139,11 @@ trait AddressIndexLoader { this: AddressFinder =>
         addressMap += (o.code -> o)
       }
 
-    val history = dbConfig.map { case DbConfig(driver, url, user, pwd, _) =>
+    val history = dbConfig.map { case conf @ DbConfig(driver, url, user, pwd, _) =>
       Class.forName(driver)
       val conn = DriverManager.getConnection(url, user, pwd)
       try {
-        loadAddressHistoryFromDb(conn)
+        loadAddressHistoryFromDb(conn)(conf.tresqlResources)
       } finally conn.close()
     }.getOrElse(Map())
 

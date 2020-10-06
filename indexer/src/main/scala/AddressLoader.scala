@@ -1,6 +1,7 @@
 package lv.addresses.indexer
 
 import java.sql.{Connection, DriverManager}
+import java.time.LocalDateTime
 
 import org.tresql._
 import com.typesafe.scalalogging.Logger
@@ -65,40 +66,10 @@ trait AddressLoader { this: AddressFinder =>
   }
 
   /** Returns from database actual and historical addresses. */
-  lazy val tresqlResources = new Resources {
-    val infoLogger = Logger(LoggerFactory.getLogger("org.tresql"))
-    val tresqlLogger = Logger(LoggerFactory.getLogger("org.tresql.tresql"))
-    val sqlLogger = Logger(LoggerFactory.getLogger("org.tresql.db.sql"))
-    val varsLogger = Logger(LoggerFactory.getLogger("org.tresql.db.vars"))
-    val sqlWithParamsLogger = Logger(LoggerFactory.getLogger("org.tresql.sql_with_params"))
-
-    override val logger = (m, params, topic) => topic match {
-      case LogTopic.sql => sqlLogger.debug(m)
-      case LogTopic.tresql => tresqlLogger.debug(m)
-      case LogTopic.params => varsLogger.debug(m)
-      case LogTopic.sql_with_params => sqlWithParamsLogger.debug(sqlWithParams(m, params))
-      case LogTopic.info => infoLogger.debug(m)
-      case _ => infoLogger.debug(m)
-    }
-
-    override val cache = new SimpleCache(4096)
-
-    def sqlWithParams(sql: String, params: Map[String, Any]) = params.foldLeft(sql) {
-      case (sql, (name, value)) => sql.replace(s"?/*$name*/", value match {
-        case _: Int | _: Long | _: Double | _: BigDecimal | _: BigInt | _: Boolean => value.toString
-        case _: String | _: java.sql.Date | _: java.sql.Timestamp => s"'$value'"
-        case null => "null"
-        case _ => value.toString
-      })
-    }
-  }
-
-  def loadAddressesFromDb(url: String,
-                          user: String,
-                          pwd: String,
-                          driver: String): (Map[Int, AddrObj], Map[Int, List[String]]) = {
+  def loadAddressesFromDb(conf: DbConfig): (Map[Int, AddrObj], Map[Int, List[String]]) = {
+    import conf._
     Class.forName(driver)
-    val conn = DriverManager.getConnection(url, user, pwd)
+    val conn = DriverManager.getConnection(url, user, password)
     try {
       implicit val res = tresqlResources withConn conn
 
@@ -119,20 +90,20 @@ trait AddressLoader { this: AddressFinder =>
 
       val addressObjs: Map[Int, AddrObj] =
         queries
-          .collect( query => {
-            Query(query, Constants.typeOrderMap.keys).toList
-          })
-          .reduce( (a, b) => a ++ b )
-          .map { row =>
-            val kods = row.long("kods").intValue()
-            val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
-            val name = row.string("nosaukums")
-            val obj = AddrObj(kods, row.long("tips_cd").intValue, name,
-              row.long("vkur_cd").intValue, row.long("pnod_cd").toString,
-              normalize(name).toVector, koordX, koordY
-            )
-            kods -> obj
+          .map(Query(_, Constants.typeOrderMap.keys))
+          .map {
+            _.map { row =>
+              val kods = row.long("kods").intValue()
+              val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
+              val name = row.string("nosaukums")
+              val obj = AddrObj(kods, row.long("tips_cd").intValue, name,
+                row.long("vkur_cd").intValue, row.long("pnod_cd").toString,
+                normalize(name).toVector, koordX, koordY
+              )
+              kods -> obj
+            }
           }
+          .reduce(_ ++ _)
           .toMap
       logger.info(s"Addresses loaded: ${addressObjs.size} objects")
 
@@ -140,11 +111,10 @@ trait AddressLoader { this: AddressFinder =>
     } finally conn.close()
   }
 
-  def loadAddressHistoryFromDb(conn: Connection): Map[Int, List[String]] = {
-    implicit val res = tresqlResources withConn conn
+  def loadAddressHistoryFromDb(conn: Connection)(implicit resources: Resources): Map[Int, List[String]] = {
     logger.info("Loading address history")
     val history =
-      Query("arg_adrese_arh {adr_cd, string_agg(std, ?)} (adr_cd)", "\n")
+      Query("arg_adrese_arh {adr_cd, string_agg(std, ?)} (adr_cd)", "\n")(resources withConn conn)
         .map(row => row.int(0) -> row.string(1).split("\n").toList.distinct)
         .toMap
     logger.info(s"Address history loaded: ${history.size} objects")
