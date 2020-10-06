@@ -142,9 +142,9 @@ object Updater {
   def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
 
   val default_opts = Map(
-    "local.driver"     -> c("db.driver",   "org.postgresql.Driver"),
-    "local.connection" -> c("db.url",      "jdbc:postgresql://127.0.0.1:5432/adreses?rewriteBatchedStatements=true"),
-    "local.username" ->   c("db.user",     "postgres"),
+    "local.driver"     -> c("db.driver",   "org.h2.Driver"),
+    "local.connection" -> c("db.url",      "jdbc:h2:./addresses.h2"),
+    "local.username" ->   c("db.user",     ""),
     "local.password" ->   c("db.password", ""),
 
     "vzd.driver"     -> c("VZD.driver", "oracle.jdbc.OracleDriver"),
@@ -179,9 +179,8 @@ Destination connection options:
                                 (default: "${default_opts("local.driver")}")
   --connection CONNECTION       JDBC connection string for destination connection
                                 (default: "${default_opts("local.connection")}")
-  --username USERNAME           username to connect to destination
-                                (default: "${default_opts("local.username")}")
-  --password PASSWORD           connection password to destination
+  --username USERNAME           username to connect to destination, if needed
+  --password PASSWORD           connection password to destination, if needed
 
 VZD connection options:
   --vzd-driver DRIVER          JDBC driver to connect to VZD

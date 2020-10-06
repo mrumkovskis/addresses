@@ -25,16 +25,15 @@ lazy val indexerDependencies = {
     "ch.qos.logback" % "logback-classic"                       % "1.2.3",
     "com.typesafe.scala-logging" %% "scala-logging"            % "3.9.2",
     "org.tresql" %% "tresql"                                   % "10.0.0",
-    "org.postgresql" % "postgresql"                            % "42.2.16",
     "com.zaxxer" % "HikariCP"                                  % "3.4.2",
   )
 }
 
 lazy val updaterDependencies = {
   Seq(
-    "com.oracle.ojdbc" % "ojdbc8" % "19.3.0.0",
+    "com.oracle.ojdbc" % "ojdbc8"  % "19.3.0.0",
     "com.oracle.ojdbc" % "orai18n" % "19.3.0.0",
-    "org.postgresql" % "postgresql" % "42.2.16",
+    "com.h2database"   % "h2"      % "1.4.200",
     "com.typesafe.akka" %% "akka-slf4j" % akkaV,
   )
 }
@@ -50,7 +49,8 @@ lazy val indexer = project
   .in(file("indexer"))
   .settings(commonSettings: _*)
   .settings(
-    libraryDependencies ++= indexerDependencies
+    libraryDependencies ++= indexerDependencies,
+    javaOptions += "-Xmx4G", // h2 string_agg query takes a lot
   )
 
 lazy val service = project

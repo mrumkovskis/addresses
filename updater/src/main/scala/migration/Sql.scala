@@ -1,6 +1,7 @@
 package lv.uniso.migration
 
 import java.sql.Connection
+import java.time.Instant
 
 import scala.collection.mutable
 
@@ -12,11 +13,24 @@ object Sql {
     val ret = if (rs.next) {
       rs.getString(1)
     } else ""
-    
+
     rs.close()
     ps.close()
     ret
   }
+
+  def get_instant(conn: Connection, sql: String): Option[Instant] = {
+    val ps = conn.createStatement()
+    val rs = ps.executeQuery(sql)
+    val ret = if (rs.next) {
+      Some(rs.getTimestamp(1).toInstant())
+    } else None
+
+    rs.close()
+    ps.close()
+    ret
+  }
+
 
   def get_int(conn: Connection, sql: String): Int = {
     val ps = conn.createStatement()

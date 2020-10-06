@@ -23,18 +23,20 @@ VZD {
   }
 
   driver = oracle.jdbc.OracleDriver
+  # already predefined to the localhost:1630 tunnel, no need to specify
   # url =  jdbc:oracle:thin:...
   user = vraa_amk_izstr
   password = "***"
 }
 
-# Address database configuration for actual and historic addresses. This takes precedence over 'VZD' setting.
 db {
-  driver = org.postgresql.Driver
-  url = "jdbc:postgresql://127.0.0.1:5432/adreses?rewriteBatchedStatements=true"
-  user = postgres
-  password = "***"
-  index-dir = <directory where to store address index>
+  driver = org.h2.Driver
+  url = "jdbc:h2:./cache/adrh2"
+  user = ""
+  password = ""
+
+  # directory where to store address index
+  index-dir = "./cache"
 }
 
 port = 8082

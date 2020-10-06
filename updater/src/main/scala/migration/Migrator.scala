@@ -2,6 +2,9 @@ package lv.uniso.migration
 
 import java.sql.Connection
 
+import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+
 class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[String, String, String]]) {
 
   val batch_size = 50000
@@ -31,7 +34,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
     val fields = fieldDef.filter(fd => fd._2 != "pk")
     val fds = s"${pk_field._1}, sync_synced, " + fields.map(_._1).mkString(", ")
-    val ins = ":sync_id, now(), "       + fields.map(fd => s":${fd._1}").mkString(", ")
+    val ins = ":sync_id, current_timestamp, "       + fields.map(fd => s":${fd._1}").mkString(", ")
 
     // s"insert into $localDest ($fds) values ($ins) on conflict do nothing"
     // oh come on, 9.5 with "on conflict" support was released in jan-2016
@@ -44,7 +47,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     val fields = fieldDef.filter(fd => fd._2 != "pk")
     val upds = fields.map(fd => s"${fd._1}=:${fd._1}").mkString(", ")
 
-    s"update $localDest set $upds where ${pk_field._1}=:sync_id"
+    s"update $localDest set $upds, sync_synced=current_timestamp where ${pk_field._1}=:sync_id"
 
   }
 
@@ -72,10 +75,6 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
         case "boolean" => "boolean"
         case "decimal" => "decimal(10, 3)"
         case "date" => "date"
-        case "vertiba" => "decimal(20, 6)"
-        // case "decimal_20_6" => "decimal(20, 6)"
-        case "decimal_20_8" => "decimal(20, 8)"
-        case "decimal_22_0" => "decimal(22, 0)"
         case "datetime" => "timestamp with time zone"
         case "datetag" => "timestamp with time zone"
         case "legacy_datetag" => "varchar"
@@ -107,9 +106,11 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
   }
 
   def getWhere(vzd: Connection, local: Connection, opts: OptMap): String = {
-    val dt_max = Sql.get_string(local, s"select max(${datetag_local}) from $localDest").substring(0, 19)
-    Printer.msg(s"Fetching new records since $dt_max")
-    s"where ${datetag_remote} > to_date('$dt_max', '$orafmt')"
+    val dt_max_ts = Sql.get_instant(local, s"select max(${datetag_local}) from $localDest").get
+    // warning, te, iespējams, slēpjas velni ar laikazonām
+    val dt_max = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("Europe/Riga")).format(dt_max_ts)
+    Printer.msg(s"Fetching new records since ${dt_max}")
+    s"where ${datetag_remote} > to_date('${dt_max}', '$orafmt')"
   }
 
   def migrate(read: Connection, write: Connection, opts: OptMap) : Unit = {
@@ -181,16 +182,6 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
                 case "string" => mod.setString(f, rs.getString(f))
                 case "date" => mod.setDate(f, rs.getDate(f))
                 case "decimal" => mod.setDecimal(f, rs.getBigDecimal(f))
-                case "vertiba" =>
-                  val bd:java.math.BigDecimal = rs.getBigDecimal(f)
-                  if (rs.wasNull) {
-                    mod.setLongNull(f)
-                  } else {
-                    val v = BigDecimal(bd);
-                    mod.setDecimal(f, v.bigDecimal)
-                  }
-                case "decimal_20_8" => mod.setDecimal(f, rs.getBigDecimal(f))
-                case "decimal_22_0" => mod.setDecimal(f, rs.getBigDecimal(f))
                 case "yn" => mod.setBoolean(f, rs.getString(f) == "Y")
                 case "01" => mod.setBoolean(f, rs.getString(f) == "1")
                 case "boolean" => mod.setBoolean(f, rs.getBoolean(f))

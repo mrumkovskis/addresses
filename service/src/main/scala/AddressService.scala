@@ -165,14 +165,15 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
   }
   override def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
 
+  def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
+
   override def dbConfig: Option[DbConfig] =
-    if (conf.hasPath("db")) {
-      val dbConf = conf.getConfig("db")
-      Some(DbConfig(dbConf.getString("driver"),
-        dbConf.getString("url"),
-        dbConf.getString("user"), dbConf.getString("password"),
-        dbConf.getString("index-dir")))
-    } else None
+    Some(DbConfig(
+      c("db.driver", "org.h2.Driver"),
+      c("db.url", "jdbc:h2:./addresses.h2"),
+      c("db.user", ""),
+      c("password", ""),
+      c("index-dir", ".")))
 }
 
 class AddressFinder(val addressFileName: String, val blackList: Set[String],

@@ -111,18 +111,24 @@ trait AddressLoader { this: AddressFinder =>
       logger.info(s"House coordinates loaded: ${houseCoords.size} objects")
 
       logger.info("Loading address objects")
-      val query =
-        "(art_vieta [statuss = 'EKS'] {kods, tips_cd, vkur_cd, nosaukums, null pnod_cd} ++" +
-        "art_nlieta [statuss = 'EKS'] {kods, tips_cd, vkur_cd, nosaukums, pnod_cd} ++" +
-        "art_dziv [statuss = 'EKS'] {kods, tips_cd, vkur_cd, nosaukums, null}) objs [tips_cd in ?]"
+      val queries = List(
+        "art_vieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null pnod_cd}",
+        "art_nlieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, pnod_cd}",
+        "art_dziv [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null pnod_cd}",
+      )
+
       val addressObjs: Map[Int, AddrObj] =
-        Query(query, Constants.typeOrderMap.keys)
+        queries
+          .collect( query => {
+            Query(query, Constants.typeOrderMap.keys).toList
+          })
+          .reduce( (a, b) => a ++ b )
           .map { row =>
-            val kods = row.int("kods")
+            val kods = row.long("kods").intValue()
             val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
             val name = row.string("nosaukums")
-            val obj = AddrObj(kods, row.int("tips_cd"), name,
-              row.int("vkur_cd"), row.string("pnod_cd"),
+            val obj = AddrObj(kods, row.long("tips_cd").intValue, name,
+              row.long("vkur_cd").intValue, row.long("pnod_cd").toString,
               normalize(name).toVector, koordX, koordY
             )
             kods -> obj
