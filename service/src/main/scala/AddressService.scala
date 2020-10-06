@@ -172,8 +172,8 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
       c("db.driver", "org.h2.Driver"),
       c("db.url", "jdbc:h2:./addresses.h2"),
       c("db.user", ""),
-      c("password", ""),
-      c("index-dir", ".")))
+      c("db.password", ""),
+      c("db.index-dir", ".")))
 }
 
 class AddressFinder(val addressFileName: String, val blackList: Set[String],
