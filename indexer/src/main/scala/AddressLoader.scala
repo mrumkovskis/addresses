@@ -1,11 +1,8 @@
 package lv.addresses.indexer
 
 import java.sql.{Connection, DriverManager}
-import java.time.LocalDateTime
 
 import org.tresql._
-import com.typesafe.scalalogging.Logger
-import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._
 

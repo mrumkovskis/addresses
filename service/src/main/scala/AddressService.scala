@@ -140,8 +140,6 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
 
   override def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
     conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
-  val initOnStartup =
-    if (conf.hasPath("VZD.init-on-startup")) conf.getBoolean("VZD.init-on-startup") else false
   val workerActorCount =
     if (conf.hasPath("VZD.worker-actor-count")) conf.getInt("VZD.worker-actor-count") else 5
   import scala.concurrent.duration._
