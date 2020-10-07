@@ -88,14 +88,16 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         unsubscribe(subscriber)
         as.log.info(s"$subscriber unsubscribed from version update.")
     }
-    private def deleteOldIndexes = if (af != null) {
-      val (cache, index) = (af.addressCacheFile(af.addressFileName),
-        af.indexFile(af.addressFileName))
-      if (cache.delete) as.log.info(s"Deleted address cache: $cache") else
-        as.log.warning(s"Unable to delete address cache file $cache")
-      if (index.delete) as.log.info(s"Deleted address index: $index") else
-        as.log.warning(s"Unable to delete address index: $index")
+    private def deleteOldIndexes = for {
+      afinder <- Option(af)
+      index <- afinder.indexFiles
+    } {
+      if (index.addresses.delete) as.log.info(s"Deleted address cache: ${index.addresses}")
+      else as.log.warning(s"Unable to delete address cache file ${index.addresses}")
+      if (index.index.delete) as.log.info(s"Deleted address index: ${index.index}")
+      else as.log.warning(s"Unable to delete address index: ${index.index}")
     }
+
     override def postStop() = af = null
   }
 
@@ -109,6 +111,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     ).fold(null: String) { (currentVersion, _) =>
       val newVersion = Option(dbDataVersion).getOrElse(addressFileName)
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
+        as.log.info(s"Initializing address finder $newVersion")
         val af = new AddressFinder(newVersion, blackList, houseCoordFile, dbConfig)
         af.init
         addressFinderActor ! Finder(af)
@@ -133,35 +136,25 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
     if (idx != -1) akFileName.substring(0, idx) else "."
   }
 
-  private val dbDataFileNamePattern =
-    new Regex(s"""$DbDataFilePrefix\\d{4}-\\d{2}-\\d{2}T\\d{2}_\\d{2}(_\\d{2})?(\\.\\d+)?""")
-
   def akFileNamePattern = akFileName.substring(akFileName.lastIndexOf('/') + 1)
 
   override def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
     conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
-  val workerActorCount =
-    if (conf.hasPath("VZD.worker-actor-count")) conf.getInt("VZD.worker-actor-count") else 5
   import scala.concurrent.duration._
   private val dur = if (conf.hasPath("VZD.initializer-run-interval"))
     Duration(conf.getString("VZD.initializer-run-interval")) else 1 hour
   val initializerRunInterval = FiniteDuration(dur.length, dur.unit)
 
-  //return alphabetically last file name matching pattern
-  override def addressFileName: String = {
-    dbConfig.map(c => c.indexDir -> ((f: File) => dbDataFileNamePattern.findPrefixOf(f.getName).nonEmpty))
-      .getOrElse(akDirName -> ((f: File) => java.util.regex.Pattern.matches(akFileNamePattern, f.getName))) match {
-      case (name, filter) =>
-        new File(name)
-          .listFiles(new FileFilter {
-            def accept(f: File) = filter(f)
-          })
-          .sortBy(_.getName)
-          .lastOption
-          .map(_.getPath)
-          .orNull
-    }
-  }
+  /** Return alphabetically last address file. */
+  override def addressFileName: String =
+    new File(akDirName)
+      .listFiles(new FileFilter {
+        def accept(f: File) = java.util.regex.Pattern.matches(akFileNamePattern, f.getName)
+      })
+      .sortBy(_.getName)
+      .lastOption.map(_.getPath)
+      .orNull
+
   override def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
 
   def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
