@@ -50,9 +50,9 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
       var rem = if (remaining_h > 0) s"${remaining_h}h ${remaining_min}m" else s"${remaining_min}m ${remaining_s}s"
       val ex = if (extra == "") "" else s" ($extra)"
       if (n <= count) {
-          Printer.msg(s"$text: $n / $count, $rem remaining$ex")
+          Printer.debug(s"$text: $n / $count, $rem remaining$ex")
       } else {
-          Printer.msg(s"$text: $n / $count, and still going$ex")
+          Printer.debug(s"$text: $n / $count, and still going$ex")
       }
   }
 
@@ -67,9 +67,9 @@ class Ticker (text: String, count: Long, default_batchsize: Long) {
 
   def startupBanner(): Unit = {
     if (count == 0) {
-      Printer.msg(s"$text: nothing to do")
+      Printer.info(s"$text: nothing to do")
     } else {
-      Printer.msg(s"$text: ${count} records")
+      Printer.info(s"$text: ${count} records")
     }
   }
 

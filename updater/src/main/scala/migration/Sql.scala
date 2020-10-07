@@ -34,7 +34,6 @@ object Sql {
 
   def get_int(conn: Connection, sql: String): Int = {
     val ps = conn.createStatement()
-    // Printer.msg(s"$sql")
 
     val rs = ps.executeQuery(sql)
     rs.next
@@ -46,7 +45,6 @@ object Sql {
 
   def get_int2(conn: Connection, sql: String): (Int, Int) = {
     val ps = conn.createStatement()
-    // Printer.msg(s"$sql")
 
     val rs = ps.executeQuery(sql)
     rs.next

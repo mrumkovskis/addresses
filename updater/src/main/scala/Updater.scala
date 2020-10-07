@@ -251,7 +251,7 @@ Examples:
             migrations = e :: migrations
             gatherOpts(opts, rest)
           case None =>
-            Printer.msg(s"Unknown option ${other}.\n")
+            Printer.error(s"Unknown option ${other}.\n")
             None
         }
     }
@@ -266,7 +266,7 @@ Examples:
     val username = opts(s"$base.username")
     val password = opts(s"$base.password")
 
-    Printer.msg(s"Connecting to $connection...")
+    Printer.debug(s"Connecting to $connection...")
 
     Try(Class.forName(driver)) match {
       case Failure(s) =>
@@ -276,10 +276,10 @@ Examples:
 
     Try(DriverManager.getConnection(connection, username, password)) match {
       case Failure(s) =>
-        Printer.msg(s.getMessage)
+        Printer.error(s.getMessage)
         throw fatal(s"Unable to connect to $connection as $username")
       case Success(conn) =>
-        Printer.msg(s"Connection successful")
+        Printer.debug(s"Connection successful")
         conn.setAutoCommit(false)
         Some(conn)
     }
@@ -298,7 +298,7 @@ Examples:
 
         val mig = migrator(m, opts)
 
-        Printer.msg(s"Migrate ${mig.source} -> ${mig.target}")
+        Printer.info(s"Migrate ${mig.source} -> ${mig.target}")
         // mig.rebuild( local.get, opts("truncate") == "true" )
         mig.rebuild(local.get, truncate = false)
         mig.migrate(vzd.get, local.get, opts)
@@ -319,7 +319,7 @@ Examples:
     gatherOpts(default_opts, args.toList) match {
       case Some(opts) => importWith(opts) match {
         case Success(_) => ()
-        case Failure(e) => Printer.msg(e.getMessage); e.printStackTrace()
+        case Failure(e) => Printer.error(e.getMessage); e.printStackTrace()
       }
       case None => usage()
     }

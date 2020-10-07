@@ -10,8 +10,7 @@ class Lock (file_name: String) {
   def acquire (): FileLock = {
     val lock = fc.tryLock(0, 1, false)
     if (lock == null) {
-      Printer.msg(s"Another instance is already running (lockfile $file_name)")
-      System.exit(42)
+      throw new Exception(s"Another instance is already running (lockfile $file_name)")
     }
     lock
   }

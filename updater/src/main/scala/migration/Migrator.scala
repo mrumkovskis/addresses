@@ -109,7 +109,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
     val dt_max_ts = Sql.get_instant(local, s"select max(${datetag_local}) from $localDest").get
     // warning, te, iespējams, slēpjas velni ar laikazonām
     val dt_max = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("Europe/Riga")).format(dt_max_ts)
-    Printer.msg(s"Fetching new records since ${dt_max}")
+    Printer.info(s"Fetching new records since ${dt_max}")
     s"where ${datetag_remote} > to_date('${dt_max}', '$orafmt')"
   }
 
@@ -121,7 +121,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       migrateFullSlurpstein(read, write)
     } else if (n_existing == 0) {
       // pārdzenam 1:1 optimizētā režīmā (straight_inserts = true)
-      Printer.msg(s"Destination empty, running fast copy")
+      Printer.debug(s"Destination empty, running fast copy")
       migrateClassic(read, write, "", straight_inserts = true)
     } else {
       if (full_sync_always) {
@@ -145,7 +145,6 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
     val ins = new NamedStatement(write, insertSql())
     val upd = new NamedStatement(write, updateSql())
-    // Printer.msg(s"select count(*) from $remoteSource $where")
 
     val ticker = new Ticker(s"Migrating $remoteSource -> $localDest", n_total, batchsize)
 
@@ -210,7 +209,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       upd.close()
       rs.close()
 
-      Printer.msg(s"Migrating $remoteSource -> $localDest: done ($n_total)")
+      Printer.info(s"Migrating $remoteSource -> $localDest: done ($n_total)")
     }
 
     n_total
@@ -219,7 +218,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
   def migrateFullSlurpstein(vzd: Connection, local: Connection) : Unit = {
     // aktualizē remotes dzēstos ierakstus, izejot cauri diviem kursoriem
 
-    Printer.msg(s"Verify $localDest")
+    Printer.info(s"Verify $localDest")
 
     val local_s = local.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY)
     local_s.setFetchSize(100_000)
@@ -245,7 +244,7 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
       n += 1
       if (n % 1_000_000 == 0) {
 
-        Printer.msg(s"Read ${n}, +${to_insert.size} -${to_delete.size}...")
+        Printer.debug(s"Read ${n}, +${to_insert.size} -${to_delete.size}...")
         if (to_insert.nonEmpty) {
 
           
@@ -268,12 +267,10 @@ class Migrator (remoteSource:String, localDest:String, fieldDef:List[Tuple3[Stri
 
       if (ours.get < theirs.get) {
         // mums ir dati, kas nav viņam
-        // Printer.msg(s" - ${ours.get}")
         to_delete += ours.get
         ours = if (local_rs.next) Some(local_rs.getLong(1)) else None
       } else if (ours.get > theirs.get) {
         // mums iztrūkst dati
-        // Printer.msg(s" + ${theirs.get} (!!!)")
         to_insert += theirs.get
         theirs = if (remote_rs.next) Some(remote_rs.getLong(1)) else None
 
