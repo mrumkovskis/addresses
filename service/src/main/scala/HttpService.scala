@@ -161,6 +161,7 @@ object Boot extends scala.App with AddressHttpService {
 
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
   FTPDownload.initialize
+  DbSync.initialize
 
   val bindingFuture = Http()
     .newServerAt("0.0.0.0",

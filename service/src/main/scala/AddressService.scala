@@ -20,8 +20,6 @@ import com.typesafe.scalalogging.Logger
 import lv.addresses.indexer.DbConfig
 import org.slf4j.LoggerFactory
 
-import scala.util.matching.Regex
-
 object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
   private[service] trait Msg
@@ -104,19 +102,23 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   import Boot._
   //address updater job as stream
   Source
-    .tick(initializerRunInterval, initializerRunInterval, CheckNewVersion) //periodical check
+    .tick(runInterval, runInterval, CheckNewVersion) //periodical check
     .mergeMat(
       Source.actorRef(PartialFunction.empty, PartialFunction.empty,2, OverflowStrategy.dropHead))(
       (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
     ).fold(null: String) { (currentVersion, _) =>
-      val newVersion = Option(dbDataVersion).getOrElse(addressFileName)
+      as.log.debug(s"Checking for address data new version, current version $currentVersion")
+      val newVersion = dbConfig.flatMap(_ => Some(dbDataVersion)).getOrElse(addressFileName)
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
-        as.log.info(s"Initializing address finder $newVersion")
+        as.log.info(s"New address data found. Initializing address finder $newVersion")
         val af = new AddressFinder(newVersion, blackList, houseCoordFile, dbConfig)
         af.init
         addressFinderActor ! Finder(af)
         newVersion
-      } else currentVersion
+      } else {
+        as.log.debug("No new address data found")
+        currentVersion
+      }
     }.runWith(Sink.ignore).onComplete {
       case Success(_) => as.log.info("Address updater job finished.")
       case Failure(err) => as.log.error(err, "Address updater terminated with failure.")
@@ -140,10 +142,14 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
 
   override def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
     conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
-  import scala.concurrent.duration._
-  private val dur = if (conf.hasPath("VZD.initializer-run-interval"))
-    Duration(conf.getString("VZD.initializer-run-interval")) else 1 hour
-  val initializerRunInterval = FiniteDuration(dur.length, dur.unit)
+
+  val runInterval: FiniteDuration = {
+    val dur: Duration =
+      if (conf.hasPath("VZD.update-run-interval"))
+        Duration(conf.getString("VZD.update-run-interval"))
+      else 1.hour
+    FiniteDuration(dur.length, dur.unit)
+  }
 
   /** Return alphabetically last address file. */
   override def addressFileName: String =

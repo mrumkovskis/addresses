@@ -45,6 +45,7 @@ trait AddressFinder
 
   def init: Unit = {
     if (ready) return
+
     if (addressFileName == null && (dbConfig.isEmpty || dbDataVersion == null))
       logger.error("Address file not set nor database connection parameters specified")
     else {
@@ -331,6 +332,10 @@ case class DbConfig(driver: String, url: String, user: String, password: String,
       Query("(art_vieta { max (sync_synced) d } +" +
         "art_nlieta { max (sync_synced) d } +" +
         "art_dziv { max (sync_synced) d }) { max(d) }").unique[LocalDateTime]
+    } catch {
+      case e: Exception =>
+        Logger(LoggerFactory.getLogger("org.tresql")).error("Error getting last sync time", e)
+        null
     } finally conn.close()
   }
 }
