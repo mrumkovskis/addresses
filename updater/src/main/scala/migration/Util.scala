@@ -1,4 +1,4 @@
-package lv.uniso.migration
+package lv.addresses.migration
 
 import java.sql.Timestamp
 import java.time.{ZoneId, ZonedDateTime}

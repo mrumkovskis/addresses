@@ -5,7 +5,7 @@ import java.sql.DriverManager
 
 import scala.util.{Failure, Success, Try}
 import scala.collection.immutable.ListMap
-import lv.uniso.migration.{Lock, Migrator, Printer}
+import lv.addresses.migration.{Lock, Migrator, Printer}
 
 import scala.annotation.tailrec
 

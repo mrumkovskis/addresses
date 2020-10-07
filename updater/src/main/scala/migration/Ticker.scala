@@ -1,4 +1,4 @@
-package lv.uniso.migration
+package lv.addresses.migration
 
 class Ticker (text: String, count: Long, default_batchsize: Long) {
 

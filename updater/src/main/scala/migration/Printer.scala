@@ -1,4 +1,4 @@
-package lv.uniso.migration
+package lv.addresses.migration
 
 import org.slf4j.LoggerFactory
 

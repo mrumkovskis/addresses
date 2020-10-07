@@ -1,4 +1,4 @@
-package lv.uniso.migration
+package lv.addresses.migration
 
 import java.nio.channels._
 import java.nio.file._
