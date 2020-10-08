@@ -80,9 +80,9 @@ trait AddressLoader { this: AddressFinder =>
 
       logger.info("Loading address objects")
       val queries = List(
-        "art_vieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null pnod_cd}",
-        "art_nlieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, pnod_cd}",
-        "art_dziv [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null pnod_cd}",
+        "art_vieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null zip_code}",
+        "art_nlieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, atrib zip_code}",
+        "art_dziv [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null zip_code}",
       )
 
       val addressObjs: Map[Int, AddrObj] =
@@ -94,7 +94,7 @@ trait AddressLoader { this: AddressFinder =>
               val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
               val name = row.string("nosaukums")
               val obj = AddrObj(kods, row.long("tips_cd").intValue, name,
-                row.long("vkur_cd").intValue, row.long("pnod_cd").toString,
+                row.long("vkur_cd").intValue, row.string("zip_code"),
                 normalize(name).toVector, koordX, koordY
               )
               kods -> obj
