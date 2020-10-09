@@ -15,10 +15,15 @@
 
     <timestamp key="bySecond" datePattern="yyyy-MM-dd--HH-mm-ss"/>
 
+    <!-- Webserver logger -->
     <logger name="akka" level="info"/>
+    <!-- Tresql statement logger (debug level logs statements) -->
     <logger name="org.tresql" level="info"/>
+    <!-- Sql statement logger -->
     <logger name="org.tresql.db" level="info"/>
+    <!-- Sql statement logger (debug level) with parameters in sql string (used for copy paste in db client tool). -->
     <logger name="org.tresql.sql_with_params" level="debug"/>
+    <!-- Connection pool logger -->
     <logger name="com.zaxxer.hikari" level="info"/>
 
     <root level="debug">
