@@ -50,7 +50,8 @@ trait Authorization {
       if (clientAuth) {
         s"User file not specified in configuration property ssl.authorized-users"
       } else {
-        s"User file not specified in configuration property ssl.authorized-users"    }
+        s"ssl.client-auth not enabled"
+      }
     }
 
   protected def authRejectionHandler = RejectionHandler.newBuilder().handle {
@@ -117,7 +118,9 @@ class AuthorizationActor(userFileName: String) extends Actor {
       }
       poll = key.reset()
     }
-    logger.error(s"user service watcher terminated, server will have to be restarted if new user is added")
+    logger.error(s"user service watcher terminated, " +
+      s"server will have to be restarted if new user is added or " +
+      s"reload-users service invoked manually.")
   }(context.dispatcher)
 
   protected def refreshUsers() = {
