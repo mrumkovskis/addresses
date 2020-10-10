@@ -109,7 +109,7 @@ class AuthorizationActor(userFileName: String) extends Actor {
     case RefreshUsers(path) =>
       if (path.toFile.getName == userFile.getName) {
         logger.info(s"Updating users")
-        refreshUsers()
+        users = refreshUsers()
       }
 
     case user: String =>
