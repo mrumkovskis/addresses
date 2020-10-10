@@ -1,16 +1,16 @@
 package lv.addresses.service
 
 import java.io.File
-import java.nio.file.{FileSystems, Path, Paths, StandardWatchEventKinds, WatchEvent}
+import java.nio.file.{FileSystems, Path, Paths}
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.{HttpChallenge, `Tls-Session-Info`}
-import akka.http.scaladsl.server.{AuthenticationFailedRejection, Directive0}
-import akka.http.scaladsl.server.Directives.{headerValueByType, pass, reject}
+import akka.http.scaladsl.server.{AuthenticationFailedRejection, Directive0, Rejection, RejectionHandler, Route, ValidationRejection}
+import akka.http.scaladsl.server.Directives._
 import akka.pattern.ask
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
-import akka.http.scaladsl.server.directives.FutureDirectives._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
@@ -18,6 +18,8 @@ import scala.io.Source
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Try
 
+
+private case object ReloadUsers
 
 trait Authorization {
 
@@ -36,25 +38,51 @@ trait Authorization {
       Some(as.actorOf(Props(classOf[AuthorizationActor], userFileName), "user-authorization"))
     } else None
 
-  def checkUser(name: String) = userActor
+  protected def checkUser(name: String) = userActor
     .map { _.ask(name)(1.second).mapTo[Boolean] }
     .getOrElse(Future.successful(false))
 
-  def authenticate =
-    if (clientAuth) {
-      headerValueByType(`Tls-Session-Info`).flatMap { sessionInfo =>
-        val session = sessionInfo.getSession()
-        val principal = session.getPeerPrincipal
-        val name = principal.getName
-        onSuccess(checkUser(name))
-          .flatMap { res =>
-            if (res) pass
-            else reject(
-              AuthenticationFailedRejection(AuthenticationFailedRejection.CredentialsRejected,
-                HttpChallenge("Any", "APP"))): Directive0
-          }
-      }
-    } else pass
+  protected def refreshUsers =
+    userActor.map { ac =>
+      ac ! ReloadUsers
+      "Ok"
+    }.getOrElse {
+      if (clientAuth) {
+        s"User file not specified in configuration property ssl.authorized-users"
+      } else {
+        s"User file not specified in configuration property ssl.authorized-users"    }
+    }
+
+  protected def authRejectionHandler = RejectionHandler.newBuilder().handle {
+    case r: Rejection =>
+      as.log.warning(s"Unauthorized request. Details - $r")
+      complete(StatusCodes.Unauthorized)
+  }.result()
+
+  protected def authenticateStrict: Directive0 =
+    handleRejections(authRejectionHandler) &
+      headerValueByType(`Tls-Session-Info`)
+        .filter(_ => clientAuth, ValidationRejection("Unauthorized")) //must specify rejection otherwise passes auth rejection handler
+        .flatMap { sessionInfo =>
+          val session = sessionInfo.getSession()
+          val principal = session.getPeerPrincipal
+          val name = principal.getName
+          onSuccess(checkUser(name))
+            .flatMap { res =>
+              if (res) pass
+              else reject(
+                AuthenticationFailedRejection(AuthenticationFailedRejection.CredentialsRejected,
+                  HttpChallenge("Any", "APP"))): Directive0
+            }
+        }
+
+  def authenticate: Directive0 =
+    handleRejections(authRejectionHandler) &
+      ((if (clientAuth) authenticateStrict else pass): Directive0) // somehow cast is needed?
+
+  def reloadUsers: Route = (path("reload-users") & authenticateStrict) {
+    complete(refreshUsers)
+  }
 }
 
 class AuthorizationActor(userFileName: String) extends Actor {
@@ -106,13 +134,18 @@ class AuthorizationActor(userFileName: String) extends Actor {
   }
 
   override def receive: Receive = {
-    case RefreshUsers(path) =>
-      if (path.toFile.getName == userFile.getName) {
-        logger.info(s"Updating users")
-        users = refreshUsers()
-      }
+    def refresh = {
+      logger.info(s"Updating users")
+      users = refreshUsers()
+    }
+    {
+      case ReloadUsers => refresh
+      case RefreshUsers(path) => if (path.toFile.getName == userFile.getName) refresh
+      case user: String => sender() ! users(user)
+    }
+  }
 
-    case user: String =>
-      sender() ! users(user)
+  override def postStop(): Unit = {
+    logger.info(s"Authorization module terminated")
   }
 }

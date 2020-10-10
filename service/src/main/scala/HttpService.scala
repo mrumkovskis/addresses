@@ -129,7 +129,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
           }
         }
       }
-    } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
+    } ~ reloadUsers ~ pathSuffixTest(
+    """.*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
       path(Remaining) { resource => getFromResource(resource) }
     }
 
@@ -219,6 +220,5 @@ object Boot extends scala.App with AddressHttpService {
             .toOption
             .getOrElse(80))
         .bind(route)
-
     }
 }
