@@ -6,6 +6,6 @@ object BootDispatcher extends scala.App {
   } else if (args(0) == "sync") {
     Updater.main(args.tail)
   } else {
-    lv.addresses.service.Boot.main(args)
+    service.Boot.main(args)
   }
 }
