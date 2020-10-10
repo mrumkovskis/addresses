@@ -6,7 +6,7 @@ import java.nio.file.{FileSystems, Path, Paths}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.{HttpChallenge, `Tls-Session-Info`}
-import akka.http.scaladsl.server.{AuthenticationFailedRejection, Directive0, Rejection, RejectionHandler, Route, ValidationRejection}
+import akka.http.scaladsl.server.{AuthenticationFailedRejection, Directive0, Directive1, Rejection, RejectionHandler, Route, ValidationRejection}
 import akka.http.scaladsl.server.Directives._
 import akka.pattern.ask
 import com.typesafe.scalalogging.Logger
@@ -59,7 +59,7 @@ trait Authorization {
       complete(StatusCodes.Unauthorized)
   }.result()
 
-  protected def authenticateStrict: Directive0 =
+  protected def authenticateStrict: Directive1[String] =
     handleRejections(authRejectionHandler) &
       headerValueByType(`Tls-Session-Info`)
         .filter(_ => clientAuth, ValidationRejection("Unauthorized")) //must specify rejection otherwise passes auth rejection handler
@@ -69,19 +69,22 @@ trait Authorization {
           val name = principal.getName
           onSuccess(checkUser(name))
             .flatMap { res =>
-              if (res) pass
+              if (res) provide(name)
               else reject(
                 AuthenticationFailedRejection(AuthenticationFailedRejection.CredentialsRejected,
-                  HttpChallenge("Any", "APP"))): Directive0
+                  HttpChallenge("Any", "APP"))): Directive1[String]
             }
         }
 
   def authenticate: Directive0 =
     handleRejections(authRejectionHandler) &
-      ((if (clientAuth) authenticateStrict else pass): Directive0) // somehow cast is needed?
+      ((if (clientAuth) authenticateStrict.flatMap(_ => pass) else pass): Directive0) // somehow cast is needed?
 
-  def reloadUsers: Route = (path("reload-users") & authenticateStrict) {
-    complete(refreshUsers)
+  def reloadUsers: Route = (path("reload-users") & authenticateStrict) { admin =>
+    Try(conf.getString("ssl.admin-name"))
+      .collect { case u if u == admin => complete(refreshUsers) }
+      .toOption
+      .getOrElse(complete(StatusCodes.Unauthorized))
   }
 }
 

@@ -57,6 +57,8 @@ ssl {
 
   #file for authorized users. each user must be written according to RFC 2253 standart on separate line.
   authorized-users = "<path to valid user list file>"
+  #administrator name according to RFC 2253 standart. can call reload-users function
+  admin-name = "CN=test-client,OU=test,O=test,L=test,C=LV"
 }
 
 address-service-port = 8082
