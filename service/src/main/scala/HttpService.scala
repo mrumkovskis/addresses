@@ -1,5 +1,8 @@
 package lv.addresses.service
 
+import java.io.FileInputStream
+import java.security.{KeyStore, SecureRandom}
+
 import akka.actor.ActorSystem
 
 import scala.language.postfixOps
@@ -9,12 +12,15 @@ import akka.stream.scaladsl._
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpResponse}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.headers._
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.{ConnectionContext, Http, HttpsConnectionContext}
 import akka.http.scaladsl.common.EntityStreamingSupport
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
 import akka.util.ByteString
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+
+import scala.util.Try
 
 object MyJsonProtocol extends DefaultJsonProtocol {
   implicit val f21 = jsonFormat21(AddressFull)
@@ -38,7 +44,10 @@ case class AddressFull(
 import MyJsonProtocol._
 import AddressService._
 
-trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport {
+trait AddressHttpService extends lv.addresses.service.Authorization with
+  akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport {
+
+  val conf = com.typesafe.config.ConfigFactory.load
 
   val CODE_PATTERN = "(\\d{9,})"r
 
@@ -75,46 +84,49 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
       redirect("/index.html", SeeOther)
     } ~ path("index.html") {
       getFromResource("index.html")
-    } ~ (path("address") & get & parameterMultiMap) { params =>
-      val pattern = params.get("search")
-        .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
-        .getOrElse("")
-      val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
-      val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
-      val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
-      val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1
-      val coordY: BigDecimal = params.get("y") map(y => BigDecimal(y.head)) getOrElse -1
-      respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-        response {
-          finder => (pattern match {
-            case CODE_PATTERN(code) => finder.addressOption(code.toInt).toArray
-            case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types)
-            case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit)
-          }) map { a =>
-            addrFull(a, finder.addressStruct(a.code), ", ").toJson
+    } ~ authenticate {
+      (path("address") & get & parameterMultiMap) { params =>
+        val pattern = params.get("search")
+          .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
+          .getOrElse("")
+        val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
+        val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
+        val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
+        val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1
+        val coordY: BigDecimal = params.get("y") map(y => BigDecimal(y.head)) getOrElse -1
+        respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
+          response {
+            finder => (pattern match {
+              case CODE_PATTERN(code) => finder.addressOption(code.toInt).toArray
+              case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types)
+              case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit)
+            }) map { a =>
+              addrFull(a, finder.addressStruct(a.code), ", ").toJson
+            }
           }
         }
-      }
-    } ~ (path("resolve") & get & parameter("address")) { address =>
-      respondWithHeader(`Access-Control-Allow-Origin`.`*`) { response {
-        finder =>
-          val ra = finder.resolve(address)
-          ResolvedAddressFull(
-            ra.address,
-            ra.resolvedAddress.map(rao => addrFull(rao, finder.addressStruct(rao.code), "\n"))
-          ).toJson
+      } ~ (path("resolve") & get & parameter("address")) { address =>
+        respondWithHeader(`Access-Control-Allow-Origin`.`*`) { response {
+          finder =>
+            val ra = finder.resolve(address)
+            ResolvedAddressFull(
+              ra.address,
+              ra.resolvedAddress.map(rao => addrFull(rao, finder.addressStruct(rao.code), "\n"))
+            ).toJson
         }
-      }
-    } ~ (path("address-structure" / IntNumber) & get) { code =>
-      respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-        response(_.addressStruct(code).toJson)
-      }
-    } ~ path("version") {
-      complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
-    } ~ (path("dump.csv") & get & parameterMultiMap) { params => {
-        val types = params.get("type") map(_.toSet.map((t: String) => t.toInt))
-        response {
-          finder => finder.getAddressSource(types)
+        }
+      } ~ (path("address-structure" / IntNumber) & get) { code =>
+        respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
+          response(_.addressStruct(code).toJson)
+        }
+      } ~ path("version") {
+        complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
+      } ~ (path("dump.csv") & get & parameterMultiMap) {
+        params => {
+          val types = params.get("type") map(_.toSet.map((t: String) => t.toInt))
+          response {
+            finder => finder.getAddressSource(types)
+          }
         }
       }
     } ~ pathSuffixTest(""".*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
@@ -154,8 +166,6 @@ trait AddressHttpService extends akka.http.scaladsl.marshallers.sprayjson.SprayJ
 
 object Boot extends scala.App with AddressHttpService {
 
-  val conf = com.typesafe.config.ConfigFactory.load
-
   // we need an ActorSystem to host our application in
   implicit val system = ActorSystem("address-service")
 
@@ -163,8 +173,52 @@ object Boot extends scala.App with AddressHttpService {
   FTPDownload.initialize
   DbSync.initialize
 
-  val bindingFuture = Http()
-    .newServerAt("0.0.0.0",
-      scala.util.Try(conf.getInt("address-service-port")).toOption.getOrElse(8082))
-    .bind(route)
+  val bindingFuture =
+    if (conf.hasPath("ssl")) {
+      val sslConf = conf.getConfig("ssl")
+      def c(p: String) = sslConf.getString(p)
+      val ksf = c("key-store")
+      val ksp = c("key-store-password")
+      val kst = c("key-store-type")
+      val ks = KeyStore.getInstance(kst)
+      ks.load(new FileInputStream(ksf), ksp.toCharArray)
+      val keyManagerFactory: KeyManagerFactory = KeyManagerFactory.getInstance("SunX509")
+      keyManagerFactory.init(ks, ksp.toCharArray)
+
+      val tsf = c("trust-store")
+      val tsp = c("trust-store-password")
+      val tst = c("trust-store-type")
+      val ts = KeyStore.getInstance(tst)
+      ts.load(new FileInputStream(tsf), tsp.toCharArray)
+      val tmf: TrustManagerFactory = TrustManagerFactory.getInstance("SunX509")
+      tmf.init(ts)
+
+      val sslContext: SSLContext = SSLContext.getInstance("TLS")
+      sslContext.init(keyManagerFactory.getKeyManagers, tmf.getTrustManagers, new SecureRandom)
+
+      val clientAuth = Try(sslConf.getBoolean("client-auth")).toOption.getOrElse(false)
+      val https: HttpsConnectionContext =
+        if (clientAuth) {
+          ConnectionContext.httpsServer(() => {
+            val engine = sslContext.createSSLEngine()
+            engine.setUseClientMode(false)
+            engine.setNeedClientAuth(true)
+            engine
+          })
+        } else {
+          ConnectionContext.httpsServer(sslContext)
+        }
+      Http()
+        .newServerAt("0.0.0.0", Try(sslConf.getInt("port")).toOption.getOrElse(443))
+        .enableHttps(https)
+        .bind(route)
+    } else {
+      Http()
+        .newServerAt("0.0.0.0",
+          Try(conf.getInt("address-service-port"))
+            .toOption
+            .getOrElse(80))
+        .bind(route)
+
+    }
 }

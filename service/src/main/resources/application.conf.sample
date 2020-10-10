@@ -40,4 +40,23 @@ db {
   index-dir = "./cache"
 }
 
-port = 8082
+#mandatory setting if ssl.client-auth=true
+akka.http.server.parsing.tls-session-info-header = on
+
+ssl {
+  #keystore containing server key and certificate
+  key-store = "<ssl server auth keys file>"
+  key-store-password = "***"
+  key-store-type = "JKS"
+  #trusted keystore containing client authentication certificate issuer certificate
+  trust-store = "<trusted certificates - server ca, client ca>"
+  trust-store-password = "***"
+  trust-store-type = "JKS"
+  client-auth = true
+  port = 8443
+
+  #file for authorized users. each user must be written according to RFC 2253 standart on separate line.
+  authorized-users = "<path to valid user list file>"
+}
+
+address-service-port = 8082
