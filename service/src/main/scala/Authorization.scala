@@ -19,7 +19,7 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Try
 
 
-private case object ReloadUsers
+private case object ReloadBlockedUsers
 
 trait Authorization {
 
@@ -29,26 +29,30 @@ trait Authorization {
 
   private val as = ActorSystem("user-authorization")
 
-  private val userActor: Option[ActorRef] =
+  private val blockedUserActor: Option[ActorRef] =
     if (clientAuth) {
-      val userFileName =
-        Try(conf.getString("ssl.authorized-users")).toOption.getOrElse {
-          throw new Error(s"User file not specified in configuration property ssl.authorized-users")
-        }
-      Some(as.actorOf(Props(classOf[AuthorizationActor], userFileName), "user-authorization"))
+        Try(conf.getString("ssl.blocked-users"))
+          .map{ blockedUserFileName =>
+            as.actorOf(Props(classOf[AuthorizationActor], blockedUserFileName), "user-authorization")
+          }
+          .toOption
+          .orElse {
+            as.log.warning("ssl.blocked-users property not specified, blocked users cannot be watched")
+            None
+          }
     } else None
 
-  protected def checkUser(name: String) = userActor
+  protected def checkUser(name: String) = blockedUserActor
     .map { _.ask(name)(1.second).mapTo[Boolean] }
-    .getOrElse(Future.successful(false))
+    .getOrElse(Future.successful(true))
 
-  protected def refreshUsers =
-    userActor.map { ac =>
-      ac ! ReloadUsers
+  protected def refreshBlockedUsers =
+    blockedUserActor.map { ac =>
+      ac ! ReloadBlockedUsers
       "Ok"
     }.getOrElse {
       if (clientAuth) {
-        s"User file not specified in configuration property ssl.authorized-users"
+        s"Blocked user file not specified in configuration property ssl.blocked-users"
       } else {
         s"ssl.client-auth not enabled"
       }
@@ -81,26 +85,26 @@ trait Authorization {
     handleRejections(authRejectionHandler) &
       ((if (clientAuth) authenticateStrict.flatMap(_ => pass) else pass): Directive0) // somehow cast is needed?
 
-  def reloadUsers: Route = (path("reload-users") & authenticateStrict) { admin =>
+  def reloadBlockedUsers: Route = (path("reload-blocked-users") & authenticateStrict) { admin =>
     Try(conf.getString("ssl.admin-name"))
-      .collect { case u if u == admin => complete(refreshUsers) }
+      .collect { case u if u == admin => complete(refreshBlockedUsers) }
       .toOption
       .getOrElse(complete(StatusCodes.Unauthorized))
   }
 }
 
-class AuthorizationActor(userFileName: String) extends Actor {
+class AuthorizationActor(blockedUserFileName: String) extends Actor {
 
-  case class RefreshUsers(path: Path)
+  case class RefreshBlockedUsers(path: Path)
 
   val logger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
 
-  private val userFile = new File(userFileName)
-  private val userFileDir: Path = Paths.get(userFile.getParent)
+  private val blockedUserFile = new File(blockedUserFileName)
+  private val blockedUserFileDir: Path = Paths.get(blockedUserFile.getParent)
 
-  if (!userFileDir.toFile.isDirectory) {
-    throw new Error(s"Directory $userFileDir does not exist. " +
-      s"Cannot watch for authorization file $userFileName changes.")
+  if (!blockedUserFileDir.toFile.isDirectory) {
+    throw new Error(s"Directory $blockedUserFileDir does not exist. " +
+      s"Cannot watch for authorization file $blockedUserFileName changes.")
   }
 
   private var users: Set[String] = _
@@ -109,27 +113,27 @@ class AuthorizationActor(userFileName: String) extends Actor {
   Future {
     val watchService = FileSystems.getDefault().newWatchService()
     import java.nio.file.StandardWatchEventKinds._
-    userFileDir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
+    blockedUserFileDir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
     var poll = true
     while (poll) {
       val key = watchService.take()
       key.pollEvents().asScala foreach { ev =>
-        self ! RefreshUsers(ev.context().asInstanceOf[Path])
+        self ! RefreshBlockedUsers(ev.context().asInstanceOf[Path])
       }
       poll = key.reset()
     }
     logger.error(s"user service watcher terminated, " +
       s"server will have to be restarted if new user is added or " +
-      s"reload-users service invoked manually.")
+      s"reload-blocked-users service invoked manually.")
   }(context.dispatcher)
 
   protected def refreshUsers() = {
-    if (userFile.exists()) {
-      Source.fromFile(userFile, "UTF-8")
+    if (blockedUserFile.exists()) {
+      Source.fromFile(blockedUserFile, "UTF-8")
         .getLines()
         .foldLeft(Set[String]()) { (res, usr) => res + usr }
     } else {
-      logger.error(s"User authorization file $userFile does not exist. Authorization not possible.")
+      logger.error(s"Blocked user file $blockedUserFile does not exist.")
       Set[String]()
     }
   }
@@ -145,9 +149,9 @@ class AuthorizationActor(userFileName: String) extends Actor {
       users = refreshUsers()
     }
     {
-      case ReloadUsers => refresh
-      case RefreshUsers(path) => if (path.toFile.getName == userFile.getName) refresh
-      case user: String => sender() ! users(user)
+      case ReloadBlockedUsers => refresh
+      case RefreshBlockedUsers(path) => if (path.toFile.getName == blockedUserFile.getName) refresh
+      case user: String => sender() ! (!users(user)) //user is valid if it is not present in blocked user list
     }
   }
 

@@ -55,9 +55,10 @@ ssl {
   client-auth = true
   port = 8443
 
-  #file for authorized users. each user must be written according to RFC 2253 standart on separate line.
-  authorized-users = "<path to valid user list file>"
-  #administrator name according to RFC 2253 standart. can call reload-users function
+  #file for blocked users. each user must be written according to RFC 2253 standart on separate line.
+  #only user needed to be blocked while having valid certificate must be put into this file
+  blocked-users = "<path to valid user list file>"
+  #administrator name according to RFC 2253 standart. can call reload-blocked-users function
   admin-name = "CN=test-client,OU=test,O=test,L=test,C=LV"
 }
 
