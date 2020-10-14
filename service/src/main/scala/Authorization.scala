@@ -31,15 +31,18 @@ trait Authorization {
 
   private val blockedUserActor: Option[ActorRef] =
     if (clientAuth) {
-        Try(conf.getString("ssl.blocked-users"))
-          .map{ blockedUserFileName =>
-            as.actorOf(Props(classOf[AuthorizationActor], blockedUserFileName), "user-authorization")
-          }
-          .toOption
-          .orElse {
-            as.log.warning("ssl.blocked-users property not specified, blocked users cannot be watched")
-            None
-          }
+        if (conf.hasPath("ssl.blocked-users")) {
+          val blockedUserFileName = conf.getString("ssl.blocked-users")
+          if (new File(blockedUserFileName).exists())
+            Some(as.actorOf(Props(classOf[AuthorizationActor], blockedUserFileName),
+              "user-authorization"))
+          else
+            throw new Error(s"File for blocked users does not exist: $blockedUserFileName. " +
+              s"Check ssl.blocked-users property value")
+        } else {
+          as.log.warning("ssl.blocked-users property not specified, blocked users cannot be watched")
+          None
+        }
     } else None
 
   protected def checkUser(name: String) = blockedUserActor
@@ -51,11 +54,8 @@ trait Authorization {
       ac ! ReloadBlockedUsers
       "Ok"
     }.getOrElse {
-      if (clientAuth) {
-        s"Blocked user file not specified in configuration property ssl.blocked-users"
-      } else {
-        s"ssl.client-auth not enabled"
-      }
+      s"Cannot refresh blocked users. Blocked user refresh process not activated. " +
+        s"Check that property ssl.blocked-users points to existing file"
     }
 
   protected def authRejectionHandler = RejectionHandler.newBuilder().handle {
@@ -82,8 +82,7 @@ trait Authorization {
         }
 
   def authenticate: Directive0 =
-    handleRejections(authRejectionHandler) &
-      ((if (clientAuth) authenticateStrict.flatMap(_ => pass) else pass): Directive0) // somehow cast is needed?
+    if (clientAuth) authenticateStrict.flatMap(_ => pass) else pass
 
   def reloadBlockedUsers: Route = (path("reload-blocked-users") & authenticateStrict) { admin =>
     Try(conf.getString("ssl.admin-name"))
@@ -102,29 +101,29 @@ class AuthorizationActor(blockedUserFileName: String) extends Actor {
   private val blockedUserFile = new File(blockedUserFileName)
   private val blockedUserFileDir: Path = Paths.get(blockedUserFile.getParent)
 
-  if (!blockedUserFileDir.toFile.isDirectory) {
-    throw new Error(s"Directory $blockedUserFileDir does not exist. " +
-      s"Cannot watch for authorization file $blockedUserFileName changes.")
-  }
-
   private var users: Set[String] = _
 
   //launch watch service
   Future {
-    val watchService = FileSystems.getDefault().newWatchService()
-    import java.nio.file.StandardWatchEventKinds._
-    blockedUserFileDir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
-    var poll = true
-    while (poll) {
-      val key = watchService.take()
-      key.pollEvents().asScala foreach { ev =>
-        self ! RefreshBlockedUsers(ev.context().asInstanceOf[Path])
+    if (blockedUserFileDir.toFile.isDirectory) {
+      val watchService = FileSystems.getDefault().newWatchService()
+      import java.nio.file.StandardWatchEventKinds._
+      blockedUserFileDir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
+      var poll = true
+      while (poll) {
+        val key = watchService.take()
+        key.pollEvents().asScala foreach { ev =>
+          self ! RefreshBlockedUsers(ev.context().asInstanceOf[Path])
+        }
+        poll = key.reset()
       }
-      poll = key.reset()
+      logger.error(s"Blocked users service watcher terminated, " +
+        s"server will have to be restarted if new blocked user is added or " +
+        s"reload-blocked-users service invoked manually.")
+    } else {
+      logger.error(s"Directory $blockedUserFileDir does not exist. " +
+        s"Cannot watch for blocked users file $blockedUserFileName changes.")
     }
-    logger.error(s"user service watcher terminated, " +
-      s"server will have to be restarted if new user is added or " +
-      s"reload-blocked-users service invoked manually.")
   }(context.dispatcher)
 
   protected def refreshUsers() = {
@@ -139,13 +138,17 @@ class AuthorizationActor(blockedUserFileName: String) extends Actor {
   }
 
   override def preStart(): Unit = {
-    logger.info(s"Authorization module started")
-    users = refreshUsers()
+    logger.info(s"Blocked user monitoring module started")
+    users = Try(refreshUsers()).recover {
+      case e: Exception =>
+        logger.error("Unable to load blocked users", e)
+        Set[String]()
+    }.get
   }
 
   override def receive: Receive = {
     def refresh = {
-      logger.info(s"Updating users")
+      logger.info(s"Updating blocked users")
       users = refreshUsers()
     }
     {
