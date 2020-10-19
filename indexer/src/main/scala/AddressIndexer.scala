@@ -207,4 +207,34 @@ trait AddressIndexer { this: AddressFinder =>
 
   def extractWords(phrase: String) = wordStatForIndex(phrase)
     .flatMap(t => List(t._1) ++ (2 to t._2).map(s => s"$s*${t._1}"))
+
+  def editDistance(s1: String, s2: String): Int = {
+    val lx = s1.length + 1
+    val ly = s2.length + 1
+    if (lx > 1 && ly > 1) {
+      val vals = new Array[Int](lx)
+      var x = 0
+      while(x < lx) {
+        vals(x) = x
+        x += 1
+      }
+      x = 1
+      var y = 1
+      var dist = 0
+      while(y < ly) {
+        var xm1 = y
+        while(x < lx) {
+          val dxy = vals(x - 1) + (if (s1.charAt(x - 1) == s2.charAt(y - 1)) 0 else 1)
+          val d = Math.min(xm1 + 1, Math.min(vals(x) + 1, dxy))
+          vals(x - 1) = xm1
+          xm1 = d
+          x += 1
+        }
+        x = 1
+        y += 1
+        dist = xm1
+      }
+      dist
+    } else Math.max(lx - 1, ly - 1)
+  }
 }
