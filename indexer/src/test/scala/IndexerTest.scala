@@ -56,7 +56,8 @@ class IndexerTest extends FunSuite {
       "aknas",
       "akls",
       "ak ak",
-      "aknīste"
+      "aknīste",
+      "ak aknīste"
     )
     .zipWithIndex
     .foldLeft(new finder.IndexMutableNode(null, null, null)) { (node, addrWithIdx) =>
@@ -67,23 +68,23 @@ class IndexerTest extends FunSuite {
 
     val expectedResult =
       """
-        |{
+        {
         |  "word": null,
         |  "codes": null,
         |  "children": [{
         |    "word": "2*a",
-        |    "codes": [2],
+        |    "codes": [2, 4],
         |    "children": null
         |  }, {
         |    "word": "2*ak",
-        |    "codes": [2],
+        |    "codes": [2, 4],
         |    "children": null
         |  }, {
         |    "word": "a",
-        |    "codes": [0, 1, 2, 3],
+        |    "codes": [0, 1, 2, 3, 4],
         |    "children": [{
         |      "word": "k",
-        |      "codes": [0, 1, 2, 3],
+        |      "codes": [0, 1, 2, 3, 4],
         |      "children": [{
         |        "word": "l",
         |        "codes": [1],
@@ -94,7 +95,7 @@ class IndexerTest extends FunSuite {
         |        }]
         |      }, {
         |        "word": "n",
-        |        "codes": [0, 3],
+        |        "codes": [0, 3, 4],
         |        "children": [{
         |          "word": "a",
         |          "codes": [0],
@@ -105,16 +106,16 @@ class IndexerTest extends FunSuite {
         |          }]
         |        }, {
         |          "word": "i",
-        |          "codes": [3],
+        |          "codes": [3, 4],
         |          "children": [{
         |            "word": "s",
-        |            "codes": [3],
+        |            "codes": [3, 4],
         |            "children": [{
         |              "word": "t",
-        |              "codes": [3],
+        |              "codes": [3, 4],
         |              "children": [{
         |                "word": "e",
-        |                "codes": [3],
+        |                "codes": [3, 4],
         |                "children": null
         |              }]
         |            }]
