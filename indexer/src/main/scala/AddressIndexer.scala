@@ -38,7 +38,6 @@ private object Constants {
 trait AddressIndexer { this: AddressFinder =>
 
   import Constants._
-
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
       words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null) {
     def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
@@ -46,6 +45,54 @@ trait AddressIndexer { this: AddressFinder =>
     def foldRight[A](z: A)(o: (A, AddrObj) => A): A =
       addressMap.get(superCode).map(ao => ao.foldRight(z)(o)).map(o(_, this)).getOrElse(o(z, this))
     def depth = foldLeft(0)((d, _) => d + 1)
+  }
+
+  final class IndexMutableNode(var word: String, var children: AB[IndexMutableNode], var codes: AB[Int]) {
+    def updateChildren(w: String, code: Int): Unit = {
+      if (children == null) children = AB()
+      if (w.contains("*")) { //repeating words - do not split
+        val i = binarySearch[IndexMutableNode, String](children, w, _.word, (s1, s2) => s1.compareTo(s2))
+        if (i < 0)
+          children.insert(-(i + 1), new IndexMutableNode(w, null, AB(code)))
+        else
+          children(i).codes += code
+      } else {
+        val i = binarySearch[IndexMutableNode, String](children, w, _.word, comp)
+        if (i < 0) {
+          children.insert(-(i + 1), new IndexMutableNode(w, null, AB(code)))
+        } else {
+          val node = children(i)
+          val (commonPart, nodeRest, wordRest) = split(node.word, w)
+          if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
+            node.codes.lastOption.filterNot(_ == code).foreach(_ => node.codes += code) //do not add code twice
+          } else {
+            if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
+              node.word = commonPart
+              val nc = node.codes
+              node.codes = AB(code)
+              val nch = node.children
+              node.children = AB(new IndexMutableNode(nodeRest, nch, nc)) //move children and codes to new child node
+            }
+            if (wordRest.nonEmpty) { //update children with remaining part of new word
+              node.updateChildren(wordRest, code)
+            }
+          }
+        }
+      }
+    }
+    /** Strings are considered equal if they have common prefix */
+    def comp(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
+    override def equals(o: Any) = o match {
+      case node: IndexMutableNode =>
+        word == node.word && children == node.children && codes == node.codes
+      case _ => false
+    }
+
+    /** returns (common part from two args, rest from first arg, rest from second arg) */
+    def split(s1: String, s2: String): (String, String, String) = {
+      val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
+      (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
+    }
   }
 
   protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
@@ -190,7 +237,7 @@ trait AddressIndexer { this: AddressFinder =>
     .toArray
 
   def wordStatForSearch(words: Array[String]) =
-    ((words groupBy identity map {case (k, a) => (k -> a.length)} toArray) sortBy (_._1.length))
+    ((words groupBy identity map {case (k, a) => k -> a.length} toArray) sortBy (_._1.length))
       .unzip match {
         case (w, c) =>
           0 until w.length foreach { i =>
@@ -236,5 +283,16 @@ trait AddressIndexer { this: AddressFinder =>
       }
       dist
     } else Math.max(lx - 1, ly - 1)
+  }
+
+  def binarySearch[T, K](arr: AB[T], key: K, keyFunc: T => K, comparator: (K, K) => Int): Int = {
+    var from = 0
+    var to = arr.length - 1
+    while (from <= to) {
+      val i = from + to >>> 1
+      val r = comparator(keyFunc(arr(i)), key)
+      if (r < 0) from = i + 1 else if (r > 0) to = i - 1 else return i
+    }
+    -(from + 1)
   }
 }

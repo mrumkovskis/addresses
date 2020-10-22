@@ -26,7 +26,8 @@ lazy val indexerDependencies = {
     "com.typesafe.scala-logging" %% "scala-logging"            % "3.9.2",
     "org.tresql" %% "tresql"                                   % "10.0.0",
     "com.zaxxer" % "HikariCP"                                  % "3.4.2",
-    "org.scalatest" %% "scalatest"                             % "3.0.8" % "test"
+    "org.scalatest" %% "scalatest"                             % "3.0.8" % "test",
+    "com.typesafe.akka" %% "akka-http-spray-json"              % akkaHttpV,
   )
 }
 
