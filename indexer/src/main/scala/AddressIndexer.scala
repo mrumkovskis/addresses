@@ -51,13 +51,13 @@ trait AddressIndexer { this: AddressFinder =>
     def updateChildren(w: String, code: Int): Unit = {
       if (children == null) children = AB()
       if (w.contains("*")) { //repeating words - do not split
-        val i = binarySearch[MutableIndexNode, String](children, w, _.word, (s1, s2) => s1.compareTo(s2))
+        val i = bin_search(children, w, _.word, comp)
         if (i < 0)
           children.insert(-(i + 1), new MutableIndexNode(w, AB(code),null))
         else
           children(i).codes += code
       } else {
-        val i = binarySearch[MutableIndexNode, String](children, w, _.word, comp)
+        val i = bin_search(children, w, _.word, compPrefixes)
         if (i < 0) {
           children.insert(-(i + 1), new MutableIndexNode(w, AB(code), null))
         } else {
@@ -65,8 +65,29 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
     }
-    /** Strings are considered equal if they have common prefix */
-    def comp(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
+
+    /** Searches index down the tree */
+    def apply(str: String): AB[Int] = {
+      if(str.contains("*")) {
+        val idx = bin_search(children, str, _.word, comp)
+        if (idx < 0) AB()
+        else children(idx).codes
+      } else search(str)
+    }
+
+    private[MutableIndex] def search(str: String): AB[Int] = {
+      val c = str.head
+      val idx = binarySearch[MutableIndexNode, Char](children, c, _.word.head, _ - _)
+      if (idx < 0) AB()
+      else if (str.length == 1) children(idx).codes
+      else children(idx).search(str.drop(1))
+    }
+
+    private def bin_search = binarySearch[MutableIndexNode, String] _
+
+    private def comp(s1: String, s2: String) = s1.compareTo(s2)
+    /* Strings are considered equal if they have common prefix */
+    private def compPrefixes(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
   }
 
   final class MutableIndexNode(var word: String, var codes: AB[Int],

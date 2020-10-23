@@ -3,15 +3,14 @@ package lv.addresses.indexer
 import org.scalatest.FunSuite
 
 import scala.collection.mutable.ArrayBuffer
+import spray.json._
 
-class IndexerTest extends FunSuite {
-
+object IndexerTest {
   class TestAddressFinder(val addressFileName: String, val blackList: Set[String],
                           val houseCoordFile: String, val dbConfig: Option[DbConfig]) extends AddressFinder
 
   val finder = new TestAddressFinder(null, Set.empty, null, None)
 
-  import spray.json._
   object IndexJsonProtocol extends DefaultJsonProtocol {
     implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
       override def write(obj: finder.MutableIndexNode): JsValue = {
@@ -44,6 +43,11 @@ class IndexerTest extends FunSuite {
       }
     }
   }
+}
+
+class IndexerTest extends FunSuite {
+
+  import IndexerTest._
 
   test("word stat for indexer") {
     assertResult(Map("vid" -> 1, "n" -> 1, "vidussko" -> 1, "pa" -> 1, "vall" -> 3, "vi" -> 1,
@@ -73,7 +77,7 @@ class IndexerTest extends FunSuite {
     .zipWithIndex
     .foldLeft(new finder.MutableIndex(ArrayBuffer())) { (node, addrWithIdx) =>
       val (addr, idx) = addrWithIdx
-      finder.extractWords(addr).foreach(node.updateChildren(_, idx))
+      (finder.extractWords(addr) ++ List("ak")).foreach(node.updateChildren(_, idx))
       node
     }
 
@@ -136,5 +140,9 @@ class IndexerTest extends FunSuite {
     import IndexJsonProtocol._
     //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
+
+    assertResult(List(0, 1, 2, 3, 4))(node("ak").toList)
+    assertResult(List(0))(node("akna").toList)
+    assertResult(Nil)(node("ziz").toList)
   }
 }
