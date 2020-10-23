@@ -54,7 +54,7 @@ trait AddressIndexer { this: AddressFinder =>
 
   sealed class MutableIndex(var children: AB[MutableIndexNode]) {
     def updateChildren(w: String, code: Int): Unit = {
-      if (children == null) children = AB()
+      if (isEmpty) children = AB()
       if (w.contains("*")) { //repeating words - do not split
         val i = bin_search(children, w, _.word, comp)
         if (i < 0)
@@ -119,7 +119,7 @@ trait AddressIndexer { this: AddressFinder =>
 
     /** Debuging info */
     def statistics: IndexStats = {
-      if (children == null)
+      if (isEmpty)
         IndexStats(0, 0)
       else
         children.foldLeft(IndexStats(children.size, 0)){ (st, n) => st + n.statistics }
