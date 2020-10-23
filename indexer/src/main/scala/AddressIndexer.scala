@@ -95,12 +95,6 @@ trait AddressIndexer { this: AddressFinder =>
       val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
     }
-
-    override def equals(o: Any) = o match {
-      case node: MutableIndexNode =>
-        word == node.word && children == node.children && codes == node.codes
-      case _ => false
-    }
   }
 
   protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
