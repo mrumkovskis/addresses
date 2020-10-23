@@ -13,8 +13,8 @@ class IndexerTest extends FunSuite {
 
   import spray.json._
   object IndexJsonProtocol extends DefaultJsonProtocol {
-    implicit object IndexFormat extends RootJsonFormat[finder.IndexMutableNode] {
-      override def write(obj: finder.IndexMutableNode): JsValue = {
+    implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
+      override def write(obj: finder.MutableIndexNode): JsValue = {
         import obj._
         JsObject(Map(
           "word" -> Option(word).map(JsString(_)).getOrElse(JsNull),
@@ -23,13 +23,24 @@ class IndexerTest extends FunSuite {
         ))
       }
 
-      override def read(json: JsValue): finder.IndexMutableNode = json match {
+      override def read(json: JsValue): finder.MutableIndexNode = json match {
         case JsObject(fields) =>
-          new finder.IndexMutableNode(
+          new finder.MutableIndexNode(
             fields("word").convertTo[String],
-            ArrayBuffer.from(fields("children") match { case JsArray(ch) => ch.map(read)}),
-            ArrayBuffer.from(fields("codes").convertTo[Vector[Int]])
+            ArrayBuffer.from(fields("codes").convertTo[Vector[Int]]),
+            ArrayBuffer.from(fields("children") match { case JsArray(ch) => ch.map(read)})
           )
+      }
+    }
+    implicit object IndexFormat extends RootJsonFormat[finder.MutableIndex] {
+      override def write(obj: finder.MutableIndex): JsValue = {
+        import obj._
+        JsArray(Option(children).map(_.map(_.toJson).toVector).getOrElse(Vector()))
+      }
+
+      override def read(json: JsValue): finder.MutableIndex = json match {
+        case JsArray(children) =>
+          new finder.MutableIndex(ArrayBuffer.from(children.map(_.convertTo[finder.MutableIndexNode])))
       }
     }
   }
@@ -60,7 +71,7 @@ class IndexerTest extends FunSuite {
       "ak aknīste"
     )
     .zipWithIndex
-    .foldLeft(new finder.IndexMutableNode(null, null, null)) { (node, addrWithIdx) =>
+    .foldLeft(new finder.MutableIndex(ArrayBuffer())) { (node, addrWithIdx) =>
       val (addr, idx) = addrWithIdx
       finder.extractWords(addr).foreach(node.updateChildren(_, idx))
       node
@@ -68,64 +79,62 @@ class IndexerTest extends FunSuite {
 
     val expectedResult =
       """
-        {
-        |  "word": null,
-        |  "codes": null,
+        [{
+        |  "word": "2*a",
+        |  "codes": [2, 4],
+        |  "children": null
+        |}, {
+        |  "word": "2*ak",
+        |  "codes": [2, 4],
+        |  "children": null
+        |}, {
+        |  "word": "a",
+        |  "codes": [0, 1, 2, 3, 4],
         |  "children": [{
-        |    "word": "2*a",
-        |    "codes": [2, 4],
-        |    "children": null
-        |  }, {
-        |    "word": "2*ak",
-        |    "codes": [2, 4],
-        |    "children": null
-        |  }, {
-        |    "word": "a",
+        |    "word": "k",
         |    "codes": [0, 1, 2, 3, 4],
         |    "children": [{
-        |      "word": "k",
-        |      "codes": [0, 1, 2, 3, 4],
+        |      "word": "l",
+        |      "codes": [1],
         |      "children": [{
-        |        "word": "l",
+        |        "word": "s",
         |        "codes": [1],
+        |        "children": null
+        |      }]
+        |    }, {
+        |      "word": "n",
+        |      "codes": [0, 3, 4],
+        |      "children": [{
+        |        "word": "a",
+        |        "codes": [0],
         |        "children": [{
         |          "word": "s",
-        |          "codes": [1],
+        |          "codes": [0],
         |          "children": null
         |        }]
         |      }, {
-        |        "word": "n",
-        |        "codes": [0, 3, 4],
+        |        "word": "i",
+        |        "codes": [3, 4],
         |        "children": [{
-        |          "word": "a",
-        |          "codes": [0],
-        |          "children": [{
-        |            "word": "s",
-        |            "codes": [0],
-        |            "children": null
-        |          }]
-        |        }, {
-        |          "word": "i",
+        |          "word": "s",
         |          "codes": [3, 4],
         |          "children": [{
-        |            "word": "s",
+        |            "word": "t",
         |            "codes": [3, 4],
         |            "children": [{
-        |              "word": "t",
+        |              "word": "e",
         |              "codes": [3, 4],
-        |              "children": [{
-        |                "word": "e",
-        |                "codes": [3, 4],
-        |                "children": null
-        |              }]
+        |              "children": null
         |            }]
         |          }]
         |        }]
         |      }]
         |    }]
         |  }]
-        |}""".stripMargin.parseJson
+        |}]
+        |""".stripMargin.parseJson
     import IndexJsonProtocol._
+    //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
   }
 }

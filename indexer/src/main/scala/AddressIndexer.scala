@@ -47,51 +47,59 @@ trait AddressIndexer { this: AddressFinder =>
     def depth = foldLeft(0)((d, _) => d + 1)
   }
 
-  final class IndexMutableNode(var word: String, var children: AB[IndexMutableNode], var codes: AB[Int]) {
+  sealed class MutableIndex(var children: AB[MutableIndexNode]) {
     def updateChildren(w: String, code: Int): Unit = {
       if (children == null) children = AB()
       if (w.contains("*")) { //repeating words - do not split
-        val i = binarySearch[IndexMutableNode, String](children, w, _.word, (s1, s2) => s1.compareTo(s2))
+        val i = binarySearch[MutableIndexNode, String](children, w, _.word, (s1, s2) => s1.compareTo(s2))
         if (i < 0)
-          children.insert(-(i + 1), new IndexMutableNode(w, null, AB(code)))
+          children.insert(-(i + 1), new MutableIndexNode(w, AB(code),null))
         else
           children(i).codes += code
       } else {
-        val i = binarySearch[IndexMutableNode, String](children, w, _.word, comp)
+        val i = binarySearch[MutableIndexNode, String](children, w, _.word, comp)
         if (i < 0) {
-          children.insert(-(i + 1), new IndexMutableNode(w, null, AB(code)))
+          children.insert(-(i + 1), new MutableIndexNode(w, AB(code), null))
         } else {
-          val node = children(i)
-          val (commonPart, nodeRest, wordRest) = split(node.word, w)
-          if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
-            node.codes.lastOption.filterNot(_ == code).foreach(_ => node.codes += code) //do not add code twice
-          } else {
-            if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
-              node.word = commonPart
-              val nc = node.codes
-              node.codes = AB(code)
-              val nch = node.children
-              node.children = AB(new IndexMutableNode(nodeRest, nch, nc)) //move children and codes to new child node
-            }
-            if (wordRest.nonEmpty) { //update children with remaining part of new word
-              node.updateChildren(wordRest, code)
-            }
-          }
+          children(i).update(w, code)
         }
       }
     }
     /** Strings are considered equal if they have common prefix */
     def comp(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
-    override def equals(o: Any) = o match {
-      case node: IndexMutableNode =>
-        word == node.word && children == node.children && codes == node.codes
-      case _ => false
+  }
+
+  final class MutableIndexNode(var word: String, var codes: AB[Int],
+                               _children: AB[MutableIndexNode]) extends MutableIndex(_children) {
+
+    def update(w: String, code: Int): Unit = {
+      val (commonPart, nodeRest, wordRest) = split(word, w)
+      if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
+        codes.lastOption.filterNot(_ == code).foreach(_ => codes += code) //do not add code twice
+      } else {
+        if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
+          word = commonPart
+          val nc = codes
+          codes = AB(code)
+          val nch = children
+          children = AB(new MutableIndexNode(nodeRest, nc, nch)) //move children and codes to new child node
+        }
+        if (wordRest.nonEmpty) { //update children with remaining part of new word
+          updateChildren(wordRest, code)
+        }
+      }
     }
 
     /** returns (common part from two args, rest from first arg, rest from second arg) */
     def split(s1: String, s2: String): (String, String, String) = {
       val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
+    }
+
+    override def equals(o: Any) = o match {
+      case node: MutableIndexNode =>
+        word == node.word && children == node.children && codes == node.codes
+      case _ => false
     }
   }
 
