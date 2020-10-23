@@ -133,7 +133,9 @@ trait AddressIndexLoader { this: AddressFinder =>
       } finally conn.close()
     }.getOrElse(Map())
 
-    logger.info(s"Address index loaded (words - $c, addresses - $ac, historical addresses - ${history.size}).")
+    index.foreach { case (w, c) => c.foreach(_index.updateChildren(w, _)) }
+    logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
+      s"index stats - ${_index.statistics.render}.")
     Index(addressMap, idx_code, index, spnpc.toVector, history)
   }
 

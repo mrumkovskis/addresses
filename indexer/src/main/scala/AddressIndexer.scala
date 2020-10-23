@@ -47,6 +47,11 @@ trait AddressIndexer { this: AddressFinder =>
     def depth = foldLeft(0)((d, _) => d + 1)
   }
 
+  case class IndexStats(nodeCount: Long, refCount: Long) {
+    def +(s: IndexStats): IndexStats = IndexStats(nodeCount + s.nodeCount, refCount + s.refCount)
+    def render: String = s"Node count - $nodeCount, code ref count - $refCount"
+  }
+
   sealed class MutableIndex(var children: AB[MutableIndexNode]) {
     def updateChildren(w: String, code: Int): Unit = {
       if (children == null) children = AB()
@@ -88,6 +93,37 @@ trait AddressIndexer { this: AddressFinder =>
     private def comp(s1: String, s2: String) = s1.compareTo(s2)
     /* Strings are considered equal if they have common prefix */
     private def compPrefixes(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
+
+    def isEmpty = children == null || children.size == 0
+    def nonEmpty = !isEmpty
+
+    /** Restores node from path */
+    def load(path: Vector[Int], word: String, codes: AB[Int]): Unit = {
+      val idx = path.head
+      if (children == null) children = AB()
+      if (idx > children.size)
+        sys.error(s"Invalid index: $idx, children size: ${children.size}, cannot add node")
+      else if (idx == children.size) {
+        val n = new MutableIndexNode(null, null, null)
+        n.load(path.drop(1), word, codes)
+        children += n
+      } else {
+        children(idx).load(path.drop(1), word, codes)
+      }
+    }
+
+    /** Calls writer function while traversing index */
+    def write(writer: (Vector[Int], String, AB[Int]) => Unit): Unit = {
+      children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, Vector(i))}
+    }
+
+    /** Debuging info */
+    def statistics: IndexStats = {
+      if (children == null)
+        IndexStats(0, 0)
+      else
+        children.foldLeft(IndexStats(children.size, 0)){ (st, n) => st + n.statistics }
+    }
   }
 
   final class MutableIndexNode(var word: String, var codes: AB[Int],
@@ -116,19 +152,40 @@ trait AddressIndexer { this: AddressFinder =>
       val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
     }
+
+    /** Debuging info */
+    override def statistics: IndexStats = {
+      IndexStats(0, codes.size) + super.statistics
+    }
+
+    override def load(path: Vector[Int], word: String, codes: AB[Int]): Unit = {
+      if (path.isEmpty) {
+        this.word = word
+        this.codes = codes
+      } else {
+        super.load(path, word, codes)
+      }
+    }
+
+    private[AddressIndexer] def writeNode(writer: (Vector[Int], String, AB[Int]) => Unit,
+                                          path: Vector[Int]): Unit = {
+      writer(path, word, codes)
+      if (children != null)
+        children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, path.appended(i))}
+    }
   }
 
   protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
-  protected var _index: scala.collection.mutable.HashMap[String, Array[Int]] = null
+  protected var _index: MutableIndex = new MutableIndex(null)
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
   def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): Array[Int] = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
-    def idx_vals(word: String) = _index.getOrElse(word, Array[Int]())
+    def idx_vals(word: String) = _index(word)
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
-    def intersect(idx: Array[Array[Int]], limit: Int): Array[Int] = {
+    def intersect(idx: Array[AB[Int]], limit: Int): Array[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
       def check_register = {
@@ -146,8 +203,8 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
       def find_equal(a_pos: Int, b_pos: Int) = {
-        val a: Array[Int] = idx(a_pos)
-        val b: Array[Int] = idx(b_pos)
+        val a: AB[Int] = idx(a_pos)
+        val b: AB[Int] = idx(b_pos)
         val al = a.length
         val bl = b.length
         var ai = pos(a_pos)
@@ -207,32 +264,20 @@ trait AddressIndexer { this: AddressFinder =>
     logger.info("Creating index...")
     val idx_code = scala.collection.mutable.HashMap[Int, Int]()
     idx = 0
-    val index = sortedAddresses
-      .foldLeft(scala.collection.mutable.HashMap[String, AB[Int]]()) {
-        case (index, (code, _, name)) =>
+    sortedAddresses
+      .foreach {
+        case (code, _, name) =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
-          val existingWords = scala.collection.mutable.Set[String]()
-          wordsLists foreach { words =>
-            words foreach { w =>
-              if (!existingWords(w)) {
-                existingWords += w
-                if (index contains w) index(w).append(idx)
-                else index(w) = AB(idx)
-              }
-            }
-          }
+          wordsLists foreach(_ foreach(_index.updateChildren(_, idx)))
           idx_code += (idx -> code)
           idx += 1
-          if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx; word cache size: ${index.size}")
-          index
-      }.map(t => t._1 -> t._2.toArray)
+          if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")
+      }
 
-    val refCount = index.foldLeft(0L)((c, t) => c + t._2.size)
-    logger.info(s"Address objects processed: $idx; word cache size: ${index.size}; ref count: $refCount")
+    logger.info(s"Address objects processed: $idx; index statistics: ${_index.statistics}")
 
     this._idxCode = idx_code
-    this._index = index
   }
 
   val accents = "ēūīāšģķļžčņ" zip "euiasgklzcn" toMap

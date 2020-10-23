@@ -18,7 +18,7 @@ object IndexerTest {
         JsObject(Map(
           "word" -> Option(word).map(JsString(_)).getOrElse(JsNull),
           "codes" -> Option(codes).map(_.toVector.toJson).getOrElse(JsNull),
-          "children" -> Option(children).map(_.map(write).toVector).map(JsArray(_)).getOrElse(JsNull)
+          "children" -> Option(children).map(_.map(this.write).toVector).map(JsArray(_)).getOrElse(JsNull)
         ))
       }
 
@@ -66,7 +66,7 @@ class IndexerTest extends FunSuite {
       finder.wordStatForSearch(Array("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
   }
 
-  test("index mutable node") {
+  test("index") {
     val node = List(
       "aknas",
       "akls",
@@ -144,5 +144,6 @@ class IndexerTest extends FunSuite {
     assertResult(List(0, 1, 2, 3, 4))(node("ak").toList)
     assertResult(List(0))(node("akna").toList)
     assertResult(Nil)(node("ziz").toList)
+    assertResult(finder.IndexStats(13,29))(node.statistics)
   }
 }

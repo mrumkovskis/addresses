@@ -207,14 +207,14 @@ trait AddressFinder
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
+    //save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
   }
 
   def loadIndex = {
     val idx = load()
     _addressMap = idx.addresses
     _idxCode = idx.idxCode
-    _index = idx.index
+    //_index = idx.index
     _sortedPilsNovPagCiem = idx.sortedBigObjs
     _addressHistory = idx.history
   }
