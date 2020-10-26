@@ -22,12 +22,12 @@ object IndexerTest {
         ))
       }
 
-      override def read(json: JsValue): finder.MutableIndexNode = json match {
+      override def read(json: JsValue): finder.MutableIndexNode = (json: @unchecked) match {
         case JsObject(fields) =>
           new finder.MutableIndexNode(
             fields("word").convertTo[String],
             ArrayBuffer.from(fields("codes").convertTo[Vector[Int]]),
-            ArrayBuffer.from(fields("children") match { case JsArray(ch) => ch.map(read)})
+            ArrayBuffer.from((fields("children"): @unchecked) match { case JsArray(ch) => ch.map(read)})
           )
       }
     }
@@ -37,7 +37,7 @@ object IndexerTest {
         JsArray(Option(children).map(_.map(_.toJson).toVector).getOrElse(Vector()))
       }
 
-      override def read(json: JsValue): finder.MutableIndex = json match {
+      override def read(json: JsValue): finder.MutableIndex = (json: @unchecked) match {
         case JsArray(children) =>
           new finder.MutableIndex(ArrayBuffer.from(children.map(_.convertTo[finder.MutableIndexNode])))
       }
@@ -72,32 +72,65 @@ class IndexerTest extends FunSuite {
       "akls",
       "ak ak",
       "aknīste",
-      "ak aknīste"
+      "ak aknīste",
+      "aka aka",
+      "aka akācijas",
+      "21 215"
     )
     .zipWithIndex
     .foldLeft(new finder.MutableIndex(ArrayBuffer())) { (node, addrWithIdx) =>
       val (addr, idx) = addrWithIdx
-      (finder.extractWords(addr) ++ List("ak")).foreach(node.updateChildren(_, idx))
+      val words = finder.extractWords(addr)
+      //check that duplicate word do not result in duplicate address code reference
+      (if (words.exists(_ == "ak")) words ++ List("ak") else words).foreach(node.updateChildren(_, idx))
       node
     }
 
     val expectedResult =
       """
-        [{
-        |  "word": "2*a",
-        |  "codes": [2, 4],
-        |  "children": null
-        |}, {
-        |  "word": "2*ak",
-        |  "codes": [2, 4],
-        |  "children": null
+        |[{
+        |  "word": "2",
+        |  "codes": [7],
+        |  "children": [{
+        |    "word": "1",
+        |    "codes": [7],
+        |    "children": [{
+        |      "word": "5",
+        |      "codes": [7],
+        |      "children": null
+        |    }]
+        |  }]
         |}, {
         |  "word": "a",
-        |  "codes": [0, 1, 2, 3, 4],
+        |  "codes": [0, 1, 2, 3, 4, 5, 6],
         |  "children": [{
         |    "word": "k",
-        |    "codes": [0, 1, 2, 3, 4],
+        |    "codes": [0, 1, 2, 3, 4, 5, 6],
         |    "children": [{
+        |      "word": "a",
+        |      "codes": [5, 6],
+        |      "children": [{
+        |        "word": "c",
+        |        "codes": [6],
+        |        "children": [{
+        |          "word": "i",
+        |          "codes": [6],
+        |          "children": [{
+        |            "word": "j",
+        |            "codes": [6],
+        |            "children": [{
+        |              "word": "a",
+        |              "codes": [6],
+        |              "children": [{
+        |                "word": "s",
+        |                "codes": [6],
+        |                "children": null
+        |              }]
+        |            }]
+        |          }]
+        |        }]
+        |      }]
+        |    }, {
         |      "word": "l",
         |      "codes": [1],
         |      "children": [{
@@ -135,15 +168,39 @@ class IndexerTest extends FunSuite {
         |      }]
         |    }]
         |  }]
+        |}, {
+        |  "word": "2*2",
+        |  "codes": [7],
+        |  "children": null
+        |}, {
+        |  "word": "2*21",
+        |  "codes": [7],
+        |  "children": null
+        |}, {
+        |  "word": "2*a",
+        |  "codes": [2, 4, 5, 6],
+        |  "children": null
+        |}, {
+        |  "word": "2*ak",
+        |  "codes": [2, 4, 5, 6],
+        |  "children": null
+        |}, {
+        |  "word": "2*aka",
+        |  "codes": [5, 6],
+        |  "children": null
         |}]
         |""".stripMargin.parseJson
     import IndexJsonProtocol._
     //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
 
-    assertResult(List(0, 1, 2, 3, 4))(node("ak").toList)
+    assertResult(List(0, 1, 2, 3, 4, 5, 6))(node("ak").toList)
+    assertResult(List(2, 4, 5, 6))(node("2*ak").toList)
     assertResult(List(0))(node("akna").toList)
+    assertResult(Nil)(node("aknass").toList)
     assertResult(Nil)(node("ziz").toList)
-    assertResult(finder.IndexStats(13,29))(node.statistics)
+    assertResult(finder.IndexStats(25,51))(node.statistics)
+    assertResult(ArrayBuffer())(node.invalidIndices)
+    assertResult(ArrayBuffer())(node.invalidWords)
   }
 }

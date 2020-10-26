@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
 import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
 import scala.collection.mutable.{ArrayBuffer => AB}
-import scala.util.{Try, Using}
+import scala.util.Using
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
                    coordX: BigDecimal, coordY: BigDecimal, history: List[String])
@@ -208,14 +208,14 @@ trait AddressFinder
 
   def saveIndex = {
     checkIndex
-    //save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
+    save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
   }
 
   def loadIndex = {
     val idx = load()
     _addressMap = idx.addresses
     _idxCode = idx.idxCode
-    //_index = idx.index
+    _index = idx.index
     _sortedPilsNovPagCiem = idx.sortedBigObjs
     _addressHistory = idx.history
   }

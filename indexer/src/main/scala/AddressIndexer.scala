@@ -53,46 +53,50 @@ trait AddressIndexer { this: AddressFinder =>
   }
 
   sealed class MutableIndex(var children: AB[MutableIndexNode]) {
+    private[this] var multiWordStartIdx = 0
     def updateChildren(w: String, code: Int): Unit = {
       if (isEmpty) children = AB()
-      if (w.contains("*")) { //repeating words - do not split
-        val i = bin_search(children, w, _.word, comp)
-        if (i < 0)
-          children.insert(-(i + 1), new MutableIndexNode(w, AB(code),null))
-        else
-          children(i).codes += code
+      val i = binarySearch[MutableIndexNode, String](children, w, _.word, compPrefixes)
+      if (i < 0) {
+        children.insert(-(i + 1), new MutableIndexNode(w, AB(code), null))
+        if (!w.contains("*")) multiWordStartIdx += 1
       } else {
-        val i = bin_search(children, w, _.word, compPrefixes)
-        if (i < 0) {
-          children.insert(-(i + 1), new MutableIndexNode(w, AB(code), null))
-        } else {
-          children(i).update(w, code)
-        }
+        children(i).update(w, code)
       }
     }
 
     /** Searches index down the tree */
     def apply(str: String): AB[Int] = {
       if(str.contains("*")) {
-        val idx = bin_search(children, str, _.word, comp)
+        val idx = binarySearchFromUntil[MutableIndexNode, String](
+          children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) AB()
         else children(idx).codes
       } else search(str)
     }
 
     private[MutableIndex] def search(str: String): AB[Int] = {
+      if (children == null) return AB()
       val c = str.head
-      val idx = binarySearch[MutableIndexNode, Char](children, c, _.word.head, _ - _)
+      val idx = binarySearchFromUntil[MutableIndexNode, Char](
+        children, 0, searchUntilIdx, c, _.word.head, _ - _)
       if (idx < 0) AB()
       else if (str.length == 1) children(idx).codes
       else children(idx).search(str.drop(1))
     }
 
-    private def bin_search = binarySearch[MutableIndexNode, String] _
+    private[AddressIndexer] def searchUntilIdx: Int = multiWordStartIdx
 
-    private def comp(s1: String, s2: String) = s1.compareTo(s2)
-    /* Strings are considered equal if they have common prefix */
-    private def compPrefixes(s1: String, s2: String) = if (s1(0) == s2(0)) 0 else s1.compareTo(s2)
+    /* Strings are considered equal if they have common prefix but do not have multiplier in them,
+    * otherwise standard comparator is used */
+    private def compPrefixes(s1: String, s2: String) = {
+      val (s1Mult, s2Mult) = (s1.contains("*"), s2.contains("*"))
+      val multiplierComp = s1Mult compareTo s2Mult
+      if (multiplierComp == 0)
+        if (s1Mult || s1(0) != s2(0)) s1 compareTo s2 else 0
+      else
+        multiplierComp
+    }
 
     def isEmpty = children == null || children.size == 0
     def nonEmpty = !isEmpty
@@ -124,6 +128,18 @@ trait AddressIndexer { this: AddressFinder =>
       else
         children.foldLeft(IndexStats(children.size, 0)){ (st, n) => st + n.statistics }
     }
+    private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
+      if (isEmpty) AB() else children.flatMap(_.validateNodeWord(path))
+    }
+    private[AddressIndexer] def validateIndex(path: String): AB[(String, AB[Int])] = {
+      if (isEmpty) AB() else children.flatMap(_.validateIndex(path))
+    }
+    /** Node word must be of one character length if it does not contains multiplier '*'.
+     * Returns tuple - (path, word, first address code) */
+    def invalidWords: AB[(String, String, Int)] = validateNodeWord("")
+    /** Address codes in node must be unique and in ascending order.
+     * Returns (invalid path|word, address codes) */
+    def invalidIndices: AB[(String, AB[Int])] = validateIndex("")
   }
 
   final class MutableIndexNode(var word: String, var codes: AB[Int],
@@ -147,15 +163,12 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
+    override private[AddressIndexer] def searchUntilIdx: Int = children.length
+
     /** returns (common part from two args, rest from first arg, rest from second arg) */
     def split(s1: String, s2: String): (String, String, String) = {
       val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
-    }
-
-    /** Debuging info */
-    override def statistics: IndexStats = {
-      IndexStats(0, codes.size) + super.statistics
     }
 
     override def load(path: Vector[Int], word: String, codes: AB[Int]): Unit = {
@@ -173,10 +186,29 @@ trait AddressIndexer { this: AddressFinder =>
       if (children != null)
         children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, path.appended(i))}
     }
+
+    /** Debuging info */
+    override def statistics: IndexStats = {
+      IndexStats(0, codes.size) + super.statistics
+    }
+
+    override private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
+      (if (word.length > 1 && !word.contains("*")) AB((path, word, _idxCode(codes.head))) else AB()) ++
+        super.validateNodeWord(path + word)
+    }
+    override private[AddressIndexer] def validateIndex(path: String): AB[(String, AB[Int])] = {
+      val wrongCodes = AB[Int]()
+      codes.reduce { (prevCode, curCode) =>
+        if (prevCode >= curCode) wrongCodes += curCode
+        curCode
+      }
+      (if (wrongCodes.nonEmpty) AB(s"$path|$word" -> wrongCodes.map(_idxCode)) else AB()) ++
+        super.validateIndex(path + word)
+    }
   }
 
   protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
-  protected var _index: MutableIndex = new MutableIndex(null)
+  protected var _index: MutableIndex = null
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
@@ -242,6 +274,8 @@ trait AddressIndexer { this: AddressFinder =>
     logger.info("Starting address indexing...")
     logger.info(s"Sorting ${addressMap.size} addresses...")
 
+    val index = new MutableIndex(null)
+
     //(addressCode, ordering weight, full space separated unnaccented address)
     val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
@@ -269,16 +303,25 @@ trait AddressIndexer { this: AddressFinder =>
         case (code, _, name) =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
-          wordsLists foreach(_ foreach(_index.updateChildren(_, idx)))
+          wordsLists foreach(_ foreach(index.updateChildren(_, idx)))
           idx_code += (idx -> code)
           idx += 1
           if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")
       }
 
-    logger.info(s"Address objects processed: $idx; index statistics: ${_index.statistics}")
+    logger.info(s"Address objects processed: $idx; index statistics: ${index.statistics}")
 
     this._idxCode = idx_code
+    this._index = index
   }
+
+  /** Node word must be of one character length if it does not contains multiplier '*'.
+   * Returns tuple - (path, word, first address code) */
+  def invalidWords: AB[(String, String, Int)] = _index.invalidWords
+
+  /** Address codes in node must be unique and in ascending order.
+   * Returns (invalid path|word, address codes) */
+  def invalidIndices: AB[(String, AB[Int])] = _index.invalidIndices
 
   val accents = "ēūīāšģķļžčņ" zip "euiasgklzcn" toMap
 
@@ -354,8 +397,13 @@ trait AddressIndexer { this: AddressFinder =>
   }
 
   def binarySearch[T, K](arr: AB[T], key: K, keyFunc: T => K, comparator: (K, K) => Int): Int = {
-    var from = 0
-    var to = arr.length - 1
+    binarySearchFromUntil(arr, 0, arr.length, key, keyFunc, comparator)
+  }
+
+  def binarySearchFromUntil[T, K](arr: AB[T], fromIdx: Int, toIdx: Int,
+                                  key: K, keyFunc: T => K, comparator: (K, K) => Int): Int = {
+    var from = fromIdx
+    var to = toIdx - 1
     while (from <= to) {
       val i = from + to >>> 1
       val r = comparator(keyFunc(arr(i)), key)

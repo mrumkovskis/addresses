@@ -13,19 +13,19 @@ import java.io.PrintWriter
 import java.sql.DriverManager
 
 import scala.util.Using
+import scala.collection.mutable.{ArrayBuffer => AB}
 
 trait AddressIndexLoader { this: AddressFinder =>
   def save(addressMap: Map[Int, AddrObj],
            idxCode: scala.collection.mutable.HashMap[Int, Int],
-           index: scala.collection.mutable.Map[String, Array[Int]],
+           index: MutableIndex,
            sortedPilNovPagCiem: Vector[Int]) = {
 
-    val IndexFiles(idxFile, addrFile) = newIndexFiles
+    val IndexFiles(addrFile, idxFile) = newIndexFiles
     logger.info(s"Saving address index in $idxFile...")
-    val maxRefArray = index.maxBy(_._2.length)
-    val maxRefArrayLength = maxRefArray._2.length
-    logger.info(s"Max. reference array length for the word '${maxRefArray._1}': ${maxRefArray._2.length}")
     Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
+      var maxRefArrayWord: String = null
+      var maxRefArrayLength = 0
       //write big object count
       os.writeInt(sortedPilNovPagCiem.size)
       //write big objects
@@ -37,13 +37,18 @@ trait AddressIndexLoader { this: AddressFinder =>
         os.writeInt(i)
         os.writeInt(c)
       }
-      os.writeInt(maxRefArrayLength)
-      //write word->addr_indexes map
-      index.foreach(i => {
-        os.writeUTF(i._1)
-        os.writeInt(i._2.length)
-        i._2 foreach os.writeInt
-      })
+      index.write { (path: Vector[Int], word: String, codes: AB[Int]) =>
+        os.writeInt(path.size)
+        path.foreach(os.writeInt)
+        os.writeUTF(word)
+        os.writeInt(codes.size)
+        codes.foreach(os.writeInt)
+        if (codes.size > maxRefArrayLength) {
+          maxRefArrayWord = word
+          maxRefArrayLength = codes.size
+        }
+      }
+      logger.info(s"Max. reference array length for the word '$maxRefArrayWord': $maxRefArrayLength")
     }
 
     logger.info(s"Saving addresses $addrFile...")
@@ -62,17 +67,16 @@ trait AddressIndexLoader { this: AddressFinder =>
 
   case class Index(addresses: Map[Int, AddrObj],
                    idxCode: scala.collection.mutable.HashMap[Int, Int],
-                   index: scala.collection.mutable.HashMap[String, Array[Int]],
+                   index: MutableIndex,
                    sortedBigObjs: Vector[Int],
                    history: Map[Int, List[String]])
 
   def load(): Index = {
-    val IndexFiles(idxFile, addrFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
+    val IndexFiles(addrFile, idxFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
     logger.info(s"Loading address index from $idxFile...")
     Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
       val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-      val index = scala.collection.mutable.HashMap[String, Array[Int]]()
-      var c = 0
+      val index = new MutableIndex(null)
       val spnpc = new Array[Int](in.readInt)
       //load pilseta, novads, pagasts, ciems
       var i = 0
@@ -88,22 +92,16 @@ trait AddressIndexLoader { this: AddressFinder =>
         i += 1
       }
       //load index
-      var a = new Array[Int](in.readInt)
       while (in.available > 0) {
-        i = 0
-        val w = in.readUTF
-        val l = in.readInt
-        if (a.length < l) a = new Array[Int](l)
-        //(0 until l) foreach (a(_) = in.readLong) this is slow
-        i = 0
-        while (i < l) {
-          a(i) = in.readInt
-          i += 1
-        }
-        index += (w -> (a take l))
-        c += 1
+        val pathSize = in.readInt
+        val path = new AB[Int](pathSize)
+        1 to pathSize foreach (_ => path += in.readInt)
+        val word = in.readUTF
+        val codeSize = in.readInt
+        val codes = new AB[Int](codeSize)
+        1 to codeSize foreach (_ => codes += in.readInt)
+        index.load(path.toVector, word, codes)
       }
-      logger.info(s"Total words loaded: $c")
       logger.info(s"Loading address data from $addrFile...")
       var addressMap = Map[Int, AddrObj]()
       var ac = 0
@@ -131,9 +129,8 @@ trait AddressIndexLoader { this: AddressFinder =>
         }.get
       }.getOrElse(Map())
 
-      index.foreach { case (w, c) => c.foreach(_index.updateChildren(w, _)) }
       logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
-        s"index stats - ${_index.statistics.render}.")
+        s"index stats - ${index.statistics.render}.")
       Index(addressMap, idx_code, index, spnpc.toVector, history)
     }.get
   }
