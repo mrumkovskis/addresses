@@ -16,7 +16,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.io.Source
 import scala.jdk.CollectionConverters.CollectionHasAsScala
-import scala.util.Try
+import scala.util.{Try, Using}
 
 
 private case object ReloadBlockedUsers
@@ -128,9 +128,10 @@ class AuthorizationActor(blockedUserFileName: String) extends Actor {
 
   protected def refreshUsers() = {
     if (blockedUserFile.exists()) {
-      Source.fromFile(blockedUserFile, "UTF-8")
+      Using(Source.fromFile(blockedUserFile, "UTF-8")) { _
         .getLines()
         .foldLeft(Set[String]()) { (res, usr) => res + usr }
+      }.get
     } else {
       logger.error(s"Blocked user file $blockedUserFile does not exist.")
       Set[String]()

@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
 import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
 import scala.collection.mutable.{ArrayBuffer => AB}
+import scala.util.{Try, Using}
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
                    coordX: BigDecimal, coordY: BigDecimal, history: List[String])
@@ -326,17 +327,16 @@ case class DbConfig(driver: String, url: String, user: String, password: String,
 
   def lastSyncTime: LocalDateTime = {
     Class.forName(driver)
-    val conn = DriverManager.getConnection(url, user, password)
-    try {
+    Using(DriverManager.getConnection(url, user, password)) { conn =>
       implicit val res = tresqlResources withConn conn
       Query("(art_vieta { max (sync_synced) d } +" +
         "art_nlieta { max (sync_synced) d } +" +
         "art_dziv { max (sync_synced) d }) { max(d) }").unique[LocalDateTime]
-    } catch {
+    }.recover {
       case e: Exception =>
         Logger(LoggerFactory.getLogger("org.tresql")).error("Error getting last sync time", e)
         null
-    } finally conn.close()
+    }.get
   }
 }
 

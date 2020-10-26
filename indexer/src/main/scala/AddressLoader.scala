@@ -5,6 +5,7 @@ import java.sql.{Connection, DriverManager}
 import org.tresql._
 
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 
 trait AddressLoader { this: AddressFinder =>
 
@@ -29,45 +30,44 @@ trait AddressLoader { this: AddressFinder =>
     logger.info(s"Loading addreses from file $addressZipFile, house coordinates from file $houseCoordFile...")
     var currentFile: String = null
     var converter: Array[String] => AddrObj = null
-    val f = new java.util.zip.ZipFile(addressZipFile)
-    val houseCoords = Option(hcf).flatMap(cf => Option(f.getEntry(cf)))
-      .map{e =>
-        logger.info(s"Loading house coordinates $hcf ...")
-        scala.io.Source.fromInputStream(f.getInputStream(e))
-      }.toList
-      .flatMap(_.getLines().drop(1))
-      .map{r =>
-        val coords = r.split(";").map(_.drop(1).dropRight(1))
-        coords(1).toInt -> (BigDecimal(coords(2)) -> BigDecimal(coords(3)))
-      }.toMap
-    val addressMap = f.entries.asScala
-      .filter(files contains _.getName)
-      .map(f => { logger.info(s"loading file: $f"); converter = files(f.getName); currentFile = f.getName; f })
-      .map(f.getInputStream(_))
-      .map(scala.io.Source.fromInputStream(_, "Cp1257"))
-      .flatMap(_.getLines().drop(1))
-      .filter(l => {
-        val r = l.split(";")
-        //use only existing addresses - status: EKS
-        (if (Set("AW_NLIETA.CSV", "AW_DZIV.CSV") contains currentFile) r(2) else r(7)) == "#EKS#"
-      })
-      .map(r => converter(r.split(";").map(_.drop(1).dropRight(1))))
-      .map(o => o.code -> houseCoords
-        .get(o.code)
-        .map(coords => o.copy(coordX = coords._1).copy(coordY = coords._2))
-        .getOrElse(o))
-      .toMap
-    f.close
-    logger.info(s"${addressMap.size} addresses loaded.")
-    addressMap
+    Using(new java.util.zip.ZipFile(addressZipFile)) { f =>
+      val houseCoords = Option(hcf).flatMap(cf => Option(f.getEntry(cf)))
+        .map{e =>
+          logger.info(s"Loading house coordinates $hcf ...")
+          scala.io.Source.fromInputStream(f.getInputStream(e))
+        }.toList
+        .flatMap(_.getLines().drop(1))
+        .map{r =>
+          val coords = r.split(";").map(_.drop(1).dropRight(1))
+          coords(1).toInt -> (BigDecimal(coords(2)) -> BigDecimal(coords(3)))
+        }.toMap
+      val addressMap = f.entries.asScala
+        .filter(files contains _.getName)
+        .map(f => { logger.info(s"loading file: $f"); converter = files(f.getName); currentFile = f.getName; f })
+        .map(f.getInputStream(_))
+        .map(scala.io.Source.fromInputStream(_, "Cp1257"))
+        .flatMap(_.getLines().drop(1))
+        .filter(l => {
+          val r = l.split(";")
+          //use only existing addresses - status: EKS
+          (if (Set("AW_NLIETA.CSV", "AW_DZIV.CSV") contains currentFile) r(2) else r(7)) == "#EKS#"
+        })
+        .map(r => converter(r.split(";").map(_.drop(1).dropRight(1))))
+        .map(o => o.code -> houseCoords
+          .get(o.code)
+          .map(coords => o.copy(coordX = coords._1).copy(coordY = coords._2))
+          .getOrElse(o))
+        .toMap
+      logger.info(s"${addressMap.size} addresses loaded.")
+      addressMap
+    }.get
   }
 
   /** Returns from database actual and historical addresses. */
   def loadAddressesFromDb(conf: DbConfig): (Map[Int, AddrObj], Map[Int, List[String]]) = {
     import conf._
     Class.forName(driver)
-    val conn = DriverManager.getConnection(url, user, password)
-    try {
+    Using(DriverManager.getConnection(url, user, password)) { conn =>
       implicit val res = tresqlResources withConn conn
 
       logger.info(s"Loading house coordinates")
@@ -105,7 +105,7 @@ trait AddressLoader { this: AddressFinder =>
       logger.info(s"Addresses loaded: ${addressObjs.size} objects")
 
       (addressObjs, loadAddressHistoryFromDb(conn))
-    } finally conn.close()
+    }.get
   }
 
   def loadAddressHistoryFromDb(conn: Connection)(implicit resources: Resources): Map[Int, List[String]] = {

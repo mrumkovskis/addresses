@@ -12,6 +12,8 @@ import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.sql.DriverManager
 
+import scala.util.Using
+
 trait AddressIndexLoader { this: AddressFinder =>
   def save(addressMap: Map[Int, AddrObj],
            idxCode: scala.collection.mutable.HashMap[Int, Int],
@@ -23,8 +25,7 @@ trait AddressIndexLoader { this: AddressFinder =>
     val maxRefArray = index.maxBy(_._2.length)
     val maxRefArrayLength = maxRefArray._2.length
     logger.info(s"Max. reference array length for the word '${maxRefArray._1}': ${maxRefArray._2.length}")
-    val os = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))
-    try {
+    Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
       //write big object count
       os.writeInt(sortedPilNovPagCiem.size)
       //write big objects
@@ -43,12 +44,11 @@ trait AddressIndexLoader { this: AddressFinder =>
         os.writeInt(i._2.length)
         i._2 foreach os.writeInt
       })
-    } finally os.close
+    }
 
     logger.info(s"Saving addresses $addrFile...")
-    val w = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
-      new FileOutputStream(addrFile), "UTF-8")))
-    try {
+    Using(new PrintWriter(new BufferedWriter(new OutputStreamWriter(
+      new FileOutputStream(addrFile), "UTF-8")))) { w =>
       addressMap.foreach(a => {
         import a._2._
         w.println(s"$code;$typ;$name;$superCode;${
@@ -56,7 +56,7 @@ trait AddressIndexLoader { this: AddressFinder =>
           Option(coordX).getOrElse("")};${
           Option(coordY).getOrElse("")}")
       })
-    } finally w.close
+    }
     logger.info(s"Address index saved.")
   }
 
@@ -69,27 +69,26 @@ trait AddressIndexLoader { this: AddressFinder =>
   def load(): Index = {
     val IndexFiles(idxFile, addrFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
     logger.info(s"Loading address index from $idxFile...")
-    val in = new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))
-    val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-    val index = scala.collection.mutable.HashMap[String, Array[Int]]()
-    var c = 0
-    val spnpc = new Array[Int](in.readInt)
-    //load pilseta, novads, pagasts, ciems
-    var i = 0
-    while(i < spnpc.length) {
-      spnpc(i) = in.readInt
-      i += 1
-    }
-    //load addr_idx->addr_code map
-    val count = in.readInt
-    i = 0
-    while (i < count) {
-      idx_code += (in.readInt -> in.readInt)
-      i += 1
-    }
-    //load index
-    var a = new Array[Int](in.readInt)
-    try {
+    Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
+      val idx_code = scala.collection.mutable.HashMap[Int, Int]()
+      val index = scala.collection.mutable.HashMap[String, Array[Int]]()
+      var c = 0
+      val spnpc = new Array[Int](in.readInt)
+      //load pilseta, novads, pagasts, ciems
+      var i = 0
+      while(i < spnpc.length) {
+        spnpc(i) = in.readInt
+        i += 1
+      }
+      //load addr_idx->addr_code map
+      val count = in.readInt
+      i = 0
+      while (i < count) {
+        idx_code += (in.readInt -> in.readInt)
+        i += 1
+      }
+      //load index
+      var a = new Array[Int](in.readInt)
       while (in.available > 0) {
         i = 0
         val w = in.readUTF
@@ -104,39 +103,39 @@ trait AddressIndexLoader { this: AddressFinder =>
         index += (w -> (a take l))
         c += 1
       }
-    } finally in.close
-    logger.info(s"Total words loaded: $c")
-    logger.info(s"Loading address data from $addrFile...")
-    var addressMap = Map[Int, AddrObj]()
-    var ac = 0
-    scala.io.Source.fromInputStream(new BufferedInputStream(new FileInputStream(addrFile)), "UTF-8")
-      .getLines()
-      .foreach { l =>
-        ac += 1
-        val a = l.split(";").padTo(7, null)
-        val o =
-          try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
-            normalize(a(2)).toVector,
-            Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-            Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull)
-          catch {
-            case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
+      logger.info(s"Total words loaded: $c")
+      logger.info(s"Loading address data from $addrFile...")
+      var addressMap = Map[Int, AddrObj]()
+      var ac = 0
+      Using(scala.io.Source.fromInputStream(new BufferedInputStream(new FileInputStream(addrFile)), "UTF-8")) {
+        _.getLines()
+          .foreach { l =>
+            ac += 1
+            val a = l.split(";").padTo(7, null)
+            val o =
+              try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
+                normalize(a(2)).toVector,
+                Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
+                Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull)
+              catch {
+                case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
+              }
+            addressMap += (o.code -> o)
           }
-        addressMap += (o.code -> o)
       }
 
-    val history = dbConfig.map { case conf @ DbConfig(driver, url, user, pwd, _) =>
-      Class.forName(driver)
-      val conn = DriverManager.getConnection(url, user, pwd)
-      try {
-        loadAddressHistoryFromDb(conn)(conf.tresqlResources)
-      } finally conn.close()
-    }.getOrElse(Map())
+      val history = dbConfig.map { case conf @ DbConfig(driver, url, user, pwd, _) =>
+        Class.forName(driver)
+        Using(DriverManager.getConnection(url, user, pwd)) { conn =>
+          loadAddressHistoryFromDb(conn)(conf.tresqlResources)
+        }.get
+      }.getOrElse(Map())
 
-    index.foreach { case (w, c) => c.foreach(_index.updateChildren(w, _)) }
-    logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
-      s"index stats - ${_index.statistics.render}.")
-    Index(addressMap, idx_code, index, spnpc.toVector, history)
+      index.foreach { case (w, c) => c.foreach(_index.updateChildren(w, _)) }
+      logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
+        s"index stats - ${_index.statistics.render}.")
+      Index(addressMap, idx_code, index, spnpc.toVector, history)
+    }.get
   }
 
   private def indexFilesInternal: Option[IndexFiles] =
