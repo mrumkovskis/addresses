@@ -87,8 +87,8 @@ trait AddressIndexer { this: AddressFinder =>
 
     private[AddressIndexer] def searchUntilIdx: Int = multiWordStartIdx
 
-    /* Strings are considered equal if they have common prefix but do not have multiplier in them,
-    * otherwise standard comparator is used */
+    /* Strings are considered equal if they have common prefix but do not have multiplier '*' in them,
+    * otherwise standard comparator is used. Words with multiplier are placed at the end. */
     private def compPrefixes(s1: String, s2: String) = {
       val (s1Mult, s2Mult) = (s1.contains("*"), s2.contains("*"))
       val multiplierComp = s1Mult compareTo s2Mult
@@ -111,6 +111,7 @@ trait AddressIndexer { this: AddressFinder =>
         val n = new MutableIndexNode(null, null, null)
         n.load(path.drop(1), word, codes)
         children += n
+        if (!word.contains("*")) multiWordStartIdx += 1 //increase multiword start position
       } else {
         children(idx).load(path.drop(1), word, codes)
       }
