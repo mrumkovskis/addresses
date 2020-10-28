@@ -75,6 +75,16 @@ trait AddressIndexer { this: AddressFinder =>
       } else search(str)
     }
 
+    /** Searches index down the tree in fuzzy mode */
+    def apply(str: String, maxEditDistance: Int): (AB[Int], Int) = {
+      if(str.contains("*")) {
+        val idx = binarySearchFromUntil[MutableIndexNode, String](
+          children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
+        if (idx < 0) (AB(), 0)
+        else (children(idx).codes, 0)
+      } else fuzzySearch(str, 0, maxEditDistance)
+    }
+
     private[MutableIndex] def search(str: String): AB[Int] = {
       if (children == null) return AB()
       val c = str.head
@@ -83,6 +93,45 @@ trait AddressIndexer { this: AddressFinder =>
       if (idx < 0) AB()
       else if (str.length == 1) children(idx).codes
       else children(idx).search(str.drop(1))
+    }
+
+    private[AddressIndexer] def fuzzySearch(str: String, currentEditDistance: Int, maxEditDistance: Int): (AB[Int], Int) = {
+      if (children == null) return (AB(), currentEditDistance)
+      val c = str.head
+      val idx = binarySearchFromUntil[MutableIndexNode, Char](
+        children, 0, searchUntilIdx, c, _.word.head, _ - _)
+      if (idx < 0) {
+        if (currentEditDistance >= maxEditDistance) (AB(), maxEditDistance)
+        else {
+          def replaceOrPrefix(s: String) = {
+            var fuzzyResult = AB[Int]()
+            var err = 0
+            val l = children.length
+            var i = 0
+            while (i < l && fuzzyResult.isEmpty) {
+              val (fr, e) = children(i).fuzzySearch(s, currentEditDistance + 1, maxEditDistance)
+              fuzzyResult = fr
+              err = e
+              i += 1
+            }
+            (fuzzyResult, err)
+          }
+          //try to replace c with one of children word values
+          replaceOrPrefix(str drop 1) match {
+            case r @ (result, _) if result.nonEmpty => r
+            case _ =>
+              //try to prefix c with on of children word values
+              replaceOrPrefix(str) match {
+                case r @ (result, _) if result.nonEmpty => r
+                case _ =>
+                  //try to omit c
+                  fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance)
+              }
+          }
+        }
+      }
+      else if (str.length == 1) (children(idx).codes, currentEditDistance)
+      else children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance)
     }
 
     private[AddressIndexer] def searchUntilIdx: Int = multiWordStartIdx
@@ -161,6 +210,19 @@ trait AddressIndexer { this: AddressFinder =>
         if (wordRest.nonEmpty) { //update children with remaining part of new word
           updateChildren(wordRest, code)
         }
+      }
+    }
+
+    override private[AddressIndexer] def fuzzySearch(str: String,
+                                                     currentEditDistance: Int,
+                                                     maxEditDistance: Int): (AB[Int], Int) = {
+      if (str.isEmpty) (codes, currentEditDistance)
+      else if (children == null) {
+        val err = currentEditDistance + str.length
+        if (err <= maxEditDistance) (codes, err)
+        else (AB(), currentEditDistance)
+      } else {
+        super.fuzzySearch(str, currentEditDistance, maxEditDistance)
       }
     }
 

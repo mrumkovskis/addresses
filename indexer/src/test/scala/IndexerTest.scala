@@ -203,4 +203,44 @@ class IndexerTest extends FunSuite {
     assertResult(ArrayBuffer())(node.invalidIndices)
     assertResult(ArrayBuffer())(node.invalidWords)
   }
+
+  test("index search") {
+    val node = List(
+      "aknas",
+      "akls",
+      "ak ak",
+      "aknīste",
+      "ak aknīste",
+      "aka aka",
+      "aka akācijas",
+      "21 215"
+    )
+    .zipWithIndex
+    .foldLeft(new finder.MutableIndex(ArrayBuffer())) { case (node, (addr, idx)) =>
+      val words = finder.extractWords(addr)
+      words.foreach(node.updateChildren(_, idx))
+      node
+    }
+
+    def word(str: String) = finder.normalize(str).head
+
+    assertResult((ArrayBuffer(5, 6), 0))(node(word("aka"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akcijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akucijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akaicijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akaicijas"), 1))
+    assertResult((ArrayBuffer(6), 0))(node(word("akācijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("kakācijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("ukācijas"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akācijs"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akācijaz"), 1))
+    assertResult((ArrayBuffer(6), 1))(node(word("akācijass"), 1))
+    assertResult((ArrayBuffer(1), 1))(node(word("aklas"), 1))
+    assertResult((ArrayBuffer(1), 1))(node(word("kakls"), 1))
+    assertResult((ArrayBuffer(), 1))(node(word("kaklas"), 1))
+
+    assertResult((ArrayBuffer(1), 2))(node(word("kaklas"), 2))
+    assertResult((ArrayBuffer(1), 2))(node(word("kikls"), 2))
+    assertResult((ArrayBuffer(1), 2))(node(word("akliss"), 2))
+  }
 }
