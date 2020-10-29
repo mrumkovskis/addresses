@@ -209,7 +209,8 @@ class IndexerTest extends FunSuite {
       "ak aknīste",
       "aka aka",
       "aka akācijas",
-      "21 215"
+      "21 215",
+      "ventspils"
     )
     .zipWithIndex
     .map { case (addr, idx) =>
@@ -247,6 +248,9 @@ class IndexerTest extends FunSuite {
     assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akācijass"), 1))
     assertResult((List("akls"), 1))(search_fuzzy(word("aklas"), 1))
     assertResult((List("akls"), 1))(search_fuzzy(word("kakls"), 1))
+    assertResult((List("ventspils"), 0))(search_fuzzy(word("ventspils"), 1))
+    assertResult((List("ventspils"), 1))(search_fuzzy(word("venspils"), 1))
+    assertResult((Nil, 1))(search_fuzzy(word("vencpils"), 1))
     assertResult((Nil, 1))(search_fuzzy(word("kaklas"), 1))
 
     //fuzzy search, edit distance 2
@@ -254,6 +258,7 @@ class IndexerTest extends FunSuite {
     assertResult((List("akls"), 2))(search_fuzzy(word("kaklas"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("kikls"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
+    assertResult((List("ventspils"), 2))(search_fuzzy(word("vencpils"), 2))
     assertResult((Nil, 2))(search_fuzzy(word("kakliss"), 2))
   }
 }
