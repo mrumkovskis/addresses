@@ -228,10 +228,10 @@ class IndexerTest extends FunSuite {
 
     //exact search, edit distance 0
     assertResult(List("aknas", "akls", "ak ak", "aknīste", "ak aknīste", "aka aka", "aka akācijas"))(search("ak"))
-    assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search("2*ak").toList)
-    assertResult(List("aknas"))(search("akna").toList)
-    assertResult(Nil)(search("aknass").toList)
-    assertResult(Nil)(search("ziz").toList)
+    assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search("2*ak"))
+    assertResult(List("aknas"))(search("akna"))
+    assertResult(Nil)(search("aknass"))
+    assertResult(Nil)(search("ziz"))
 
     //fuzzy search, edit distance 1
     assertResult(((List("aka aka", "aka akācijas"),0)))(search_fuzzy(word("aka"), 1))
