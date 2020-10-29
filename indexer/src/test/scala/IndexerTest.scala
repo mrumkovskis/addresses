@@ -254,5 +254,6 @@ class IndexerTest extends FunSuite {
     assertResult((List("akls"), 2))(search_fuzzy(word("kaklas"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("kikls"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
+    assertResult((Nil, 2))(search_fuzzy(word("kakliss"), 2))
   }
 }
