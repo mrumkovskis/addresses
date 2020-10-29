@@ -194,18 +194,14 @@ class IndexerTest extends FunSuite {
     //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
 
-    assertResult(List(0, 1, 2, 3, 4, 5, 6))(node("ak").toList)
-    assertResult(List(2, 4, 5, 6))(node("2*ak").toList)
-    assertResult(List(0))(node("akna").toList)
-    assertResult(Nil)(node("aknass").toList)
-    assertResult(Nil)(node("ziz").toList)
     assertResult(finder.IndexStats(25,51))(node.statistics)
     assertResult(ArrayBuffer())(node.invalidIndices)
     assertResult(ArrayBuffer())(node.invalidWords)
   }
 
   test("index search") {
-    val node = List(
+    val node = new finder.MutableIndex(ArrayBuffer())
+    val idx_val = List(
       "aknas",
       "akls",
       "ak ak",
@@ -216,31 +212,47 @@ class IndexerTest extends FunSuite {
       "21 215"
     )
     .zipWithIndex
-    .foldLeft(new finder.MutableIndex(ArrayBuffer())) { case (node, (addr, idx)) =>
+    .map { case (addr, idx) =>
       val words = finder.extractWords(addr)
       words.foreach(node.updateChildren(_, idx))
-      node
-    }
+      (idx, addr)
+    }.toMap
 
     def word(str: String) = finder.normalize(str).head
+    def search(str: String) = res(node(str))
+    def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
+    def res(r: ArrayBuffer[Int]) = r.map(idx_val(_)).toList
+    def res_fuzzy(r: (ArrayBuffer[Int], Int)) = {
+      (r._1.map(idx_val(_)).toList, r._2)
+    }
 
-    assertResult((ArrayBuffer(5, 6), 0))(node(word("aka"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akcijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akucijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akaicijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akaicijas"), 1))
-    assertResult((ArrayBuffer(6), 0))(node(word("akācijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("kakācijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("ukācijas"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akācijs"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akācijaz"), 1))
-    assertResult((ArrayBuffer(6), 1))(node(word("akācijass"), 1))
-    assertResult((ArrayBuffer(1), 1))(node(word("aklas"), 1))
-    assertResult((ArrayBuffer(1), 1))(node(word("kakls"), 1))
-    assertResult((ArrayBuffer(), 1))(node(word("kaklas"), 1))
+    //exact search, edit distance 0
+    assertResult(List("aknas", "akls", "ak ak", "aknīste", "ak aknīste", "aka aka", "aka akācijas"))(search("ak"))
+    assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search("2*ak").toList)
+    assertResult(List("aknas"))(search("akna").toList)
+    assertResult(Nil)(search("aknass").toList)
+    assertResult(Nil)(search("ziz").toList)
 
-    assertResult((ArrayBuffer(1), 2))(node(word("kaklas"), 2))
-    assertResult((ArrayBuffer(1), 2))(node(word("kikls"), 2))
-    assertResult((ArrayBuffer(1), 2))(node(word("akliss"), 2))
+    //fuzzy search, edit distance 1
+    assertResult(((List("aka aka", "aka akācijas"),0)))(search_fuzzy(word("aka"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akcijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akucijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akaicijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akaicijas"), 1))
+    assertResult((List("aka akācijas"), 0))(search_fuzzy(word("akācijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("kakācijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("ukācijas"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akācijs"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akācijaz"), 1))
+    assertResult((List("aka akācijas"), 1))(search_fuzzy(word("akācijass"), 1))
+    assertResult((List("akls"), 1))(search_fuzzy(word("aklas"), 1))
+    assertResult((List("akls"), 1))(search_fuzzy(word("kakls"), 1))
+    assertResult((Nil, 1))(search_fuzzy(word("kaklas"), 1))
+
+    //fuzzy search, edit distance 2
+    assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
+    assertResult((List("akls"), 2))(search_fuzzy(word("kaklas"), 2))
+    assertResult((List("akls"), 2))(search_fuzzy(word("kikls"), 2))
+    assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
   }
 }
