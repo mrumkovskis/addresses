@@ -14,7 +14,8 @@ import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.util.Using
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
-                   coordX: BigDecimal, coordY: BigDecimal, history: List[String])
+                   coordX: BigDecimal, coordY: BigDecimal, history: List[String],
+                   editDistance: Option[Int])
 case class AddressStruct(
                           pilCode: Option[Int] = None, pilName: Option[String] = None,
                           novCode: Option[Int] = None, novName: Option[String] = None,
@@ -85,11 +86,11 @@ trait AddressFinder
           }
           i += 1
         }
-        (result map address).toArray
+        result.map(address(_)).toArray
       }
     else {
       val words = normalize(str)
-      val codes = searchCodes(words)(1024, types)
+      val (codes, editDistance) = searchCodes(words)(1024, types)
       var (perfectRankCount, i) = (0, 0)
       val size = Math.min(codes.length, limit)
       val result = new AB[Long](size)
@@ -107,14 +108,14 @@ trait AddressFinder
         )
         .map(_ & 0x00000000FFFFFFFFL)
         .map(_.toInt)
-        .map(address)
+        .map(address(_, editDistance))
     }
   }
 
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
     new Search(Math.min(limit, 20))
       .searchNearest(coordX, coordY)
-      .map(result => address(result._1))
+      .map(result => addressFromObj(result._1))
       .toArray
 
   def addressStruct(code: Int) = {
@@ -138,11 +139,12 @@ trait AddressFinder
     Source(addressMap)
       .map(_._2)
       .filter(a => types.isEmpty || types.get.contains(a.typ))
-      .map(address(_))
+      .map(addressFromObj(_))
   }
 
-  def addressOption(code: Int) = addressMap.get(code) map address
-  private def address(addrObj: AddrObj): Address = addrObj.foldLeft((
+  def addressOption(code: Int, editDistance: Int = 0) =
+    addressMap.get(code).map(addressFromObj(_, editDistance))
+  private def addressFromObj(addrObj: AddrObj, editDistance: Int = 0): Address = addrObj.foldLeft((
     Map[Int, AddrObj](),
     null: String, //zip code
     0, //address object type
@@ -164,9 +166,9 @@ trait AddressFinder
     ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
     ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
     Address(addrObj.code, as.toString, zip, typ, coordX, coordY,
-      addressHistory.getOrElse(addrObj.code, Nil))
+      addressHistory.getOrElse(addrObj.code, Nil), Option(editDistance).filter(_ > 0))
   }
-  def address(code: Int): Address = addressOption(code).get
+  def address(code: Int, editDistance: Int = 0): Address = addressOption(code, editDistance).get
 
   /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.

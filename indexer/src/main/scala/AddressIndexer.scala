@@ -33,6 +33,14 @@ private object Constants {
   val big_unit_types = Set(PIL, NOV, PAG, CIE)
 
   val SEPARATOR_REGEXP = """[\s-,/\."'\n]"""
+
+  val wordLengthEditDistances = Map[Int, Int](
+    0 -> 0,
+    1 -> 0,
+    2 -> 0,
+    3 -> 1,
+    4 -> 1
+  )
 }
 
 trait AddressIndexer { this: AddressFinder =>
@@ -95,43 +103,50 @@ trait AddressIndexer { this: AddressFinder =>
       else children(idx).search(str.drop(1))
     }
 
-    private[AddressIndexer] def fuzzySearch(str: String, currentEditDistance: Int, maxEditDistance: Int): (AB[Int], Int) = {
-      if (children == null) return (AB(), currentEditDistance)
+    private[AddressIndexer] def fuzzySearch(str: String, currentEditDistance: Int, maxEditDistance: Int, p: String = ""): (AB[Int], Int) = {
+      if (children == null || currentEditDistance > maxEditDistance) return (AB(), maxEditDistance)
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
-      if (idx < 0) {
-        if (currentEditDistance >= maxEditDistance) (AB(), maxEditDistance)
-        else {
-          def replaceOrPrefix(s: String) = {
-            var fuzzyResult = AB[Int]()
-            var err = 0
-            val l = children.length
-            var i = 0
-            while (i < l && fuzzyResult.isEmpty) {
-              val (fr, e) = children(i).fuzzySearch(s, currentEditDistance + 1, maxEditDistance)
-              fuzzyResult = fr
-              err = e
-              i += 1
+
+      def tryTransformedSearch = {
+        def replaceOrPrefix(s: String) = {
+          var fuzzyResult = AB[Int]()
+          var err = 0
+          val l = searchUntilIdx
+          var i = 0
+          while (i < l && fuzzyResult.isEmpty) {
+            val (fr, e) = children(i).fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
+            fuzzyResult = fr
+            err = e
+            i += 1
+          }
+          (fuzzyResult, err)
+        }
+        //try to replace c with one of children word values
+        replaceOrPrefix(str drop 1) match {
+          case r @ (result, _) if result.nonEmpty => r
+          case _ =>
+            //try to prefix c with on of children word values
+            replaceOrPrefix(str) match {
+              case r @ (result, _) if result.nonEmpty => r
+              case _ =>
+                //try to omit c
+                fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p)
             }
-            (fuzzyResult, err)
-          }
-          //try to replace c with one of children word values
-          replaceOrPrefix(str drop 1) match {
-            case r @ (result, _) if result.nonEmpty => r
-            case _ =>
-              //try to prefix c with on of children word values
-              replaceOrPrefix(str) match {
-                case r @ (result, _) if result.nonEmpty => r
-                case _ =>
-                  //try to omit c
-                  fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance)
-              }
-          }
         }
       }
-      else if (str.length == 1) (children(idx).codes, currentEditDistance)
-      else children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance)
+
+      if (idx < 0) {
+        tryTransformedSearch
+      } else if (str.length == 1) {
+        (children(idx).codes, currentEditDistance)
+      } else {
+        children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c) match {
+          case r @ (result, _) if result.nonEmpty => r
+          case _ => tryTransformedSearch
+        }
+      }
     }
 
     private[AddressIndexer] def searchUntilIdx: Int = multiWordStartIdx
@@ -215,14 +230,19 @@ trait AddressIndexer { this: AddressFinder =>
 
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
-                                                     maxEditDistance: Int): (AB[Int], Int) = {
-      if (str.isEmpty) (codes, currentEditDistance)
-      else if (children == null) {
+                                                     maxEditDistance: Int, p: String = ""): (AB[Int], Int) = {
+      if (str.isEmpty) {
+        if (currentEditDistance > maxEditDistance) (AB(), currentEditDistance)
+        else (codes, currentEditDistance)
+      } else if (children == null) {
         val err = currentEditDistance + str.length
-        if (err <= maxEditDistance) (codes, err)
-        else (AB(), currentEditDistance)
+        if (err <= maxEditDistance) {
+          (codes, err)
+        } else {
+          (AB(), currentEditDistance)
+        }
       } else {
-        super.fuzzySearch(str, currentEditDistance, maxEditDistance)
+        super.fuzzySearch(str, currentEditDistance, maxEditDistance, p)
       }
     }
 
@@ -275,10 +295,12 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): Array[Int] = {
+  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): (Array[Int], Int) = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
     def idx_vals(word: String) = _index(word)
+    def idx_vals_fuzzy(word: String) =
+      _index(word, wordLengthEditDistances.getOrElse(word.length, 1))
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
     def intersect(idx: Array[AB[Int]], limit: Int): Array[Int] = {
       val result = AB[Int]()
@@ -326,9 +348,17 @@ trait AddressIndexer { this: AddressFinder =>
       result.map(_idxCode(_)).toArray
     }
 
-    (searchParams(words) map idx_vals sortBy(_.size)) match {
-      case Array() => Array[Int]()
-      case result => intersect(result, limit)
+    val params = searchParams(words)
+    (params map idx_vals sortBy(_.size) match {
+      case a if a.isEmpty => (Array[Int](), 0)
+      case result => (intersect(result, limit), 0)
+    }) match {
+      case r @ (a, _) if a.nonEmpty => r
+      case _ => //try fuzzy search
+        params map idx_vals_fuzzy sortBy { case (a, e) => (e, a.length) } match {
+          case a if a.isEmpty => (Array[Int](), 0)
+          case result => (intersect(result.map(_._1), limit), result.map(_._2).sum)
+        }
     }
   }
 

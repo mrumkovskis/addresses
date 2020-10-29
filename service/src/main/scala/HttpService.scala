@@ -23,7 +23,7 @@ import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.util.Try
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f21 = jsonFormat21(AddressFull)
+  implicit val f22 = jsonFormat22(AddressFull)
   implicit val f02 = jsonFormat2(ResolvedAddressFull)
   implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
 }
@@ -37,7 +37,8 @@ case class AddressFull(
   cieCode: Option[Int] = None, cieName: Option[String] = None,
   ielCode: Option[Int] = None, ielName: Option[String] = None,
   nltCode: Option[Int] = None, nltName: Option[String] = None,
-  dzvCode: Option[Int] = None, dzvName: Option[String] = None)
+  dzvCode: Option[Int] = None, dzvName: Option[String] = None,
+  editDistance: Option[Int])
 
  case class ResolvedAddressFull(address: String, resolvedAddress: Option[AddressFull])
 
@@ -157,7 +158,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         cieCode, cieName,
         ielCode, ielName,
         nltCode, nltName,
-        dzvCode, dzvName)
+        dzvCode, dzvName,
+        a.editDistance)
     }
 
     //beautification method
