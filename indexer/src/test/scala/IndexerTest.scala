@@ -264,13 +264,12 @@ class IndexerTest extends FunSuite {
     assertResult((List("kazdanga"), 1))(search_fuzzy(word("vazdanga"), 1))
     assertResult((List("ventspils"), 1))(search_fuzzy(word("kentspils"), 1))
 
-    //fuzzy search, edit distance
+    //fuzzy search, edit distance 2
     assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("kaklas"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("kikls"), 2))
     assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
     assertResult((Nil, 2))(search_fuzzy(word("kakliss"), 2))
-
     assertResult((List("ventspils"), 1))(search_fuzzy(word("ventpils"), 2))
     assertResult((List("ventspils"), 1))(search_fuzzy(word("venspils"), 2))
 
