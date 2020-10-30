@@ -104,11 +104,6 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     private[AddressIndexer] def fuzzySearch(str: String, currentEditDistance: Int, maxEditDistance: Int, p: String = ""): (AB[Int], Int) = {
-      if (children == null || currentEditDistance > maxEditDistance) return (AB(), maxEditDistance)
-      val c = str.head
-      val idx = binarySearchFromUntil[MutableIndexNode, Char](
-        children, 0, searchUntilIdx, c, _.word.head, _ - _)
-
       def tryTransformedSearch = {
         def replaceOrPrefix(s: String) = {
           var fuzzyResult = AB[Int]()
@@ -147,10 +142,12 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
 
+      if (children == null || currentEditDistance > maxEditDistance) return (AB(), maxEditDistance)
+      val c = str.head
+      val idx = binarySearchFromUntil[MutableIndexNode, Char](
+        children, 0, searchUntilIdx, c, _.word.head, _ - _)
       if (idx < 0) {
         tryTransformedSearch
-      } else if (str.length == 1) {
-        (children(idx).codes, currentEditDistance)
       } else {
         children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c) match {
           case r @ (result, _) if result.nonEmpty => r
