@@ -38,9 +38,11 @@ private object Constants {
     0 -> 0,
     1 -> 0,
     2 -> 0,
-    3 -> 1
+    3 -> 1,
+    4 -> 1,
+    5 -> 1
   )
-  val DefaultEditDistance = 1
+  val DefaultEditDistance = 2
 }
 
 trait AddressIndexer { this: AddressFinder =>
