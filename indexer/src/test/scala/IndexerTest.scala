@@ -271,9 +271,8 @@ class IndexerTest extends FunSuite {
     assertResult((List("akls"), 2))(search_fuzzy(word("akliss"), 2))
     assertResult((Nil, 2))(search_fuzzy(word("kakliss"), 2))
 
-    //TODO wrong distance calculation - results 2 instead of 1
-    //assertResult((List("ventspils"), 1))(search_fuzzy(word("ventpils"), 2))
-    //assertResult((List("ventspils"), 1))(search_fuzzy(word("venspils"), 2))
+    assertResult((List("ventspils"), 1))(search_fuzzy(word("ventpils"), 2))
+    assertResult((List("ventspils"), 1))(search_fuzzy(word("venspils"), 2))
 
     //strange behaviours due to partial word match - hits 'vencīši' before 'ventspils'
     assertResult((List("vencīši"), 2))(search_fuzzy(word("venpils"), 2))

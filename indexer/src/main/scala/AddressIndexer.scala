@@ -125,14 +125,23 @@ trait AddressIndexer { this: AddressFinder =>
         }
         //try to replace c with one of children word values
         replaceOrPrefix(str drop 1) match {
-          case r @ (result, _) if result.nonEmpty => r
-          case _ =>
+          case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
+          case repl @ (replaceResult, replaceErr) =>
             //try to prefix c with on of children word values
             replaceOrPrefix(str) match {
-              case r @ (result, _) if result.nonEmpty => r
-              case _ =>
+              case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
+              case pref @ (prefixResult, prefixErr) =>
                 //try to omit c
-                fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p)
+                fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p) match {
+                  case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
+                  case omit @ (omitResult, omitErr) =>
+                    List(pref, omit, repl).reduce { (r1, r2) =>
+                      if (r1._1.nonEmpty && r2._1.nonEmpty)
+                        if (r1._2 < r2._2) r1 else r2
+                      else if (r1._1.isEmpty) r2
+                      else r1
+                    }
+                }
             }
         }
       }
