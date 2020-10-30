@@ -162,7 +162,7 @@ trait AddressIndexer { this: AddressFinder =>
         multiplierComp
     }
 
-    def isEmpty = children == null || children.size == 0
+    def isEmpty = children == null || children.isEmpty
     def nonEmpty = !isEmpty
 
     /** Restores node from path */
