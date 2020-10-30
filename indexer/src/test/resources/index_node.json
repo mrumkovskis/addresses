@@ -1,0 +1,254 @@
+[{
+  "word": "2",
+  "refs": [{
+    "code": 7,
+    "exact": false
+  }],
+  "children": [{
+    "word": "1",
+    "refs": [{
+      "code": 7,
+      "exact": true
+    }],
+    "children": [{
+      "word": "5",
+      "refs": [{
+        "code": 7,
+        "exact": true
+      }],
+      "children": null
+    }]
+  }]
+}, {
+  "word": "a",
+  "refs": [{
+    "code": 0,
+    "exact": false
+  }, {
+    "code": 1,
+    "exact": false
+  }, {
+    "code": 2,
+    "exact": false
+  }, {
+    "code": 3,
+    "exact": false
+  }, {
+    "code": 4,
+    "exact": false
+  }, {
+    "code": 5,
+    "exact": false
+  }, {
+    "code": 6,
+    "exact": false
+  }],
+  "children": [{
+    "word": "k",
+    "refs": [{
+      "code": 0,
+      "exact": false
+    }, {
+      "code": 1,
+      "exact": false
+    }, {
+      "code": 2,
+      "exact": true
+    }, {
+      "code": 3,
+      "exact": false
+    }, {
+      "code": 4,
+      "exact": true
+    }, {
+      "code": 5,
+      "exact": false
+    }, {
+      "code": 6,
+      "exact": false
+    }],
+    "children": [{
+      "word": "a",
+      "refs": [{
+        "code": 5,
+        "exact": true
+      }, {
+        "code": 6,
+        "exact": true
+      }],
+      "children": [{
+        "word": "c",
+        "refs": [{
+          "code": 6,
+          "exact": false
+        }],
+        "children": [{
+          "word": "i",
+          "refs": [{
+            "code": 6,
+            "exact": false
+          }],
+          "children": [{
+            "word": "j",
+            "refs": [{
+              "code": 6,
+              "exact": false
+            }],
+            "children": [{
+              "word": "a",
+              "refs": [{
+                "code": 6,
+                "exact": false
+              }],
+              "children": [{
+                "word": "s",
+                "refs": [{
+                  "code": 6,
+                  "exact": true
+                }],
+                "children": null
+              }]
+            }]
+          }]
+        }]
+      }]
+    }, {
+      "word": "l",
+      "refs": [{
+        "code": 1,
+        "exact": false
+      }],
+      "children": [{
+        "word": "s",
+        "refs": [{
+          "code": 1,
+          "exact": true
+        }],
+        "children": null
+      }]
+    }, {
+      "word": "n",
+      "refs": [{
+        "code": 0,
+        "exact": false
+      }, {
+        "code": 3,
+        "exact": false
+      }, {
+        "code": 4,
+        "exact": false
+      }],
+      "children": [{
+        "word": "a",
+        "refs": [{
+          "code": 0,
+          "exact": false
+        }],
+        "children": [{
+          "word": "s",
+          "refs": [{
+            "code": 0,
+            "exact": true
+          }],
+          "children": null
+        }]
+      }, {
+        "word": "i",
+        "refs": [{
+          "code": 3,
+          "exact": false
+        }, {
+          "code": 4,
+          "exact": false
+        }],
+        "children": [{
+          "word": "s",
+          "refs": [{
+            "code": 3,
+            "exact": false
+          }, {
+            "code": 4,
+            "exact": false
+          }],
+          "children": [{
+            "word": "t",
+            "refs": [{
+              "code": 3,
+              "exact": false
+            }, {
+              "code": 4,
+              "exact": false
+            }],
+            "children": [{
+              "word": "e",
+              "refs": [{
+                "code": 3,
+                "exact": true
+              }, {
+                "code": 4,
+                "exact": true
+              }],
+              "children": null
+            }]
+          }]
+        }]
+      }]
+    }]
+  }]
+}, {
+  "word": "2*2",
+  "refs": [{
+    "code": 7,
+    "exact": false
+  }],
+  "children": null
+}, {
+  "word": "2*21",
+  "refs": [{
+    "code": 7,
+    "exact": false
+  }],
+  "children": null
+}, {
+  "word": "2*a",
+  "refs": [{
+    "code": 2,
+    "exact": false
+  }, {
+    "code": 4,
+    "exact": false
+  }, {
+    "code": 5,
+    "exact": false
+  }, {
+    "code": 6,
+    "exact": false
+  }],
+  "children": null
+}, {
+  "word": "2*ak",
+  "refs": [{
+    "code": 2,
+    "exact": false
+  }, {
+    "code": 4,
+    "exact": false
+  }, {
+    "code": 5,
+    "exact": false
+  }, {
+    "code": 6,
+    "exact": false
+  }],
+  "children": null
+}, {
+  "word": "2*aka",
+  "refs": [{
+    "code": 5,
+    "exact": false
+  }, {
+    "code": 6,
+    "exact": false
+  }],
+  "children": null
+}]

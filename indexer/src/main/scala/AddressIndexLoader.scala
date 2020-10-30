@@ -22,6 +22,19 @@ trait AddressIndexLoader { this: AddressFinder =>
            sortedPilNovPagCiem: Vector[Int]) = {
 
     val IndexFiles(addrFile, idxFile) = newIndexFiles
+
+    logger.info(s"Saving addresses $addrFile...")
+    Using(new PrintWriter(new BufferedWriter(new OutputStreamWriter(
+      new FileOutputStream(addrFile), "UTF-8")))) { w =>
+      addressMap.foreach(a => {
+        import a._2._
+        w.println(s"$code;$typ;$name;$superCode;${
+          Option(zipCode).getOrElse("")};${
+          Option(coordX).getOrElse("")};${
+          Option(coordY).getOrElse("")}")
+      })
+    }
+
     logger.info(s"Saving address index in $idxFile...")
     Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
       var maxRefArrayWord: String = null
@@ -37,30 +50,21 @@ trait AddressIndexLoader { this: AddressFinder =>
         os.writeInt(i)
         os.writeInt(c)
       }
-      index.write { (path: Vector[Int], word: String, codes: AB[Int]) =>
+      index.write { (path: Vector[Int], word: String, refs: Refs) =>
         os.writeInt(path.size)
         path.foreach(os.writeInt)
         os.writeUTF(word)
-        os.writeInt(codes.size)
-        codes.foreach(os.writeInt)
-        if (codes.size > maxRefArrayLength) {
+        os.writeInt(refs.size)
+        refs.foreach{ c =>
+          os.writeInt(c.code)
+          os.writeBoolean(c.exact)
+        }
+        if (refs.size > maxRefArrayLength) {
           maxRefArrayWord = word
-          maxRefArrayLength = codes.size
+          maxRefArrayLength = refs.size
         }
       }
       logger.info(s"Max. reference array length for the word '$maxRefArrayWord': $maxRefArrayLength")
-    }
-
-    logger.info(s"Saving addresses $addrFile...")
-    Using(new PrintWriter(new BufferedWriter(new OutputStreamWriter(
-      new FileOutputStream(addrFile), "UTF-8")))) { w =>
-      addressMap.foreach(a => {
-        import a._2._
-        w.println(s"$code;$typ;$name;$superCode;${
-          Option(zipCode).getOrElse("")};${
-          Option(coordX).getOrElse("")};${
-          Option(coordY).getOrElse("")}")
-      })
     }
     logger.info(s"Address index saved.")
   }
@@ -75,33 +79,6 @@ trait AddressIndexLoader { this: AddressFinder =>
     val IndexFiles(addrFile, idxFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
     logger.info(s"Loading address index from $idxFile...")
     Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
-      val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-      val index = new MutableIndex(null)
-      val spnpc = new Array[Int](in.readInt)
-      //load pilseta, novads, pagasts, ciems
-      var i = 0
-      while(i < spnpc.length) {
-        spnpc(i) = in.readInt
-        i += 1
-      }
-      //load addr_idx->addr_code map
-      val count = in.readInt
-      i = 0
-      while (i < count) {
-        idx_code += (in.readInt -> in.readInt)
-        i += 1
-      }
-      //load index
-      while (in.available > 0) {
-        val pathSize = in.readInt
-        val path = new AB[Int](pathSize)
-        1 to pathSize foreach (_ => path += in.readInt)
-        val word = in.readUTF
-        val codeSize = in.readInt
-        val codes = new AB[Int](codeSize)
-        1 to codeSize foreach (_ => codes += in.readInt)
-        index.load(path.toVector, word, codes)
-      }
       logger.info(s"Loading address data from $addrFile...")
       var addressMap = Map[Int, AddrObj]()
       var ac = 0
@@ -128,6 +105,34 @@ trait AddressIndexLoader { this: AddressFinder =>
           loadAddressHistoryFromDb(conn)(conf.tresqlResources)
         }.get
       }.getOrElse(Map())
+
+      val idx_code = scala.collection.mutable.HashMap[Int, Int]()
+      val index = new MutableIndex(null)
+      val spnpc = new Array[Int](in.readInt)
+      //load pilseta, novads, pagasts, ciems
+      var i = 0
+      while(i < spnpc.length) {
+        spnpc(i) = in.readInt
+        i += 1
+      }
+      //load addr_idx->addr_code map
+      val count = in.readInt
+      i = 0
+      while (i < count) {
+        idx_code += (in.readInt -> in.readInt)
+        i += 1
+      }
+      //load index
+      while (in.available > 0) {
+        val pathSize = in.readInt
+        val path = new AB[Int](pathSize)
+        1 to pathSize foreach (_ => path += in.readInt)
+        val word = in.readUTF
+        val refsSize = in.readInt
+        val refs = new AB[Ref](refsSize)
+        1 to refsSize foreach (_ => refs += Ref(in.readInt, in.readBoolean))
+        index.load(path.toVector, word, refs)
+      }
 
       logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
         s"index stats - ${index.statistics.render}.")

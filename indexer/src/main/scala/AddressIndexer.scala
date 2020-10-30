@@ -34,16 +34,20 @@ private object Constants {
 
   val SEPARATOR_REGEXP = """[\s-,/\."'\n]"""
 
-  val wordLengthEditDistances = Map[Int, Int](
+  val WordLengthEditDistances = Map[Int, Int](
     0 -> 0,
     1 -> 0,
     2 -> 0,
-    3 -> 1,
-    4 -> 1
+    3 -> 1
   )
+  val DefaultEditDistance = 1
 }
 
 trait AddressIndexer { this: AddressFinder =>
+
+  type Refs = AB[Ref]
+
+  case class Ref(code: Int, exact: Boolean)
 
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
@@ -62,56 +66,60 @@ trait AddressIndexer { this: AddressFinder =>
 
   sealed class MutableIndex(var children: AB[MutableIndexNode]) {
     private[this] var multiWordStartIdx = 0
-    def updateChildren(w: String, code: Int): Unit = {
+    def updateChildren(w: String, ref: Ref): Unit = {
       if (isEmpty) children = AB()
       val i = binarySearch[MutableIndexNode, String](children, w, _.word, compPrefixes)
       if (i < 0) {
-        children.insert(-(i + 1), new MutableIndexNode(w, AB(code), null))
+        children.insert(-(i + 1), new MutableIndexNode(w, AB(ref), null))
         if (!w.contains("*")) multiWordStartIdx += 1
       } else {
-        children(i).update(w, code)
+        children(i).update(w, ref)
       }
     }
 
     /** Searches index down the tree */
-    def apply(str: String): AB[Int] = {
+    def apply(str: String): Refs = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) AB()
-        else children(idx).codes
+        else children(idx).refs
       } else search(str)
     }
 
     /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): (AB[Int], Int) = {
+    def apply(str: String, maxEditDistance: Int): (Refs, Int) = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) (AB(), 0)
-        else (children(idx).codes, 0)
+        else (children(idx).refs, 0)
       } else fuzzySearch(str, 0, maxEditDistance)
     }
 
-    private[MutableIndex] def search(str: String): AB[Int] = {
+    private[MutableIndex] def search(str: String): Refs = {
       if (children == null) return AB()
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
       if (idx < 0) AB()
-      else if (str.length == 1) children(idx).codes
+      else if (str.length == 1) children(idx).refs
       else children(idx).search(str.drop(1))
     }
 
-    private[AddressIndexer] def fuzzySearch(str: String, currentEditDistance: Int, maxEditDistance: Int, p: String = ""): (AB[Int], Int) = {
+    private[AddressIndexer] def fuzzySearch(str: String,
+                                            currentEditDistance: Int,
+                                            maxEditDistance: Int,
+                                            p: String = ""): (Refs, Int) = {
       def tryTransformedSearch = {
         def replaceOrPrefix(s: String) = {
-          var fuzzyResult = AB[Int]()
+          var fuzzyResult = AB[Ref]()
           var err = 0
           val l = searchUntilIdx
           var i = 0
           while (i < l && fuzzyResult.isEmpty) {
-            val (fr, e) = children(i).fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
+            val (fr, e) = children(i)
+              .fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
             fuzzyResult = fr
             err = e
             i += 1
@@ -173,23 +181,23 @@ trait AddressIndexer { this: AddressFinder =>
     def nonEmpty = !isEmpty
 
     /** Restores node from path */
-    def load(path: Vector[Int], word: String, codes: AB[Int]): Unit = {
+    def load(path: Vector[Int], word: String, refs: Refs): Unit = {
       val idx = path.head
       if (children == null) children = AB()
       if (idx > children.size)
         sys.error(s"Invalid index: $idx, children size: ${children.size}, cannot add node")
       else if (idx == children.size) {
         val n = new MutableIndexNode(null, null, null)
-        n.load(path.drop(1), word, codes)
+        n.load(path.drop(1), word, refs)
         children += n
         if (!word.contains("*")) multiWordStartIdx += 1 //increase multiword start position
       } else {
-        children(idx).load(path.drop(1), word, codes)
+        children(idx).load(path.drop(1), word, refs)
       }
     }
 
     /** Calls writer function while traversing index */
-    def write(writer: (Vector[Int], String, AB[Int]) => Unit): Unit = {
+    def write(writer: (Vector[Int], String, Refs) => Unit): Unit = {
       children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, Vector(i))}
     }
 
@@ -214,37 +222,39 @@ trait AddressIndexer { this: AddressFinder =>
     def invalidIndices: AB[(String, AB[Int])] = validateIndex("")
   }
 
-  final class MutableIndexNode(var word: String, var codes: AB[Int],
+  final class MutableIndexNode(var word: String, var refs: Refs,
                                _children: AB[MutableIndexNode]) extends MutableIndex(_children) {
 
-    def update(w: String, code: Int): Unit = {
+    def update(w: String, ref: Ref): Unit = {
       val (commonPart, nodeRest, wordRest) = split(word, w)
       if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
-        codes.lastOption.filterNot(_ == code).foreach(_ => codes += code) //do not add code twice
+        refs.lastOption.filterNot(_ == ref).foreach(_ => refs += ref) //do not add code twice
       } else {
         if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
           word = commonPart
-          val nc = codes
-          codes = AB(code)
+          val nc = refs
+          refs = AB(ref)
           val nch = children
           children = AB(new MutableIndexNode(nodeRest, nc, nch)) //move children and codes to new child node
         }
         if (wordRest.nonEmpty) { //update children with remaining part of new word
-          updateChildren(wordRest, code)
+          updateChildren(wordRest, ref)
         }
       }
     }
 
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
-                                                     maxEditDistance: Int, p: String = ""): (AB[Int], Int) = {
+                                                     maxEditDistance: Int, p: String = ""): (Refs, Int) = {
+      def maybe_filter_exact(dist: Int) =
+        if (dist >= maxEditDistance) refs.filter(_.exact) else refs
       if (str.isEmpty) {
         if (currentEditDistance > maxEditDistance) (AB(), currentEditDistance)
-        else (codes, currentEditDistance)
+        else (maybe_filter_exact(currentEditDistance), currentEditDistance)
       } else if (children == null) {
         val err = currentEditDistance + str.length
         if (err <= maxEditDistance) {
-          (codes, err)
+          (maybe_filter_exact(err), err)
         } else {
           (AB(), currentEditDistance)
         }
@@ -261,35 +271,35 @@ trait AddressIndexer { this: AddressFinder =>
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
     }
 
-    override def load(path: Vector[Int], word: String, codes: AB[Int]): Unit = {
+    override def load(path: Vector[Int], word: String, refs: Refs): Unit = {
       if (path.isEmpty) {
         this.word = word
-        this.codes = codes
+        this.refs = refs
       } else {
-        super.load(path, word, codes)
+        super.load(path, word, refs)
       }
     }
 
-    private[AddressIndexer] def writeNode(writer: (Vector[Int], String, AB[Int]) => Unit,
+    private[AddressIndexer] def writeNode(writer: (Vector[Int], String, Refs) => Unit,
                                           path: Vector[Int]): Unit = {
-      writer(path, word, codes)
+      writer(path, word, refs)
       if (children != null)
         children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, path.appended(i))}
     }
 
     /** Debuging info */
     override def statistics: IndexStats = {
-      IndexStats(0, codes.size) + super.statistics
+      IndexStats(0, refs.size) + super.statistics
     }
 
     override private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
-      (if (word.length > 1 && !word.contains("*")) AB((path, word, _idxCode(codes.head))) else AB()) ++
+      (if (word.length > 1 && !word.contains("*")) AB((path, word, _idxCode(refs.head.code))) else AB()) ++
         super.validateNodeWord(path + word)
     }
     override private[AddressIndexer] def validateIndex(path: String): AB[(String, AB[Int])] = {
       val wrongCodes = AB[Int]()
-      codes.reduce { (prevCode, curCode) =>
-        if (prevCode >= curCode) wrongCodes += curCode
+      refs.reduce { (prevCode, curCode) =>
+        if (prevCode.code >= curCode.code) wrongCodes += curCode.code
         curCode
       }
       (if (wrongCodes.nonEmpty) AB(s"$path|$word" -> wrongCodes.map(_idxCode)) else AB()) ++
@@ -307,16 +317,16 @@ trait AddressIndexer { this: AddressFinder =>
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
     def idx_vals(word: String) = _index(word)
     def idx_vals_fuzzy(word: String) =
-      _index(word, wordLengthEditDistances.getOrElse(word.length, 1))
+      _index(word, WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance))
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
-    def intersect(idx: Array[AB[Int]], limit: Int): Array[Int] = {
+    def intersect(idx: Array[Refs], limit: Int): Array[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
       def check_register = {
-        val v = idx(0)(pos(0))
+        val v = idx(0)(pos(0)).code
         val l = pos.length
         var i = 1
-        while (i < l && v == idx(i)(pos(i))) i += 1
+        while (i < l && v == idx(i)(pos(i)).code) i += 1
         if (i == l) {
           if (types == null || has_type(v)) result append v
           i = 0
@@ -327,13 +337,14 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
       def find_equal(a_pos: Int, b_pos: Int) = {
-        val a: AB[Int] = idx(a_pos)
-        val b: AB[Int] = idx(b_pos)
+        val a: Refs = idx(a_pos)
+        val b: Refs = idx(b_pos)
         val al = a.length
         val bl = b.length
         var ai = pos(a_pos)
         var bi = pos(b_pos)
-        while (ai < al && bi < bl && a(ai) != b(bi)) if (a(ai) < b(bi)) ai += 1 else bi += 1
+        while (ai < al && bi < bl && a(ai).code != b(bi).code)
+          if (a(ai).code < b(bi).code) ai += 1 else bi += 1
         pos(a_pos) = ai
         pos(b_pos) = bi
       }
@@ -403,7 +414,10 @@ trait AddressIndexer { this: AddressFinder =>
         case (code, _, name) =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
-          wordsLists foreach(_ foreach(index.updateChildren(_, idx)))
+          wordsLists foreach(_ foreach { w =>
+            index.updateChildren(w,
+              Ref(idx, normalize(name).contains(w)))
+          })
           idx_code += (idx -> code)
           idx += 1
           if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")

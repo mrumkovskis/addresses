@@ -5,6 +5,8 @@ import org.scalatest.FunSuite
 import scala.collection.mutable.ArrayBuffer
 import spray.json._
 
+import scala.io.Source
+
 object IndexerTest {
   class TestAddressFinder(val addressFileName: String, val blackList: Set[String],
                           val houseCoordFile: String, val dbConfig: Option[DbConfig]) extends AddressFinder
@@ -13,11 +15,12 @@ object IndexerTest {
 
   object IndexJsonProtocol extends DefaultJsonProtocol {
     implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
+      implicit val refFormat = jsonFormat2(finder.Ref)
       override def write(obj: finder.MutableIndexNode): JsValue = {
         import obj._
         JsObject(Map(
           "word" -> Option(word).map(JsString(_)).getOrElse(JsNull),
-          "codes" -> Option(codes).map(_.toVector.toJson).getOrElse(JsNull),
+          "refs" -> Option(refs).map(_.toVector.toJson).getOrElse(JsNull),
           "children" -> Option(children).map(_.map(this.write).toVector).map(JsArray(_)).getOrElse(JsNull)
         ))
       }
@@ -26,7 +29,7 @@ object IndexerTest {
         case JsObject(fields) =>
           new finder.MutableIndexNode(
             fields("word").convertTo[String],
-            ArrayBuffer.from(fields("codes").convertTo[Vector[Int]]),
+            ArrayBuffer.from(fields("refs").convertTo[Vector[finder.Ref]]),
             ArrayBuffer.from((fields("children"): @unchecked) match { case JsArray(ch) => ch.map(read)})
           )
       }
@@ -82,114 +85,16 @@ class IndexerTest extends FunSuite {
       val (addr, idx) = addrWithIdx
       val words = finder.extractWords(addr)
       //check that duplicate word do not result in duplicate address code reference
-      (if (words.exists(_ == "ak")) words ++ List("ak") else words).foreach(node.updateChildren(_, idx))
+      (if (words.exists(_ == "ak")) words ++ List("ak") else words)
+        .foreach(w => node.updateChildren(w, finder.Ref(idx, finder.normalize(addr).contains(w))))
       node
     }
 
-    val expectedResult =
-      """
-        |[{
-        |  "word": "2",
-        |  "codes": [7],
-        |  "children": [{
-        |    "word": "1",
-        |    "codes": [7],
-        |    "children": [{
-        |      "word": "5",
-        |      "codes": [7],
-        |      "children": null
-        |    }]
-        |  }]
-        |}, {
-        |  "word": "a",
-        |  "codes": [0, 1, 2, 3, 4, 5, 6],
-        |  "children": [{
-        |    "word": "k",
-        |    "codes": [0, 1, 2, 3, 4, 5, 6],
-        |    "children": [{
-        |      "word": "a",
-        |      "codes": [5, 6],
-        |      "children": [{
-        |        "word": "c",
-        |        "codes": [6],
-        |        "children": [{
-        |          "word": "i",
-        |          "codes": [6],
-        |          "children": [{
-        |            "word": "j",
-        |            "codes": [6],
-        |            "children": [{
-        |              "word": "a",
-        |              "codes": [6],
-        |              "children": [{
-        |                "word": "s",
-        |                "codes": [6],
-        |                "children": null
-        |              }]
-        |            }]
-        |          }]
-        |        }]
-        |      }]
-        |    }, {
-        |      "word": "l",
-        |      "codes": [1],
-        |      "children": [{
-        |        "word": "s",
-        |        "codes": [1],
-        |        "children": null
-        |      }]
-        |    }, {
-        |      "word": "n",
-        |      "codes": [0, 3, 4],
-        |      "children": [{
-        |        "word": "a",
-        |        "codes": [0],
-        |        "children": [{
-        |          "word": "s",
-        |          "codes": [0],
-        |          "children": null
-        |        }]
-        |      }, {
-        |        "word": "i",
-        |        "codes": [3, 4],
-        |        "children": [{
-        |          "word": "s",
-        |          "codes": [3, 4],
-        |          "children": [{
-        |            "word": "t",
-        |            "codes": [3, 4],
-        |            "children": [{
-        |              "word": "e",
-        |              "codes": [3, 4],
-        |              "children": null
-        |            }]
-        |          }]
-        |        }]
-        |      }]
-        |    }]
-        |  }]
-        |}, {
-        |  "word": "2*2",
-        |  "codes": [7],
-        |  "children": null
-        |}, {
-        |  "word": "2*21",
-        |  "codes": [7],
-        |  "children": null
-        |}, {
-        |  "word": "2*a",
-        |  "codes": [2, 4, 5, 6],
-        |  "children": null
-        |}, {
-        |  "word": "2*ak",
-        |  "codes": [2, 4, 5, 6],
-        |  "children": null
-        |}, {
-        |  "word": "2*aka",
-        |  "codes": [5, 6],
-        |  "children": null
-        |}]
-        |""".stripMargin.parseJson
+    val expectedResult = Source
+      .fromInputStream(this.getClass.getResourceAsStream("/index_node.json"), "UTF-8")
+      .mkString
+      .parseJson
+
     import IndexJsonProtocol._
     //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
@@ -219,16 +124,16 @@ class IndexerTest extends FunSuite {
     .zipWithIndex
     .map { case (addr, idx) =>
       val words = finder.extractWords(addr)
-      words.foreach(node.updateChildren(_, idx))
+      words.foreach(w => node.updateChildren(w, finder.Ref(idx, finder.normalize(addr).contains(w))))
       (idx, addr)
     }.toMap
 
     def word(str: String) = finder.normalize(str).head
     def search(str: String) = res(node(str))
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
-    def res(r: ArrayBuffer[Int]) = r.map(idx_val(_)).toList
-    def res_fuzzy(r: (ArrayBuffer[Int], Int)) = {
-      (r._1.map(idx_val(_)).toList, r._2)
+    def res(refs: ArrayBuffer[finder.Ref]) = refs.map(r => idx_val(r.code)).toList
+    def res_fuzzy(res: (ArrayBuffer[finder.Ref], Int)) = {
+      (res._1.map(r => idx_val(r.code)).toList, res._2)
     }
 
     //exact search, edit distance 0
@@ -272,9 +177,7 @@ class IndexerTest extends FunSuite {
     assertResult((Nil, 2))(search_fuzzy(word("kakliss"), 2))
     assertResult((List("ventspils"), 1))(search_fuzzy(word("ventpils"), 2))
     assertResult((List("ventspils"), 1))(search_fuzzy(word("venspils"), 2))
-
-    //strange behaviours due to partial word match - hits 'vencīši' before 'ventspils'
-    assertResult((List("vencīši"), 2))(search_fuzzy(word("venpils"), 2))
-    assertResult((List("vencīši"), 2))(search_fuzzy(word("vencpils"), 2))
+    assertResult((List("ventspils"), 2))(search_fuzzy(word("venpils"), 2))
+    assertResult((List("ventspils"), 2))(search_fuzzy(word("vencpils"), 2))
   }
 }
