@@ -319,7 +319,10 @@ trait AddressIndexer { this: AddressFinder =>
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
     def idx_vals(word: String) = _index(word)
     def idx_vals_fuzzy(word: String) =
-      _index(word, WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance))
+      _index(word,
+        if (word.exists(_.isDigit)) 0 //no fuzzy search for words with digits in them
+        else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
+      )
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
     def intersect(idx: Array[Refs], limit: Int): Array[Int] = {
       val result = AB[Int]()
