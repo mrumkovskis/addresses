@@ -1,5 +1,6 @@
 package lv.addresses.indexer
 
+import scala.collection.mutable
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
 
@@ -90,12 +91,12 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): (Refs, Int) = {
+    def apply(str: String, maxEditDistance: Int): AB[(Refs, Int)] = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
-        if (idx < 0) (AB(), 0)
-        else (children(idx).refs, 0)
+        if (idx < 0) AB()
+        else AB((children(idx).refs, 0))
       } else fuzzySearch(str, 0, maxEditDistance)
     }
 
@@ -112,57 +113,56 @@ trait AddressIndexer { this: AddressFinder =>
     private[AddressIndexer] def fuzzySearch(str: String,
                                             currentEditDistance: Int,
                                             maxEditDistance: Int,
-                                            p: String = ""): (Refs, Int) = {
-      def tryTransformedSearch = {
+                                            p: String = ""): AB[(Refs, Int)] = {
+      def tryTransformedSearch(excludeChar: Char) = {
         def replaceOrPrefix(s: String) = {
-          var fuzzyResult = AB[Ref]()
-          var err = 0
+          var fuzzyResult = AB[(Refs, Int)]()
           val l = searchUntilIdx
           var i = 0
           while (i < l && fuzzyResult.isEmpty) {
-            val (fr, e) = children(i)
-              .fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
-            fuzzyResult = fr
-            err = e
+            if (children(i).word.head != excludeChar) {
+              fuzzyResult ++=
+                children(i)
+                  .fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
+            }
             i += 1
           }
-          (fuzzyResult, err)
+          fuzzyResult
         }
-        //try to replace c with one of children word values
-        replaceOrPrefix(str drop 1) match {
-          case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
-          case repl =>
-            //try to prefix c with on of children word values
-            replaceOrPrefix(str) match {
-              case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
-              case pref =>
-                //try to omit c
-                fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p) match {
-                  case r @ (result, err) if result.nonEmpty && err == currentEditDistance => r
-                  case omit =>
-                    //select non empty result with minimum edit distance
-                    List(pref, omit, repl).reduce { (r1, r2) =>
-                      if (r1._1.nonEmpty && r2._1.nonEmpty)
-                        if (r1._2 < r2._2) r1 else r2
-                      else if (r1._1.isEmpty) r2
-                      else r1
-                    }
-                }
-            }
+        //try to prefix c with on of children word values
+        replaceOrPrefix(str) ++
+          //try to omit c
+          fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p) ++
+          //try to replace c with one of children word values
+          replaceOrPrefix(str drop 1)
+      }
+
+      def mergeTransformedResult(res: AB[(Refs, Int)]): AB[(Refs, Int)] = {
+        res.groupBy(_._2).map[(Refs, Int)] { case (e, refs) => //parametrize map method so that iterable is returned
+          merge[Ref](refs.map(_._1), _.code - _.code) -> e
+        }
+        .toArray
+        .sortBy(_._2)
+        .unzip match {
+          case (arr, errs) =>
+            pruneRight[Ref](AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*),
+              _.code - _.code
+            )
+            .zip(errs)
+            .filter(_._1.nonEmpty)
         }
       }
 
-      if (children == null || currentEditDistance > maxEditDistance) return (AB(), maxEditDistance)
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
       if (idx < 0) {
-        tryTransformedSearch
+        if (currentEditDistance >= maxEditDistance) AB()
+        else mergeTransformedResult(tryTransformedSearch('\u0000')) //no char excluded
       } else {
-        children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c) match {
-          case r @ (result, _) if result.nonEmpty => r
-          case _ => tryTransformedSearch
-        }
+        val r = children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c)
+        if (currentEditDistance >= maxEditDistance) r
+        else mergeTransformedResult(r ++ tryTransformedSearch(c)) //exclude found char from further fuzzy search
       }
     }
 
@@ -247,18 +247,22 @@ trait AddressIndexer { this: AddressFinder =>
 
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
-                                                     maxEditDistance: Int, p: String = ""): (Refs, Int) = {
-      def maybe_filter_exact(dist: Int) =
-        if (dist >= maxEditDistance) refs.filter(_.exact) else refs
+                                                     maxEditDistance: Int, p: String = ""): AB[(Refs, Int)] = {
+      def maybe_filter_exact(dist: Int): AB[(Refs, Int)] =
+        (if (dist >= maxEditDistance) refs.filter(_.exact) else refs) match {
+          case r if r.nonEmpty => AB((r, dist))
+          case _ => AB()
+        }
+
       if (str.isEmpty) {
-        if (currentEditDistance > maxEditDistance) (AB(), currentEditDistance)
-        else (maybe_filter_exact(currentEditDistance), currentEditDistance)
+        if (currentEditDistance > maxEditDistance) AB()
+        else maybe_filter_exact(currentEditDistance)
       } else if (children == null) {
         val err = currentEditDistance + str.length
         if (err <= maxEditDistance) {
-          (maybe_filter_exact(err), err)
+          maybe_filter_exact(err)
         } else {
-          (AB(), currentEditDistance)
+          AB()
         }
       } else {
         super.fuzzySearch(str, currentEditDistance, maxEditDistance, p)
@@ -322,7 +326,7 @@ trait AddressIndexer { this: AddressFinder =>
       _index(word,
         if (word.exists(_.isDigit)) 0 //no fuzzy search for words with digits in them
         else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
-      )
+      ).headOption.getOrElse(AB() -> 0)
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
     def intersect(idx: Array[Refs], limit: Int): Array[Int] = {
       val result = AB[Int]()
@@ -530,4 +534,88 @@ trait AddressIndexer { this: AddressFinder =>
     }
     -(from + 1)
   }
+
+  /** Merge ordered collections removing duplicates */
+  def merge[T >: Null](arrs: AB[AB[T]], comparator: (T, T) => Int): AB[T] = {
+    def merge(r1: AB[T], r2: AB[T]) = {
+      var i1 = 0
+      var i2 = 0
+      val l1 = r1.length
+      val l2 = r2.length
+      val res = new AB[T](Math.max(l1, l2))
+      var prevCode: T = null
+      while (i1 < l1 && i2 < l2) {
+        val c1 = r1(i1)
+        val c2 = r2(i2)
+        if (comparator(c1, c2) < 0) {
+          if (prevCode == null || comparator(prevCode, c1) < 0) {
+            res += r1(i1)
+            prevCode = c1
+          }
+          i1 += 1
+        } else if (comparator(c1, c2) > 0) {
+          if (prevCode == null || comparator(prevCode, c2) < 0) {
+            res += r2(i2)
+            prevCode = c2
+          }
+          i2 += 1
+        } else {
+          if (prevCode == null || comparator(prevCode, c1) < 0) {
+            res += r1(i1)
+            prevCode = c1
+          }
+          i1 += 1
+          i2 += 1
+        }
+      }
+      def addDistinct(a: AB[T], start: Int, l: Int) = {
+        var i = start
+        while(i < l) {
+          val c = a(i)
+          if (prevCode == null || comparator(prevCode, c) < 0) {
+            res += a(i)
+            prevCode = c
+          }
+          i += 1
+        }
+      }
+      if (i1 < l1) addDistinct(r1, i1, l1)
+      else if (i2 < l2) addDistinct(r2, i2, l2)
+      res
+    }
+    if (arrs.isEmpty) AB()
+    else arrs.reduce(merge)
+  }
+
+  /** Removes collections values that are in left collection(s) placed to the left, collections are ordered */
+  def pruneRight[T](arrs: AB[AB[T]], comparator: (T, T) => Int): AB[AB[T]] = {
+    def prune(l: AB[T], r: AB[T]): AB[T] = {
+      if (l.isEmpty && r.isEmpty) return r
+      var li = 0
+      var ri = 0
+      val ll = l.length
+      while(li < ll && ri < r.length) {
+        if (comparator(l(li), r(ri)) < 0) li += 1
+        else if (comparator(l(li), r(ri)) > 0) ri += 1
+        else {
+          r.remove(ri)
+          li += 1
+        }
+      }
+      r
+    }
+    if (arrs.length < 2) return arrs
+    var i = 0
+    val l = arrs.length
+    while (i < l) {
+      var j = i + 1
+      while (j < l) {
+        arrs(j) = prune(arrs(i), arrs(j))
+        j += 1
+      }
+      i += 1
+    }
+    arrs
+  }
 }
+
