@@ -1,6 +1,5 @@
 package lv.addresses.indexer
 
-import scala.collection.mutable
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
 
@@ -49,6 +48,7 @@ private object Constants {
 trait AddressIndexer { this: AddressFinder =>
 
   type Refs = AB[Ref]
+  type FuzzyResult = AB[(Refs, Int)]
 
   case class Ref(code: Int, exact: Boolean)
 
@@ -91,7 +91,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): AB[(Refs, Int)] = {
+    def apply(str: String, maxEditDistance: Int): FuzzyResult = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
@@ -113,7 +113,7 @@ trait AddressIndexer { this: AddressFinder =>
     private[AddressIndexer] def fuzzySearch(str: String,
                                             currentEditDistance: Int,
                                             maxEditDistance: Int,
-                                            p: String = ""): AB[(Refs, Int)] = {
+                                            p: String = ""): FuzzyResult = {
       def tryTransformedSearch(excludeChar: Char) = {
         def replaceOrPrefix(s: String) = {
           var fuzzyResult = AB[(Refs, Int)]()
@@ -137,7 +137,7 @@ trait AddressIndexer { this: AddressFinder =>
           replaceOrPrefix(str drop 1)
       }
 
-      def mergeTransformedResult(res: AB[(Refs, Int)]): AB[(Refs, Int)] = {
+      def mergeTransformedResult(res: FuzzyResult): FuzzyResult = {
         res.groupBy(_._2).map[(Refs, Int)] { case (e, refs) => //parametrize map method so that iterable is returned
           merge[Ref](refs.map(_._1), _.code - _.code) -> e
         }
@@ -247,8 +247,8 @@ trait AddressIndexer { this: AddressFinder =>
 
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
-                                                     maxEditDistance: Int, p: String = ""): AB[(Refs, Int)] = {
-      def maybe_filter_exact(dist: Int): AB[(Refs, Int)] =
+                                                     maxEditDistance: Int, p: String = ""): FuzzyResult = {
+      def maybe_filter_exact(dist: Int): FuzzyResult =
         (if (dist >= maxEditDistance) refs.filter(_.exact) else refs) match {
           case r if r.nonEmpty => AB((r, dist))
           case _ => AB()
@@ -374,6 +374,10 @@ trait AddressIndexer { this: AddressFinder =>
       }
       result.map(_idxCode(_)).toArray
     }
+
+//    def intersectFuzzy(res: Array[FuzzyResult]): FuzzyResult = {
+//      val
+//    }
 
     val params = searchParams(words)
     (params map idx_vals sortBy(_.size) match {
