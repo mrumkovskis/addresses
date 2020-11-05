@@ -48,9 +48,9 @@ private object Constants {
 trait AddressIndexer { this: AddressFinder =>
 
   type Refs = AB[Ref]
-  type FuzzyResult = AB[(Refs, Int)]
 
   case class Ref(code: Int, exact: Boolean)
+  case class FuzzyResult(refs: Refs, editDistance: Int)
 
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
@@ -91,12 +91,12 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): FuzzyResult = {
+    def apply(str: String, maxEditDistance: Int): AB[FuzzyResult] = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) AB()
-        else AB((children(idx).refs, 0))
+        else AB(FuzzyResult(children(idx).refs, 0))
       } else fuzzySearch(str, 0, maxEditDistance)
     }
 
@@ -113,10 +113,10 @@ trait AddressIndexer { this: AddressFinder =>
     private[AddressIndexer] def fuzzySearch(str: String,
                                             currentEditDistance: Int,
                                             maxEditDistance: Int,
-                                            p: String = ""): FuzzyResult = {
+                                            p: String = ""): AB[FuzzyResult] = {
       def tryTransformedSearch(excludeChar: Char) = {
         def replaceOrPrefix(s: String) = {
-          var fuzzyResult = AB[(Refs, Int)]()
+          var fuzzyResult = AB[FuzzyResult]()
           val l = searchUntilIdx
           var i = 0
           while (i < l && fuzzyResult.isEmpty) {
@@ -137,9 +137,9 @@ trait AddressIndexer { this: AddressFinder =>
           replaceOrPrefix(str drop 1)
       }
 
-      def mergeTransformedResult(res: FuzzyResult): FuzzyResult = {
-        res.groupBy(_._2).map[(Refs, Int)] { case (e, refs) => //parametrize map method so that iterable is returned
-          merge[Ref](refs.map(_._1), _.code - _.code) -> e
+      def mergeTransformedResult(res: AB[FuzzyResult]): AB[FuzzyResult] = {
+        res.groupBy(_.editDistance).map[(Refs, Int)] { case (e, refs) => //parametrize map method so that iterable is returned
+          merge[Ref](refs.map(_.refs), _.code - _.code) -> e
         }
         .toArray
         .sortBy(_._2)
@@ -149,7 +149,8 @@ trait AddressIndexer { this: AddressFinder =>
               _.code - _.code
             )
             .zip(errs)
-            .filter(_._1.nonEmpty)
+            .withFilter(_._1.nonEmpty)
+            .map { case (refs, err) => FuzzyResult(refs, err) }
         }
       }
 
@@ -247,10 +248,10 @@ trait AddressIndexer { this: AddressFinder =>
 
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
-                                                     maxEditDistance: Int, p: String = ""): FuzzyResult = {
-      def maybe_filter_exact(dist: Int): FuzzyResult =
+                                                     maxEditDistance: Int, p: String = ""): AB[FuzzyResult] = {
+      def maybe_filter_exact(dist: Int): AB[FuzzyResult] =
         (if (dist >= maxEditDistance) refs.filter(_.exact) else refs) match {
-          case r if r.nonEmpty => AB((r, dist))
+          case r if r.nonEmpty => AB(FuzzyResult(r, dist))
           case _ => AB()
         }
 
@@ -326,7 +327,7 @@ trait AddressIndexer { this: AddressFinder =>
       _index(word,
         if (word.exists(_.isDigit)) 0 //no fuzzy search for words with digits in them
         else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
-      ).headOption.getOrElse(AB() -> 0)
+      ).headOption.getOrElse(FuzzyResult(AB(), 0))
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
     def intersect(idx: Array[Refs], limit: Int): Array[Int] = {
       val result = AB[Int]()
@@ -386,9 +387,9 @@ trait AddressIndexer { this: AddressFinder =>
     }) match {
       case r @ (a, _) if a.nonEmpty => r
       case _ => //try fuzzy search
-        params map idx_vals_fuzzy sortBy { case (a, e) => (e, a.length) } match {
+        params map idx_vals_fuzzy sortBy { case FuzzyResult(a, e) => (e, a.length) } match {
           case a if a.isEmpty => (Array[Int](), 0)
-          case result => (intersect(result.map(_._1), limit), result.map(_._2).sum)
+          case result => (intersect(result.map(_.refs), limit), result.map(_.editDistance).sum)
         }
     }
   }

@@ -132,8 +132,8 @@ class IndexerTest extends FunSuite {
     def search(str: String) = res(node(str))
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
     def res(refs: ArrayBuffer[finder.Ref]) = refs.map(r => idx_val(r.code)).toList
-    def res_fuzzy(res: ArrayBuffer[(ArrayBuffer[finder.Ref], Int)]) = {
-      res.map{ case (r, e) => r.map(r => idx_val(r.code)).toList -> e }.toList
+    def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
+      res.map { case finder.FuzzyResult(r, e) => r.map(r => idx_val(r.code)).toList -> e }.toList
     }
 
     //exact search, edit distance 0
