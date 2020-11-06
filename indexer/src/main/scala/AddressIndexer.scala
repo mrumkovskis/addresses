@@ -1,5 +1,6 @@
 package lv.addresses.indexer
 
+import scala.collection.mutable
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
 
@@ -91,13 +92,13 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): AB[FuzzyResult] = {
+    def apply(str: String, maxEditDistance: Int, fuzzyLimit: Int = 1024): AB[FuzzyResult] = {
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) AB()
         else AB(FuzzyResult(children(idx).refs, 0))
-      } else fuzzySearch(str, 0, maxEditDistance)
+      } else fuzzySearch(str, fuzzyLimit, 0, maxEditDistance)
     }
 
     private[MutableIndex] def search(str: String): Refs = {
@@ -111,6 +112,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     private[AddressIndexer] def fuzzySearch(str: String,
+                                            fuzzyLimit: Int,
                                             currentEditDistance: Int,
                                             maxEditDistance: Int,
                                             p: String = ""): AB[FuzzyResult] = {
@@ -119,11 +121,13 @@ trait AddressIndexer { this: AddressFinder =>
           var fuzzyResult = AB[FuzzyResult]()
           val l = searchUntilIdx
           var i = 0
-          while (i < l && fuzzyResult.isEmpty) {
-            if (children(i).word.head != excludeChar) {
+          while (i < l) {
+            val charToTry = children(i).word.head
+            if (charToTry != excludeChar) {
               fuzzyResult ++=
                 children(i)
-                  .fuzzySearch(s, currentEditDistance + 1, maxEditDistance, p + children(i).word)
+                  .fuzzySearch(s, fuzzyLimit, currentEditDistance + 1, maxEditDistance,
+                    p + charToTry)
             }
             i += 1
           }
@@ -132,7 +136,7 @@ trait AddressIndexer { this: AddressFinder =>
         //try to prefix c with on of children word values
         replaceOrPrefix(str) ++
           //try to omit c
-          fuzzySearch(str drop 1, currentEditDistance + 1, maxEditDistance, p) ++
+          fuzzySearch(str drop 1, fuzzyLimit, currentEditDistance + 1, maxEditDistance, p) ++
           //try to replace c with one of children word values
           replaceOrPrefix(str drop 1)
       }
@@ -161,7 +165,9 @@ trait AddressIndexer { this: AddressFinder =>
         if (currentEditDistance >= maxEditDistance) AB()
         else mergeTransformedResult(tryTransformedSearch('\u0000')) //no char excluded
       } else {
-        val r = children(idx).fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c)
+        val r =
+          children(idx)
+            .fuzzySearch(str.drop(1), fuzzyLimit, currentEditDistance, maxEditDistance, p + c)
         if (currentEditDistance >= maxEditDistance) r
         else mergeTransformedResult(r ++ tryTransformedSearch(c)) //exclude found char from further fuzzy search
       }
@@ -247,6 +253,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     override private[AddressIndexer] def fuzzySearch(str: String,
+                                                     fuzzyLimit: Int,
                                                      currentEditDistance: Int,
                                                      maxEditDistance: Int, p: String = ""): AB[FuzzyResult] = {
       def maybe_filter_exact(dist: Int): AB[FuzzyResult] =
@@ -266,7 +273,7 @@ trait AddressIndexer { this: AddressFinder =>
           AB()
         }
       } else {
-        super.fuzzySearch(str, currentEditDistance, maxEditDistance, p)
+        super.fuzzySearch(str, fuzzyLimit, currentEditDistance, maxEditDistance, p)
       }
     }
 
@@ -319,17 +326,21 @@ trait AddressIndexer { this: AddressFinder =>
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
-  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): (Array[Int], Int) = {
+  /** Returns array of typles, each tuple consist of mathcing address codes and
+   * edit distance from search parameters */
+  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): AB[(AB[Int], Int)] = {
     def searchParams(words: Array[String]) = wordStatForSearch(words)
       .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
     def idx_vals(word: String) = _index(word)
-    def idx_vals_fuzzy(word: String) =
+    def idx_vals_fuzzy(word: String) = {
       _index(word,
         if (word.exists(_.isDigit)) 0 //no fuzzy search for words with digits in them
         else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
-      ).headOption.getOrElse(FuzzyResult(AB(), 0))
+      )
+    }
+
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
-    def intersect(idx: Array[Refs], limit: Int): Array[Int] = {
+    def intersect(idx: Array[Refs], limit: Int): AB[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
       def check_register = {
@@ -373,25 +384,61 @@ trait AddressIndexer { this: AddressFinder =>
           i += 1
         }
       }
-      result.map(_idxCode(_)).toArray
+      result.map(i => _idxCode(i))
     }
 
-//    def intersectFuzzy(res: Array[FuzzyResult]): FuzzyResult = {
-//      val
-//    }
+    def intersectFuzzy(results: Array[AB[FuzzyResult]]): AB[(AB[Int], Int)] = {
+      if (results.exists(_.isEmpty)) return AB()
+      val count = results.length
+      val ls = results.map(_.length - 1)
+      val pos = Array.fill(count)(0)
+      val res = AB[(AB[Int], Int)]()
+      def neq = {
+        var i = 0
+        while (i < count && pos(i) == ls(i)) i += 1
+        i != count
+      }
+      val intersectable = new Array[Refs](count)
+      do {
+        var err = 0
+        var i = 0
+        while (i < count) {
+          val fr = results(i)(pos(i))
+          intersectable(i) = fr.refs
+          err += fr.editDistance
+          i += 1
+        }
+        res += (intersect(intersectable, limit) -> err)
+        i = 0
+        var shift = true
+        while (i < count && shift) {
+          if (pos(i) == ls(i)) {
+            pos(i) = 0
+          } else {
+            pos(i) += 1
+            shift = false
+          }
+          i += 1
+        }
+      } while(neq)
+      res.sortBy(_._2)
+    }
 
     val params = searchParams(words)
     (params map idx_vals sortBy(_.size) match {
-      case a if a.isEmpty => (Array[Int](), 0)
-      case result => (intersect(result, limit), 0)
+      case a if a.isEmpty => AB[(AB[Int], Int)]()
+      case result => intersect(result, limit) match {
+        case intersected if intersected.nonEmpty => AB((intersected, 0))
+        case _ => AB[(AB[Int], Int)]()
+      }
     }) match {
-      case r @ (a, _) if a.nonEmpty => r
-      case _ => //try fuzzy search
-        params map idx_vals_fuzzy sortBy { case FuzzyResult(a, e) => (e, a.length) } match {
-          case a if a.isEmpty => (Array[Int](), 0)
-          case result => (intersect(result.map(_.refs), limit), result.map(_.editDistance).sum)
-        }
+      case r if r.nonEmpty => r
+      case _ => intersectFuzzy(params map idx_vals_fuzzy)
     }
+  }
+
+  def fuzzySearch(str: String, editDistance: Int): AB[(AB[Int], Int)] = {
+    _index(str, editDistance).map(fr => (fr.refs.map(r => _idxCode(r.code)), fr.editDistance))
   }
 
   def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {

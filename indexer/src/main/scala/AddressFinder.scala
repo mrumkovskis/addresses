@@ -90,25 +90,30 @@ trait AddressFinder
       }
     else {
       val words = normalize(str)
-      val (codes, editDistance) = searchCodes(words)(1024, types)
-      var (perfectRankCount, i) = (0, 0)
-      val size = Math.min(codes.length, limit)
-      val result = new AB[Long](size)
-      while (perfectRankCount < size && i < codes.length) {
-        val code = codes(i)
-        val r = rank(words, code)
-        if (r == 0) perfectRankCount += 1
-        val key = r.toLong << 53 | i.toLong << 32 | code
-        insertIntoHeap(result, key)
-        i += 1
+      def codesToAddr(codes: AB[Int], editDistance: Int) = {
+        var (perfectRankCount, i) = (0, 0)
+        val size = Math.min(codes.length, limit)
+        val result = new AB[Long](size)
+        while (perfectRankCount < size && i < codes.length) {
+          val code = codes(i)
+          val r = rank(words, code)
+          if (r == 0) perfectRankCount += 1
+          val key = r.toLong << 53 | i.toLong << 32 | code
+          insertIntoHeap(result, key)
+          i += 1
+        }
+        val res =
+          if (size < result.size / 2) heap_topx(result, size)
+          else if (size < result.size) result.sorted.take(size) else result.sorted
+        res
+          .map(_ & 0x00000000FFFFFFFFL)
+          .map(_.toInt)
+          .map(address(_, editDistance))
       }
-      (
-        if (size < result.size / 2) heap_topx(result, size)
-        else (if (size < result.size) result.sorted.take(size) else result.sorted).toArray
-        )
-        .map(_ & 0x00000000FFFFFFFFL)
-        .map(_.toInt)
-        .map(address(_, editDistance))
+      val addresses = new AB[Address]()
+      searchCodes(words)(1024, types)
+        .foreach { case (codes, err) => addresses ++= codesToAddr(codes, err) }
+      addresses.toArray
     }
   }
 
@@ -273,7 +278,7 @@ trait AddressFinder
       na(i) = h(s - i)
       i += 1
     }
-    na
+    AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(na): _*)
   }
 
   def heapsortx(a: AB[Long], x: Int) = {
