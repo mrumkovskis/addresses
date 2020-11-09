@@ -387,6 +387,7 @@ trait AddressIndexer { this: AddressFinder =>
     (params map idx_vals).map(r => AB(r.exact, r.approx)) match {
       case a if a.isEmpty => AB[(AB[Int], Int)]()
       case result =>
+        var intersectionCount = 0
         val intersection = AB[Int]()
         val combInit = (new Array[AB[Int]](result.size), 0) //(refs, idx)
         foldCombinations[AB[Int], (Array[AB[Int]], Int), AB[Int]](result,
@@ -405,7 +406,8 @@ trait AddressIndexer { this: AddressFinder =>
           case intersected if intersected.nonEmpty => //exact result found
             AB((if (intersected.size > limit) intersected.take(limit) else intersected, 0))
           case _ =>
-            val fuzzyRes = (params map idx_vals_fuzzy)
+            val fullRes = params map idx_vals_fuzzy
+            val fuzzyRes = fullRes
               .map(_.map(fr => fr.refs.exact -> fr.editDistance)) //pick only exact refs for fuzzy result
             val fuzzyIntersection = AB[(AB[Int], Int)]()
             val fuzzyCombInit = (new Array[AB[Int]](result.size), 0, 0) //(refs, editDistance, idx)
@@ -419,6 +421,12 @@ trait AddressIndexer { this: AddressFinder =>
               fuzzyIntersection,
               (r, cr) => {
                 r += (intersect(cr._1, limit) -> cr._2)
+                intersectionCount += 1
+                if (intersectionCount > 32)
+                  logger.warn(s"A LOT OF FUZZY RESULTS: ${fullRes.map(_.size).mkString("(", ",", ")")}\n ${
+                    fullRes.map(_.map(fr => fr.word -> fr.editDistance)
+                      .mkString("(", ",", ")")).mkString(",")}")
+
                 (r, true) // TODO maybe some limit needed due to performance reasons?
               }
             )
