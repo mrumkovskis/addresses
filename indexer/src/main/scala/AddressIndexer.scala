@@ -398,7 +398,7 @@ trait AddressIndexer { this: AddressFinder =>
           intersection,
           (r, cr) => {
             r ++= intersect(cr._1, limit)
-            r
+            (r, true)
           }
         )
         intersection match {
@@ -419,7 +419,7 @@ trait AddressIndexer { this: AddressFinder =>
               fuzzyIntersection,
               (r, cr) => {
                 r += (intersect(cr._1, limit) -> cr._2)
-                r
+                (r, true) // TODO maybe some limit needed due to performance reasons?
               }
             )
             val res =
@@ -680,16 +680,17 @@ trait AddressIndexer { this: AddressFinder =>
                                 combInit: B,
                                 combFun: (B, A) => B,
                                 init: C,
-                                folder: (C, B) => C): C = {
+                                folder: (C, B) => (C, Boolean)): C = {
     if (data.exists(_.isEmpty)) return init
     val count = data.length
     val ls = data.map(_.length - 1)
     val pos = Array.fill(count)(0)
     var res = init
+    var continue = true
     def neq = {
       var i = 0
       while (i < count && pos(i) == 0) i += 1
-      i != count
+      i != count && continue
     }
     do {
       var combRes = combInit
@@ -698,7 +699,9 @@ trait AddressIndexer { this: AddressFinder =>
         combRes = combFun(combRes, data(i)(pos(i)))
         i += 1
       }
-      res = folder(res, combRes)
+      val (fr, cont) = folder(res, combRes)
+      res = fr
+      continue = cont
       i = 0
       var shift = true
       while (i < count && shift) {
