@@ -1,111 +1,72 @@
 [{
   "word": "2",
-  "refs": [{
-    "code": 7,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [7],
+    "exact": []
+  },
   "children": [{
     "word": "1",
-    "refs": [{
-      "code": 7,
-      "exact": true
-    }],
+    "refs": {
+      "approx": [],
+      "exact": [7]
+    },
     "children": [{
       "word": "5",
-      "refs": [{
-        "code": 7,
-        "exact": true
-      }],
+      "refs": {
+        "approx": [],
+        "exact": [7]
+      },
       "children": null
     }]
   }]
 }, {
   "word": "a",
-  "refs": [{
-    "code": 0,
-    "exact": false
-  }, {
-    "code": 1,
-    "exact": false
-  }, {
-    "code": 2,
-    "exact": false
-  }, {
-    "code": 3,
-    "exact": false
-  }, {
-    "code": 4,
-    "exact": false
-  }, {
-    "code": 5,
-    "exact": false
-  }, {
-    "code": 6,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [0, 1, 2, 3, 4, 5, 6],
+    "exact": []
+  },
   "children": [{
     "word": "k",
-    "refs": [{
-      "code": 0,
-      "exact": false
-    }, {
-      "code": 1,
-      "exact": false
-    }, {
-      "code": 2,
-      "exact": true
-    }, {
-      "code": 3,
-      "exact": false
-    }, {
-      "code": 4,
-      "exact": true
-    }, {
-      "code": 5,
-      "exact": false
-    }, {
-      "code": 6,
-      "exact": false
-    }],
+    "refs": {
+      "approx": [0, 1, 3, 5, 6],
+      "exact": [2, 4]
+    },
     "children": [{
       "word": "a",
-      "refs": [{
-        "code": 5,
-        "exact": true
-      }, {
-        "code": 6,
-        "exact": true
-      }],
+      "refs": {
+        "approx": [],
+        "exact": [5, 6]
+      },
       "children": [{
         "word": "c",
-        "refs": [{
-          "code": 6,
-          "exact": false
-        }],
+        "refs": {
+          "approx": [6],
+          "exact": []
+        },
         "children": [{
           "word": "i",
-          "refs": [{
-            "code": 6,
-            "exact": false
-          }],
+          "refs": {
+            "approx": [6],
+            "exact": []
+          },
           "children": [{
             "word": "j",
-            "refs": [{
-              "code": 6,
-              "exact": false
-            }],
+            "refs": {
+              "approx": [6],
+              "exact": []
+            },
             "children": [{
               "word": "a",
-              "refs": [{
-                "code": 6,
-                "exact": false
-              }],
+              "refs": {
+                "approx": [6],
+                "exact": []
+              },
               "children": [{
                 "word": "s",
-                "refs": [{
-                  "code": 6,
-                  "exact": true
-                }],
+                "refs": {
+                  "approx": [],
+                  "exact": [6]
+                },
                 "children": null
               }]
             }]
@@ -114,80 +75,62 @@
       }]
     }, {
       "word": "l",
-      "refs": [{
-        "code": 1,
-        "exact": false
-      }],
+      "refs": {
+        "approx": [1],
+        "exact": []
+      },
       "children": [{
         "word": "s",
-        "refs": [{
-          "code": 1,
-          "exact": true
-        }],
+        "refs": {
+          "approx": [],
+          "exact": [1]
+        },
         "children": null
       }]
     }, {
       "word": "n",
-      "refs": [{
-        "code": 0,
-        "exact": false
-      }, {
-        "code": 3,
-        "exact": false
-      }, {
-        "code": 4,
-        "exact": false
-      }],
+      "refs": {
+        "approx": [0, 3, 4],
+        "exact": []
+      },
       "children": [{
         "word": "a",
-        "refs": [{
-          "code": 0,
-          "exact": false
-        }],
+        "refs": {
+          "approx": [0],
+          "exact": []
+        },
         "children": [{
           "word": "s",
-          "refs": [{
-            "code": 0,
-            "exact": true
-          }],
+          "refs": {
+            "approx": [],
+            "exact": [0]
+          },
           "children": null
         }]
       }, {
         "word": "i",
-        "refs": [{
-          "code": 3,
-          "exact": false
-        }, {
-          "code": 4,
-          "exact": false
-        }],
+        "refs": {
+          "approx": [3, 4],
+          "exact": []
+        },
         "children": [{
           "word": "s",
-          "refs": [{
-            "code": 3,
-            "exact": false
-          }, {
-            "code": 4,
-            "exact": false
-          }],
+          "refs": {
+            "approx": [3, 4],
+            "exact": []
+          },
           "children": [{
             "word": "t",
-            "refs": [{
-              "code": 3,
-              "exact": false
-            }, {
-              "code": 4,
-              "exact": false
-            }],
+            "refs": {
+              "approx": [3, 4],
+              "exact": []
+            },
             "children": [{
               "word": "e",
-              "refs": [{
-                "code": 3,
-                "exact": true
-              }, {
-                "code": 4,
-                "exact": true
-              }],
+              "refs": {
+                "approx": [],
+                "exact": [3, 4]
+              },
               "children": null
             }]
           }]
@@ -197,58 +140,37 @@
   }]
 }, {
   "word": "2*2",
-  "refs": [{
-    "code": 7,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [7],
+    "exact": []
+  },
   "children": null
 }, {
   "word": "2*21",
-  "refs": [{
-    "code": 7,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [7],
+    "exact": []
+  },
   "children": null
 }, {
   "word": "2*a",
-  "refs": [{
-    "code": 2,
-    "exact": false
-  }, {
-    "code": 4,
-    "exact": false
-  }, {
-    "code": 5,
-    "exact": false
-  }, {
-    "code": 6,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [2, 4, 5, 6],
+    "exact": []
+  },
   "children": null
 }, {
   "word": "2*ak",
-  "refs": [{
-    "code": 2,
-    "exact": false
-  }, {
-    "code": 4,
-    "exact": false
-  }, {
-    "code": 5,
-    "exact": false
-  }, {
-    "code": 6,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [2, 4, 5, 6],
+    "exact": []
+  },
   "children": null
 }, {
   "word": "2*aka",
-  "refs": [{
-    "code": 5,
-    "exact": false
-  }, {
-    "code": 6,
-    "exact": false
-  }],
+  "refs": {
+    "approx": [5, 6],
+    "exact": []
+  },
   "children": null
 }]

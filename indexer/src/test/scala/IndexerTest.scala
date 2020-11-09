@@ -14,13 +14,18 @@ object IndexerTest {
   val finder = new TestAddressFinder(null, Set.empty, null, None)
 
   object IndexJsonProtocol extends DefaultJsonProtocol {
+    implicit object ABFormat extends RootJsonFormat[ArrayBuffer[Int]] {
+      override def write(obj: ArrayBuffer[Int]): JsValue = obj.toVector.toJson
+      override def read(json: JsValue): ArrayBuffer[Int] = ArrayBuffer.from(json.convertTo[Vector[Int]])
+    }
     implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
-      implicit val refFormat = jsonFormat2(finder.Ref)
+      implicit val refFormat = jsonFormat2(finder.Refs)
       override def write(obj: finder.MutableIndexNode): JsValue = {
         import obj._
+
         JsObject(Map(
           "word" -> Option(word).map(JsString(_)).getOrElse(JsNull),
-          "refs" -> Option(refs).map(_.toVector.toJson).getOrElse(JsNull),
+          "refs" -> Option(refs).map(_.toJson).getOrElse(JsNull),
           "children" -> Option(children).map(_.map(this.write).toVector).map(JsArray(_)).getOrElse(JsNull)
         ))
       }
@@ -29,7 +34,7 @@ object IndexerTest {
         case JsObject(fields) =>
           new finder.MutableIndexNode(
             fields("word").convertTo[String],
-            ArrayBuffer.from(fields("refs").convertTo[Vector[finder.Ref]]),
+            fields("refs").convertTo[finder.Refs],
             ArrayBuffer.from((fields("children"): @unchecked) match { case JsArray(ch) => ch.map(read)})
           )
       }
@@ -86,7 +91,7 @@ class IndexerTest extends FunSuite {
       val words = finder.extractWords(addr)
       //check that duplicate word do not result in duplicate address code reference
       (if (words.exists(_ == "ak")) words ++ List("ak") else words)
-        .foreach(w => node.updateChildren(w, finder.Ref(idx, finder.normalize(addr).contains(w))))
+        .foreach(w => node.updateChildren(w, idx, finder.normalize(addr).contains(w)))
       node
     }
 
@@ -127,20 +132,20 @@ class IndexerTest extends FunSuite {
     .zipWithIndex
     .map { case (addr, idx) =>
       val words = finder.extractWords(addr)
-      words.foreach(w => node.updateChildren(w, finder.Ref(idx, finder.normalize(addr).contains(w))))
+      words.foreach(w => node.updateChildren(w, idx, finder.normalize(addr).contains(w)))
       (idx, addr)
     }.toMap
 
     def word(str: String) = finder.normalize(str).head
     def search(str: String) = res(node(str))
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
-    def res(refs: ArrayBuffer[finder.Ref]) = refs.map(r => idx_val(r.code)).toList
+    def res(refs: finder.Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
     def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
-      res.map { case finder.FuzzyResult(r, e) => r.map(r => idx_val(r.code)).toList -> e }.toList
+      res.map { case finder.FuzzyResult(_, r, e) => r.exact.map(idx_val(_)).toList -> e }.toList
     }
 
     //exact search, edit distance 0
-    assertResult(List("aknas", "akls", "ak ak", "aknīste", "ak aknīste", "aka aka", "aka akācijas"))(search("ak"))
+    assertResult(List("ak ak", "ak aknīste", "aknas", "akls", "aknīste", "aka aka", "aka akācijas"))(search("ak"))
     assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search("2*ak"))
     assertResult(List("aknas"))(search("akna"))
     assertResult(Nil)(search("aknass"))
@@ -158,7 +163,7 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijs"), 1))
     assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijaz"), 1))
     assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijass"), 1))
-    assertResult(List((List("aknas", "akls"), 1)))(search_fuzzy(word("aklas"), 1))
+    assertResult(List((List("akls"),1), (List("aknas"),1)))(search_fuzzy(word("aklas"), 1))
     assertResult(List((List("akls"), 1)))(search_fuzzy(word("kakls"), 1))
     assertResult(List((List("ventspils"), 0)))(search_fuzzy(word("ventspils"), 1))
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 1))
@@ -172,11 +177,11 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("bentspils"), 1))
     assertResult(List((List("kazdanga"), 1)))(search_fuzzy(word("vazdanga"), 1))
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("kentspils"), 1))
-    assertResult(List((List("ķirša"),0), (List("ķirši", "ķiršu"),1)))(search_fuzzy(word("kirsa"), 1))
+    assertResult(List((List("ķirša"), 0), (List("ķiršu"), 1), (List("ķirši"), 1)))(search_fuzzy(word("kirsa"), 1))
 
     //fuzzy search, edit distance 2
     assertResult(List((List("akls"), 2)))(search_fuzzy(word("akliss"), 2))
-    assertResult(List((List("aknas", "akls"), 2)))(search_fuzzy(word("kaklas"), 2))
+    assertResult(List((List("akls"), 2), (List("aknas"), 2)))(search_fuzzy(word("kaklas"), 2))
     assertResult(List((List("akls"), 2)))(search_fuzzy(word("kikls"), 2))
     assertResult(List((List("akls"), 2)))(search_fuzzy(word("akliss"), 2))
     assertResult(Nil)(search_fuzzy(word("kakliss"), 2))

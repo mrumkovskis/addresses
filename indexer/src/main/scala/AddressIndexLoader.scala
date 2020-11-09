@@ -54,14 +54,17 @@ trait AddressIndexLoader { this: AddressFinder =>
         os.writeInt(path.size)
         path.foreach(os.writeInt)
         os.writeUTF(word)
-        os.writeInt(refs.size)
-        refs.foreach{ c =>
-          os.writeInt(c.code)
-          os.writeBoolean(c.exact)
+        def writeRefs(r: AB[Int]) = {
+          os.writeInt(r.size)
+          r foreach os.writeInt
         }
-        if (refs.size > maxRefArrayLength) {
+        //write exact refs
+        writeRefs(refs.exact)
+        writeRefs(refs.approx)
+        //write approx refs
+        if (refs.exact.size + refs.approx.size > maxRefArrayLength) {
           maxRefArrayWord = word
-          maxRefArrayLength = refs.size
+          maxRefArrayLength = refs.exact.size + refs.approx.size
         }
       }
       logger.info(s"Max. reference array length for the word '$maxRefArrayWord': $maxRefArrayLength")
@@ -128,10 +131,13 @@ trait AddressIndexLoader { this: AddressFinder =>
         val path = new AB[Int](pathSize)
         1 to pathSize foreach (_ => path += in.readInt)
         val word = in.readUTF
-        val refsSize = in.readInt
-        val refs = new AB[Ref](refsSize)
-        1 to refsSize foreach (_ => refs += Ref(in.readInt, in.readBoolean))
-        index.load(path.toVector, word, refs)
+        def readRefs = {
+          val refsSize = in.readInt
+          val refs = new AB[Int](refsSize)
+          1 to refsSize foreach (_ => refs += in.readInt)
+          refs
+        }
+        index.load(path.toVector, word, Refs(exact = readRefs, approx = readRefs))
       }
 
       logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +

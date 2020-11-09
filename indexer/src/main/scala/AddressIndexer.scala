@@ -48,10 +48,18 @@ private object Constants {
 
 trait AddressIndexer { this: AddressFinder =>
 
-  type Refs = AB[Ref]
-
-  case class Ref(code: Int, exact: Boolean)
-  case class FuzzyResult(refs: Refs, editDistance: Int)
+  case class Refs(exact: AB[Int] = AB(), approx: AB[Int] = AB()) {
+    def add(ref: Int, exactMatch: Boolean): Refs = {
+      def coll = if (exactMatch) exact else approx
+      if (coll.size == 0) coll += ref
+      else
+        coll
+          .lastOption.filterNot(_ == ref)
+          .foreach(_ => coll += ref) //do not add code twice
+      this
+    }
+  }
+  case class FuzzyResult(word: String, refs: Refs, editDistance: Int)
 
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
@@ -70,14 +78,14 @@ trait AddressIndexer { this: AddressFinder =>
 
   sealed class MutableIndex(var children: AB[MutableIndexNode]) {
     private[this] var multiWordStartIdx = 0
-    def updateChildren(w: String, ref: Ref): Unit = {
+    def updateChildren(w: String, ref: Int, exact: Boolean): Unit = {
       if (isEmpty) children = AB()
       val i = binarySearch[MutableIndexNode, String](children, w, _.word, compPrefixes)
       if (i < 0) {
-        children.insert(-(i + 1), new MutableIndexNode(w, AB(ref), null))
+        children.insert(-(i + 1), new MutableIndexNode(w, Refs().add(ref, exact), null))
         if (!w.contains("*")) multiWordStartIdx += 1
       } else {
-        children(i).update(w, ref)
+        children(i).update(w, ref, exact)
       }
     }
 
@@ -86,7 +94,7 @@ trait AddressIndexer { this: AddressFinder =>
       if(str.contains("*")) {
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
-        if (idx < 0) AB()
+        if (idx < 0) Refs()
         else children(idx).refs
       } else search(str)
     }
@@ -97,16 +105,24 @@ trait AddressIndexer { this: AddressFinder =>
         val idx = binarySearchFromUntil[MutableIndexNode, String](
           children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
         if (idx < 0) AB()
-        else AB(FuzzyResult(children(idx).refs, 0))
-      } else fuzzySearch(str, 0, maxEditDistance)
+        else AB(FuzzyResult(children(idx).word, children(idx).refs, 0))
+      } else {
+        val r =
+          fuzzySearch(str, 0, maxEditDistance)
+            .groupBy(_.word)
+            .map[FuzzyResult] { case (_, searchResults) =>
+              searchResults.minBy(_.editDistance)
+            }
+        AB.from(r).sortBy(_.editDistance)
+      }
     }
 
     private[MutableIndex] def search(str: String): Refs = {
-      if (children == null) return AB()
+      if (children == null) return Refs()
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
-      if (idx < 0) AB()
+      if (idx < 0) Refs()
       else if (str.length == 1) children(idx).refs
       else children(idx).search(str.drop(1))
     }
@@ -140,35 +156,18 @@ trait AddressIndexer { this: AddressFinder =>
           replaceOrPrefix(str drop 1)
       }
 
-      def mergeTransformedResult(res: AB[FuzzyResult]): AB[FuzzyResult] = {
-        res.groupBy(_.editDistance).map[(Refs, Int)] { case (e, refs) => //parametrize map method so that iterable is returned
-          merge[Ref](refs.map(_.refs), _.code - _.code) -> e
-        }
-        .toArray
-        .sortBy(_._2)
-        .unzip match {
-          case (arr, errs) =>
-            pruneRight[Ref](AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*),
-              _.code - _.code
-            )
-            .zip(errs)
-            .withFilter(_._1.nonEmpty)
-            .map { case (refs, err) => FuzzyResult(refs, err) }
-        }
-      }
-
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
       if (idx < 0) {
         if (currentEditDistance >= maxEditDistance) AB()
-        else mergeTransformedResult(tryTransformedSearch('\u0000')) //no char excluded
+        else tryTransformedSearch('\u0000') //no char excluded
       } else {
         val r =
           children(idx)
             .fuzzySearch(str.drop(1), currentEditDistance, maxEditDistance, p + c)
         if (currentEditDistance >= maxEditDistance) r
-        else mergeTransformedResult(r ++ tryTransformedSearch(c)) //exclude found char from further fuzzy search
+        else r ++ tryTransformedSearch(c) //exclude found char from further fuzzy search
       }
     }
 
@@ -233,20 +232,20 @@ trait AddressIndexer { this: AddressFinder =>
   final class MutableIndexNode(var word: String, var refs: Refs,
                                _children: AB[MutableIndexNode]) extends MutableIndex(_children) {
 
-    def update(w: String, ref: Ref): Unit = {
+    def update(w: String, ref: Int, exact: Boolean): Unit = {
       val (commonPart, nodeRest, wordRest) = split(word, w)
       if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
-        refs.lastOption.filterNot(_ == ref).foreach(_ => refs += ref) //do not add code twice
+        refs.add(ref, exact)
       } else {
         if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
           word = commonPart
-          val nc = refs
-          refs = AB(ref)
+          val chRefs = refs
+          refs = Refs().add(ref, exact)
           val nch = children
-          children = AB(new MutableIndexNode(nodeRest, nc, nch)) //move children and codes to new child node
+          children = AB(new MutableIndexNode(nodeRest, chRefs, nch)) //move children and refs to new child node
         }
         if (wordRest.nonEmpty) { //update children with remaining part of new word
-          updateChildren(wordRest, ref)
+          updateChildren(wordRest, ref, exact)
         }
       }
     }
@@ -254,22 +253,14 @@ trait AddressIndexer { this: AddressFinder =>
     override private[AddressIndexer] def fuzzySearch(str: String,
                                                      currentEditDistance: Int,
                                                      maxEditDistance: Int, p: String = ""): AB[FuzzyResult] = {
-      def maybe_filter_exact(dist: Int): AB[FuzzyResult] =
-        (if (dist >= maxEditDistance) refs.filter(_.exact) else refs) match {
-          case r if r.nonEmpty => AB(FuzzyResult(r, dist))
-          case _ => AB()
-        }
 
       if (str.isEmpty) {
-        if (currentEditDistance > maxEditDistance) AB()
-        else maybe_filter_exact(currentEditDistance)
+        if (currentEditDistance > maxEditDistance || refs.exact.isEmpty) AB()
+        else AB(FuzzyResult(p, refs, currentEditDistance))
       } else if (children == null) {
         val err = currentEditDistance + str.length
-        if (err <= maxEditDistance) {
-          maybe_filter_exact(err)
-        } else {
-          AB()
-        }
+        if (err <= maxEditDistance && refs.exact.nonEmpty) AB(FuzzyResult(p, refs, err))
+        else AB()
       } else {
         super.fuzzySearch(str, currentEditDistance, maxEditDistance, p)
       }
@@ -301,19 +292,26 @@ trait AddressIndexer { this: AddressFinder =>
 
     /** Debuging info */
     override def statistics: IndexStats = {
-      IndexStats(0, refs.size) + super.statistics
+      IndexStats(0, refs.exact.size + refs.approx.size) + super.statistics
     }
 
     override private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
-      (if (word.length > 1 && !word.contains("*")) AB((path, word, _idxCode(refs.head.code))) else AB()) ++
+      (if (word.length > 1 && !word.contains("*"))
+        AB((path, word, _idxCode(refs.exact.headOption.getOrElse(refs.approx.head))))
+      else AB()) ++
         super.validateNodeWord(path + word)
     }
     override private[AddressIndexer] def validateIndex(path: String): AB[(String, AB[Int])] = {
       val wrongCodes = AB[Int]()
-      refs.reduce { (prevCode, curCode) =>
-        if (prevCode.code >= curCode.code) wrongCodes += curCode.code
-        curCode
+      def findDuplicates(arr: AB[Int]): Int = {
+        if (arr.isEmpty) return -1
+        arr.reduce { (prevCode, curCode) =>
+          if (prevCode >= curCode) wrongCodes += curCode
+          curCode
+        }
       }
+      findDuplicates(refs.exact)
+      findDuplicates(refs.approx)
       (if (wrongCodes.nonEmpty) AB(s"$path|$word" -> wrongCodes.map(_idxCode)) else AB()) ++
         super.validateIndex(path + word)
     }
@@ -338,14 +336,14 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
-    def intersect(idx: Array[Refs], limit: Int): AB[Int] = {
+    def intersect(idx: Array[AB[Int]], limit: Int): AB[Int] = {
       val result = AB[Int]()
       val pos = Array.fill(idx.length)(0)
       def check_register = {
-        val v = idx(0)(pos(0)).code
+        val v = idx(0)(pos(0))
         val l = pos.length
         var i = 1
-        while (i < l && v == idx(i)(pos(i)).code) i += 1
+        while (i < l && v == idx(i)(pos(i))) i += 1
         if (i == l) {
           if (types == null || has_type(v)) result append v
           i = 0
@@ -356,14 +354,14 @@ trait AddressIndexer { this: AddressFinder =>
         }
       }
       def find_equal(a_pos: Int, b_pos: Int) = {
-        val a: Refs = idx(a_pos)
-        val b: Refs = idx(b_pos)
+        val a: AB[Int] = idx(a_pos)
+        val b: AB[Int] = idx(b_pos)
         val al = a.length
         val bl = b.length
         var ai = pos(a_pos)
         var bi = pos(b_pos)
-        while (ai < al && bi < bl && a(ai).code != b(bi).code)
-          if (a(ai).code < b(bi).code) ai += 1 else bi += 1
+        while (ai < al && bi < bl && a(ai) != b(bi))
+          if (a(ai) < b(bi)) ai += 1 else bi += 1
         pos(a_pos) = ai
         pos(b_pos) = bi
       }
@@ -385,58 +383,64 @@ trait AddressIndexer { this: AddressFinder =>
       result.map(i => _idxCode(i))
     }
 
-    def intersectFuzzy(results: Array[AB[FuzzyResult]]): AB[(AB[Int], Int)] = {
-      if (results.exists(_.isEmpty)) return AB()
-      val count = results.length
-      val ls = results.map(_.length - 1)
-      val pos = Array.fill(count)(0)
-      val res = AB[(AB[Int], Int)]()
-      def neq = {
-        var i = 0
-        while (i < count && pos(i) == ls(i)) i += 1
-        i != count
-      }
-      val intersectable = new Array[Refs](count)
-      do {
-        var err = 0
-        var i = 0
-        while (i < count) {
-          val fr = results(i)(pos(i))
-          intersectable(i) = fr.refs
-          err += fr.editDistance
-          i += 1
-        }
-        res += (intersect(intersectable, limit) -> err)
-        i = 0
-        var shift = true
-        while (i < count && shift) {
-          if (pos(i) == ls(i)) {
-            pos(i) = 0
-          } else {
-            pos(i) += 1
-            shift = false
-          }
-          i += 1
-        }
-      } while(neq)
-      res.sortBy(_._2)
-    }
-
     val params = searchParams(words)
-    (params map idx_vals sortBy(_.size) match {
+    (params map idx_vals).map(r => AB(r.exact, r.approx)) match {
       case a if a.isEmpty => AB[(AB[Int], Int)]()
-      case result => intersect(result, limit) match {
-        case intersected if intersected.nonEmpty => AB((intersected, 0))
-        case _ => AB[(AB[Int], Int)]()
-      }
-    }) match {
-      case r if r.nonEmpty => r
-      case _ => intersectFuzzy(params map idx_vals_fuzzy)
+      case result =>
+        val intersection = AB[Int]()
+        val combInit = (new Array[AB[Int]](result.size), 0) //(refs, idx)
+        foldCombinations[AB[Int], (Array[AB[Int]], Int), AB[Int]](result,
+          combInit,
+          (cr, d) => {
+            cr._1(cr._2) = d
+            (cr._1, cr._2 + 1)
+          },
+          intersection,
+          (r, cr) => {
+            r ++= intersect(cr._1, limit)
+            r
+          }
+        )
+        intersection match {
+          case intersected if intersected.nonEmpty => AB((intersected.take(limit), 0)) //exact result found
+          case _ =>
+            val fuzzyRes = (params map idx_vals_fuzzy)
+              .map(_.map(fr => fr.refs.exact -> fr.editDistance)) //pick only exact refs for fuzzy result
+            val fuzzyIntersection = AB[(AB[Int], Int)]()
+            val fuzzyCombInit = (new Array[AB[Int]](result.size), 0, 0) //(refs, editDistance, idx)
+            foldCombinations[(AB[Int], Int), (Array[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
+              fuzzyRes,
+              fuzzyCombInit,
+              (cr, d) => {
+                cr._1(cr._3) = d._1
+                (cr._1, cr._2 + d._2, cr._3 + 1) //sum all edit distances from fuzzy results
+              },
+              fuzzyIntersection,
+              (r, cr) => {
+                r += (intersect(cr._1, limit) -> cr._2)
+                r
+              }
+            )
+            fuzzyIntersection
+              .groupBy(_._2)
+              .map[(AB[Int], Int)] {
+                case (err, refs) => //parametrize map method so that iterable is returned
+                  merge(refs.map(_._1)) -> err
+              }
+              .toArray
+              .sortBy(_._2)
+              .unzip match {
+                case (arr, errs) =>
+                  pruneRight(AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*))
+                    .zip (errs)
+                    .filter(_._1.nonEmpty)
+            }
+        }
     }
   }
 
   def fuzzySearch(str: String, editDistance: Int): AB[(AB[Int], Int)] = {
-    _index(str, editDistance).map(fr => (fr.refs.map(r => _idxCode(r.code)), fr.editDistance))
+    _index(str, editDistance).map(fr => (fr.refs.exact.map(_idxCode(_)), fr.editDistance))
   }
 
   def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {
@@ -474,8 +478,7 @@ trait AddressIndexer { this: AddressFinder =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
           wordsLists foreach(_ foreach { w =>
-            index.updateChildren(w,
-              Ref(idx, normalize(name).contains(w)))
+            index.updateChildren(w, idx, normalize(name).contains(w))
           })
           idx_code += (idx -> code)
           idx += 1
@@ -586,31 +589,31 @@ trait AddressIndexer { this: AddressFinder =>
   }
 
   /** Merge ordered collections removing duplicates */
-  def merge[T >: Null](arrs: AB[AB[T]], comparator: (T, T) => Int): AB[T] = {
-    def merge(r1: AB[T], r2: AB[T]) = {
+  def merge(arrs: AB[AB[Int]]): AB[Int] = {
+    def merge(r1: AB[Int], r2: AB[Int]) = {
       var i1 = 0
       var i2 = 0
       val l1 = r1.length
       val l2 = r2.length
-      val res = new AB[T](Math.max(l1, l2))
-      var prevCode: T = null
+      val res = new AB[Int](Math.max(l1, l2))
+      var prevCode = -1
       while (i1 < l1 && i2 < l2) {
         val c1 = r1(i1)
         val c2 = r2(i2)
-        if (comparator(c1, c2) < 0) {
-          if (prevCode == null || comparator(prevCode, c1) < 0) {
+        if (c1 < c2) {
+          if (prevCode < c1) {
             res += r1(i1)
             prevCode = c1
           }
           i1 += 1
-        } else if (comparator(c1, c2) > 0) {
-          if (prevCode == null || comparator(prevCode, c2) < 0) {
+        } else if (c1 > c2) {
+          if (prevCode < c2) {
             res += r2(i2)
             prevCode = c2
           }
           i2 += 1
         } else {
-          if (prevCode == null || comparator(prevCode, c1) < 0) {
+          if (prevCode < c1) {
             res += r1(i1)
             prevCode = c1
           }
@@ -618,11 +621,11 @@ trait AddressIndexer { this: AddressFinder =>
           i2 += 1
         }
       }
-      def addDistinct(a: AB[T], start: Int, l: Int) = {
+      def addDistinct(a: AB[Int], start: Int, l: Int) = {
         var i = start
         while(i < l) {
           val c = a(i)
-          if (prevCode == null || comparator(prevCode, c) < 0) {
+          if (prevCode < c) {
             res += a(i)
             prevCode = c
           }
@@ -637,16 +640,18 @@ trait AddressIndexer { this: AddressFinder =>
     else arrs.reduce(merge)
   }
 
-  /** Removes collections values that are in left collection(s) placed to the left, collections are ordered */
-  def pruneRight[T](arrs: AB[AB[T]], comparator: (T, T) => Int): AB[AB[T]] = {
-    def prune(l: AB[T], r: AB[T]): AB[T] = {
+  /** Removes duplicates from collections going forward i.e. from collection at index 1 are removed elements
+   * contained by collection at index 0, and so on.
+   * Collections are ordered */
+  def pruneRight(arrs: AB[AB[Int]]): AB[AB[Int]] = {
+    def prune(l: AB[Int], r: AB[Int]): AB[Int] = {
       if (l.isEmpty && r.isEmpty) return r
       var li = 0
       var ri = 0
       val ll = l.length
       while(li < ll && ri < r.length) {
-        if (comparator(l(li), r(ri)) < 0) li += 1
-        else if (comparator(l(li), r(ri)) > 0) ri += 1
+        if (l(li) < r(ri)) li += 1
+        else if (l(li) > r(ri)) ri += 1
         else {
           r.remove(ri)
           li += 1
@@ -667,5 +672,42 @@ trait AddressIndexer { this: AddressFinder =>
     }
     arrs
   }
-}
 
+  def foldCombinations[A, B, C](data: Array[AB[A]],
+                                combInit: B,
+                                combFun: (B, A) => B,
+                                init: C,
+                                folder: (C, B) => C): C = {
+    if (data.exists(_.isEmpty)) return init
+    val count = data.length
+    val ls = data.map(_.length - 1)
+    val pos = Array.fill(count)(0)
+    var res = init
+    def neq = {
+      var i = 0
+      while (i < count && pos(i) == 0) i += 1
+      i != count
+    }
+    do {
+      var combRes = combInit
+      var i = 0
+      while (i < count) {
+        combRes = combFun(combRes, data(i)(pos(i)))
+        i += 1
+      }
+      res = folder(res, combRes)
+      i = 0
+      var shift = true
+      while (i < count && shift) {
+        if (pos(i) == ls(i)) {
+          pos(i) = 0
+        } else {
+          pos(i) += 1
+          shift = false
+        }
+        i += 1
+      }
+    } while(neq)
+    init
+  }
+}
