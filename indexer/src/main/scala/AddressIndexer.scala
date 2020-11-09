@@ -402,7 +402,8 @@ trait AddressIndexer { this: AddressFinder =>
           }
         )
         intersection match {
-          case intersected if intersected.nonEmpty => AB((intersected.take(limit), 0)) //exact result found
+          case intersected if intersected.nonEmpty => //exact result found
+            AB((if (intersected.size > limit) intersected.take(limit) else intersected, 0))
           case _ =>
             val fuzzyRes = (params map idx_vals_fuzzy)
               .map(_.map(fr => fr.refs.exact -> fr.editDistance)) //pick only exact refs for fuzzy result
@@ -421,20 +422,22 @@ trait AddressIndexer { this: AddressFinder =>
                 r
               }
             )
-            fuzzyIntersection
-              .groupBy(_._2)
-              .map[(AB[Int], Int)] {
-                case (err, refs) => //parametrize map method so that iterable is returned
-                  merge(refs.map(_._1)) -> err
-              }
-              .toArray
-              .sortBy(_._2)
-              .unzip match {
-                case (arr, errs) =>
-                  pruneRight(AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*))
-                    .zip (errs)
-                    .filter(_._1.nonEmpty)
-            }
+            val res =
+              fuzzyIntersection
+                .groupBy(_._2)
+                .map[(AB[Int], Int)] {
+                  case (err, refs) => //parametrize map method so that iterable is returned
+                    merge(refs.map(_._1)) -> err
+                }
+                .toArray
+                .sortBy(_._2)
+                .unzip match {
+                  case (arr, errs) =>
+                    pruneRight(AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*))
+                      .zip (errs)
+                      .filter(_._1.nonEmpty)
+                }
+            if (res.size > limit) res.take(limit) else res
         }
     }
   }
