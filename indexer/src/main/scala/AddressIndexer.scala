@@ -384,7 +384,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     val params = searchParams(words)
-    (params map idx_vals).map(r => AB(r.exact, r.approx)) match {
+    (params map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty)) match {
       case a if a.isEmpty => AB[(AB[Int], Int)]()
       case result =>
         val intersection = AB[Int]()
