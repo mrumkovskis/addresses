@@ -156,6 +156,7 @@ trait AddressIndexer { this: AddressFinder =>
           replaceOrPrefix(str drop 1)
       }
 
+      if (str.isEmpty) return AB()
       val c = str.head
       val idx = binarySearchFromUntil[MutableIndexNode, Char](
         children, 0, searchUntilIdx, c, _.word.head, _ - _)
@@ -255,8 +256,17 @@ trait AddressIndexer { this: AddressFinder =>
                                                      maxEditDistance: Int, p: String = ""): AB[FuzzyResult] = {
 
       if (str.isEmpty) {
-        if (currentEditDistance > maxEditDistance || refs.exact.isEmpty) AB()
-        else AB(FuzzyResult(p, refs, currentEditDistance))
+        if (currentEditDistance > maxEditDistance) AB()
+        else {
+          //add exact refs to fuzzy result
+          (if (refs.exact.isEmpty) AB() else AB(FuzzyResult(p, refs, currentEditDistance))) ++
+          //add children word values if current edit distance is less than max edit distance
+          (if (currentEditDistance < maxEditDistance && children != null)  {
+            children.foldLeft(AB[FuzzyResult]()) { case (r, c) =>
+              r ++= c.fuzzySearch(str, currentEditDistance + 1, maxEditDistance, p + c.word)
+            }
+          } else AB())
+        }
       } else if (children == null) {
         val err = currentEditDistance + str.length
         if (err <= maxEditDistance && refs.exact.nonEmpty) AB(FuzzyResult(p, refs, err))
@@ -407,27 +417,38 @@ trait AddressIndexer { this: AddressFinder =>
           case _ =>
             val fullRes = params map idx_vals_fuzzy
             val fuzzyRes = fullRes
-              .map(_.map(fr => fr.refs.exact -> fr.editDistance)) //pick only exact refs for fuzzy result
+              .map(_.map(fr => (fr.word, fr.refs.exact, fr.editDistance))) //pick only exact refs for fuzzy result
             val fuzzyIntersection = AB[(AB[Int], Int)]()
+            var productiveIntersectionCount = 0
             var intersectionCount = 0
             val fuzzyCombInit = (new Array[AB[Int]](result.size), 0, 0) //(refs, editDistance, idx)
-            foldCombinations[(AB[Int], Int), (Array[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
+            val currentWords = Array.fill(fullRes.size)("")
+            val MaxProductiveIntersectionCount = 32
+            val MaxIntersectionCount = 1024
+            foldCombinations[(String, AB[Int], Int), (Array[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
               fuzzyRes,
               fuzzyCombInit,
               (cr, d) => {
-                cr._1(cr._3) = d._1
-                (cr._1, cr._2 + d._2, cr._3 + 1) //sum all edit distances from fuzzy results
+                currentWords(cr._3) = d._1 //for debugging purposes
+                cr._1(cr._3) = d._2
+                (cr._1, cr._2 + d._3, cr._3 + 1) //sum all edit distances from fuzzy results
               },
               fuzzyIntersection,
               (r, cr) => {
-                r += (intersect(cr._1, limit) -> cr._2)
+                val int_ed = (intersect(cr._1, limit), cr._2)
+                if (int_ed._1.nonEmpty) {
+                  r += int_ed
+                  productiveIntersectionCount += 1
+                }
                 intersectionCount += 1
-                if (intersectionCount > 32)
-                  logger.warn(s"A LOT OF FUZZY RESULTS: ${fullRes.map(_.size).mkString("(", ",", ")")}\n ${
+                //println(s"INTERSECTION: ${currentWords.mkString(",")}, ${int_ed._1.size}")
+                if (intersectionCount > MaxIntersectionCount)
+                  logger.debug(s"A LOT OF FUZZY RESULTS: ${fullRes.map(_.size).mkString("(", ",", ")")}\n ${
                     fullRes.map(_.map(fr => fr.word -> fr.editDistance)
                       .mkString("(", ",", ")")).mkString(",")}")
 
-                (r, intersectionCount <= 32)
+                (r, intersectionCount < MaxIntersectionCount &&
+                  productiveIntersectionCount < MaxProductiveIntersectionCount)
               }
             )
             val res =
@@ -450,8 +471,8 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
 
-  def fuzzySearch(str: String, editDistance: Int): AB[(AB[Int], Int)] = {
-    _index(str, editDistance).map(fr => (fr.refs.exact.map(_idxCode(_)), fr.editDistance))
+  def fuzzySearch(str: String, editDistance: Int): AB[FuzzyResult] = {
+    _index(str, editDistance)
   }
 
   def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {
