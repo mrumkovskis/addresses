@@ -387,7 +387,6 @@ trait AddressIndexer { this: AddressFinder =>
     (params map idx_vals).map(r => AB(r.exact, r.approx)) match {
       case a if a.isEmpty => AB[(AB[Int], Int)]()
       case result =>
-        var intersectionCount = 0
         val intersection = AB[Int]()
         val combInit = (new Array[AB[Int]](result.size), 0) //(refs, idx)
         foldCombinations[AB[Int], (Array[AB[Int]], Int), AB[Int]](result,
@@ -410,6 +409,7 @@ trait AddressIndexer { this: AddressFinder =>
             val fuzzyRes = fullRes
               .map(_.map(fr => fr.refs.exact -> fr.editDistance)) //pick only exact refs for fuzzy result
             val fuzzyIntersection = AB[(AB[Int], Int)]()
+            var intersectionCount = 0
             val fuzzyCombInit = (new Array[AB[Int]](result.size), 0, 0) //(refs, editDistance, idx)
             foldCombinations[(AB[Int], Int), (Array[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
               fuzzyRes,
@@ -427,7 +427,7 @@ trait AddressIndexer { this: AddressFinder =>
                     fullRes.map(_.map(fr => fr.word -> fr.editDistance)
                       .mkString("(", ",", ")")).mkString(",")}")
 
-                (r, true) // TODO maybe some limit needed due to performance reasons?
+                (r, intersectionCount <= 32)
               }
             )
             val res =
