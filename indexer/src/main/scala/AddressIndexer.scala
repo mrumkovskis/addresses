@@ -1,6 +1,7 @@
 package lv.addresses.indexer
 
-import scala.collection.mutable
+import java.util.Properties
+
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
 
@@ -478,21 +479,31 @@ trait AddressIndexer { this: AddressFinder =>
   def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {
 
     logger.info("Starting address indexing...")
+    logger.info("Loading address synonyms...")
+    val synonyms: Properties = {
+      val props = new Properties()
+      val in = getClass.getResourceAsStream("/synonyms.properties")
+      if (in != null) props.load(in)
+      props
+    }
+    logger.info(s"${synonyms.size} address synonym(s) loaded")
+
     logger.info(s"Sorting ${addressMap.size} addresses...")
 
     val index = new MutableIndex(null)
 
     //(addressCode, ordering weight, full space separated unnaccented address)
-    val addresses = new Array[(Int, Int, String)](addressMap.size)
     var idx = 0
-    addressMap.foreach { case (code, addr) =>
-      addresses(idx) = (code, typeOrderMap(addr.typ) * 100 + addr.depth,
-          addr.foldRight(new scala.collection.mutable.StringBuilder())((b, o) =>
-            b.append(" ").append(unaccent(o.name))).toString)
-      idx += 1
-    }
-    val sortedAddresses = addresses.sortWith { case ((_, ord1, a1), (_, ord2, a2)) =>
-      ord1 < ord2 || (ord1 == ord2 && (a1.length < a2.length || (a1.length == a2.length && a1 < a2)))
+    val sortedAddresses = {
+      val addresses = new Array[(Int, Int, String)](addressMap.size)
+      addressMap.foreach { case (code, addr) =>
+        addresses(idx) = (code, typeOrderMap(addr.typ) * 100 + addr.depth,
+          addr.foldRight(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" "))
+        idx += 1
+      }
+      addresses.sortWith { case ((_, ord1, a1), (_, ord2, a2)) =>
+        ord1 < ord2 || (ord1 == ord2 && (a1.length < a2.length || (a1.length == a2.length && a1 < a2)))
+      }
     }
 
     _sortedPilsNovPagCiem =
@@ -512,6 +523,9 @@ trait AddressIndexer { this: AddressFinder =>
           wordsLists foreach(_ foreach { w =>
             index.updateChildren(w, idx, normalize(name).contains(w))
           })
+          //update synonyms
+          Option(synonyms.getProperty(name))
+            .foreach(syn => extractWords(syn).foreach(index.updateChildren(_, idx, true)))
           idx_code += (idx -> code)
           idx += 1
           if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")
