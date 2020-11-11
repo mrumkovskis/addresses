@@ -25,8 +25,8 @@ private object Constants {
   )
   val typeOrderMap = Map[Int, Int](
     NOV -> 1, //novads
-    PAG -> 2, //pagasts
-    PIL -> 3, //pilsēta
+    PIL -> 2, //pilsēta
+    PAG -> 3, //pagasts
     CIE -> 4, //ciems
     IEL -> 5, //iela
     NLT -> 6, //nekustama lieta (māja)
@@ -495,9 +495,13 @@ trait AddressIndexer { this: AddressFinder =>
     //(addressCode, ordering weight, full space separated unnaccented address)
     var idx = 0
     val sortedAddresses = {
+      def typeOrder(code: Int, typ: Int) = typ match {
+        case PIL if !addressMap.contains(addressMap(code).superCode) => 0 // top level cities
+        case _ => typeOrderMap(typ)
+      }
       val addresses = new Array[(Int, Int, String)](addressMap.size)
       addressMap.foreach { case (code, addr) =>
-        addresses(idx) = (code, typeOrderMap(addr.typ) * 100 + addr.depth,
+        addresses(idx) = (code, typeOrder(code, addr.typ) * 100 + addr.depth,
           addr.foldRight(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" "))
         idx += 1
       }
