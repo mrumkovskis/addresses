@@ -526,10 +526,10 @@ trait AddressIndexer { this: AddressFinder =>
             history.getOrElse(code, Nil).map(extractWords)
           wordsLists foreach(_ foreach { w =>
             index.updateChildren(w, idx, normalize(name).contains(w))
+            //update synonyms
+            Option(synonyms.getProperty(w))
+              .foreach(syn => extractWords(syn).foreach(index.updateChildren(_, idx, true)))
           })
-          //update synonyms
-          Option(synonyms.getProperty(name))
-            .foreach(syn => extractWords(syn).foreach(index.updateChildren(_, idx, true)))
           idx_code += (idx -> code)
           idx += 1
           if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")
