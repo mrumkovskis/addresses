@@ -330,6 +330,8 @@ trait AddressIndexer { this: AddressFinder =>
 
   protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
   protected var _index: MutableIndex = null
+  def idxCode = _idxCode
+  def indexNode = _index
   //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
   protected var _sortedPilsNovPagCiem: Vector[Int] = null
 
