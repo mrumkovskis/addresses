@@ -400,6 +400,7 @@ trait AddressIndexer { this: AddressFinder =>
     (params map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty)) match {
       case a if a.isEmpty => AB[(AB[Int], Int)]()
       case result =>
+        var refCount = 0
         val intersection = AB[Int]()
         val combInit = (new Array[AB[Int]](result.size), 0) //(refs, idx)
         foldCombinations[AB[Int], (Array[AB[Int]], Int), AB[Int]](result,
@@ -410,14 +411,18 @@ trait AddressIndexer { this: AddressFinder =>
           },
           intersection,
           (r, cr) => {
-            r ++= intersect(cr._1, limit)
-            (r, true)
+            val intr = intersect(cr._1, limit)
+            r ++= intr
+            refCount += intr.length
+            (r, refCount < limit)
           }
         )
         intersection match {
           case intersected if intersected.nonEmpty => //exact result found
             AB((if (intersected.size > limit) intersected.take(limit) else intersected, 0))
           case _ =>
+            //reset ref count
+            refCount = 0
             val fullRes = params map idx_vals_fuzzy
             val fuzzyRes = fullRes
               .map(_.map(fr => (fr.word, fr.refs.exact, fr.editDistance))) //pick only exact refs for fuzzy result
@@ -441,6 +446,7 @@ trait AddressIndexer { this: AddressFinder =>
                 val int_ed = (intersect(cr._1, limit), cr._2)
                 if (int_ed._1.nonEmpty) {
                   r += int_ed
+                  refCount += int_ed._1.length
                   productiveIntersectionCount += 1
                 }
                 intersectionCount += 1
@@ -450,8 +456,10 @@ trait AddressIndexer { this: AddressFinder =>
                     fullRes.map(_.map(fr => fr.word -> fr.editDistance)
                       .mkString("(", ",", ")")).mkString(",")}")
 
-                (r, intersectionCount < MaxIntersectionCount &&
-                  productiveIntersectionCount < MaxProductiveIntersectionCount)
+                (r, refCount < limit &&
+                    intersectionCount < MaxIntersectionCount &&
+                    productiveIntersectionCount < MaxProductiveIntersectionCount
+                )
               }
             )
             val res =
