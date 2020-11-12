@@ -110,10 +110,23 @@ trait AddressFinder
           .map(_.toInt)
           .map(address(_, editDistance))
       }
+      val resultCodes = searchCodes(words)(1024, types)
+      val length = resultCodes.length
       val addresses = new AB[Address]()
-      searchCodes(words)(1024, types)
-        .foreach { case (codes, err) => addresses ++= codesToAddr(codes, err) }
-      addresses.toArray
+      var i = 0
+      while (i < length && addresses.length < limit) {
+        val (codes, err) = resultCodes(i)
+        addresses ++= codesToAddr(codes, err)
+        i += 1
+      }
+      val size = Math.min(limit, addresses.length)
+      val result = new Array[Address](size)
+      i = 0
+      while (i < size) {
+        result(i) = addresses(i)
+        i += 1
+      }
+      result
     }
   }
 
