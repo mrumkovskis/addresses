@@ -61,6 +61,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
   case class FuzzyResult(word: String, refs: Refs, editDistance: Int)
+  case class PartFuzRes(word: String, refs: Refs, editDistance: Int, rest: Option[String])
 
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
@@ -269,9 +270,12 @@ trait AddressIndexer { this: AddressFinder =>
           } else AB())
         }
       } else if (children == null) {
-        val err = currentEditDistance + str.length
-        if (err <= maxEditDistance && refs.exact.nonEmpty) AB(FuzzyResult(p, refs, err))
-        else AB()
+        if (currentEditDistance > maxEditDistance) AB()
+        else if (refs.exact.nonEmpty) {
+          val err = currentEditDistance + str.length
+          if (err <= maxEditDistance) AB(FuzzyResult(p, refs, err))
+          else AB()//AB(FuzzyResult(p, refs, currentEditDistance)) // TODO return partial fuzzy result
+        } else AB()
       } else {
         super.fuzzySearch(str, currentEditDistance, maxEditDistance, p)
       }
@@ -350,50 +354,8 @@ trait AddressIndexer { this: AddressFinder =>
 
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
     def intersect(idx: Array[AB[Int]], limit: Int): AB[Int] = {
-      val result = AB[Int]()
-      val pos = Array.fill(idx.length)(0)
-      def check_register = {
-        val v = idx(0)(pos(0))
-        val l = pos.length
-        var i = 1
-        while (i < l && v == idx(i)(pos(i))) i += 1
-        if (i == l) {
-          if (types == null || has_type(v)) result append v
-          i = 0
-          while (i < l) {
-            pos(i) += 1
-            i += 1
-          }
-        }
-      }
-      def find_equal(a_pos: Int, b_pos: Int) = {
-        val a: AB[Int] = idx(a_pos)
-        val b: AB[Int] = idx(b_pos)
-        val al = a.length
-        val bl = b.length
-        var ai = pos(a_pos)
-        var bi = pos(b_pos)
-        while (ai < al && bi < bl && a(ai) != b(bi))
-          if (a(ai) < b(bi)) ai += 1 else bi += 1
-        pos(a_pos) = ai
-        pos(b_pos) = bi
-      }
-      def continue = {
-        var i = 0
-        val l = pos.length
-        while (i < l && pos(i) < idx(i).length) i += 1
-        i == l
-      }
-      while (result.length < limit && continue) {
-        check_register
-        var i = 0
-        val l = pos.length - 1
-        while(i < l) {
-          find_equal(i, i + 1)
-          i += 1
-        }
-      }
-      result.map(i => _idxCode(i))
+      this.intersect(idx, limit, if (types == null) null else has_type)
+        .map(i => _idxCode(i))
     }
 
     val params = searchParams(words)
@@ -646,6 +608,53 @@ trait AddressIndexer { this: AddressFinder =>
       if (r < 0) from = i + 1 else if (r > 0) to = i - 1 else return i
     }
     -(from + 1)
+  }
+
+  def intersect(idx: Array[AB[Int]], limit: Int, filter: Int => Boolean): AB[Int] = {
+    val result = AB[Int]()
+    val pos = Array.fill(idx.length)(0)
+    def check_register = {
+      val v = idx(0)(pos(0))
+      val l = pos.length
+      var i = 1
+      while (i < l && v == idx(i)(pos(i))) i += 1
+      if (i == l) {
+        if (filter == null || filter(v)) result append v
+        i = 0
+        while (i < l) {
+          pos(i) += 1
+          i += 1
+        }
+      }
+    }
+    def find_equal(a_pos: Int, b_pos: Int) = {
+      val a: AB[Int] = idx(a_pos)
+      val b: AB[Int] = idx(b_pos)
+      val al = a.length
+      val bl = b.length
+      var ai = pos(a_pos)
+      var bi = pos(b_pos)
+      while (ai < al && bi < bl && a(ai) != b(bi))
+        if (a(ai) < b(bi)) ai += 1 else bi += 1
+      pos(a_pos) = ai
+      pos(b_pos) = bi
+    }
+    def continue = {
+      var i = 0
+      val l = pos.length
+      while (i < l && pos(i) < idx(i).length) i += 1
+      i == l
+    }
+    while (result.length < limit && continue) {
+      check_register
+      var i = 0
+      val l = pos.length - 1
+      while(i < l) {
+        find_equal(i, i + 1)
+        i += 1
+      }
+    }
+    result
   }
 
   /** Merge ordered collections removing duplicates */
