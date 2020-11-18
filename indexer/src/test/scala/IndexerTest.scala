@@ -127,7 +127,11 @@ class IndexerTest extends FunSuite {
       "kazdanga",
       "ķirši",
       "ķiršu",
-      "ķirša"
+      "ķirša",
+      "rīga",
+      "brīvības",
+      "brīvības rīga",
+      "brīvības iela rīga"
     )
     .zipWithIndex
     .map { case (addr, idx) =>
@@ -141,7 +145,7 @@ class IndexerTest extends FunSuite {
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
     def res(refs: finder.Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
     def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
-      res.map { case finder.FuzzyResult(_, r, e) => r.exact.map(idx_val(_)).toList -> e }.toList
+      res.map { case finder.FuzzyResult(_, r, e) => r.map(idx_val(_)).toList -> e }.toList
     }
 
     //exact search, edit distance 0
@@ -189,5 +193,10 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 2))
     assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("venpils"), 2))
     assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("vencpils"), 2))
+
+    //fuzzy search with search string split
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"),0)))(search_fuzzy(word("rigabrivibas"), 0))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbas"), 2))
+    assertResult(List((List("brīvības iela rīga"),1)))(search_fuzzy(word("riiabrivibasiela"), 2))
   }
 }
