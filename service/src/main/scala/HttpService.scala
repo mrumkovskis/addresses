@@ -1,6 +1,6 @@
 package lv.addresses.service
 
-import java.io.FileInputStream
+import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
 
 import akka.actor.ActorSystem
@@ -129,6 +129,16 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
             finder => finder.getAddressSource(types)
           }
         }
+      } ~ path("artifact") {
+        val file =
+          Try(conf.getString("address-artifact-file-name"))
+            .map(new File(_))
+            .filter(_.exists)
+            .getOrElse(null)
+
+        if (file != null) {
+          getFromFile(file, ContentTypes.`application/octet-stream`)
+        } else complete(NotFound)
       }
     } ~ reloadBlockedUsers ~ pathSuffixTest(
     """.*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable

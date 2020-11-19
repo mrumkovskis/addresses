@@ -63,3 +63,6 @@ ssl {
 }
 
 address-service-port = 8082
+
+#optional parameter to enable artifact download
+address-artifact-file-name = "<full path to addresses jar>"
