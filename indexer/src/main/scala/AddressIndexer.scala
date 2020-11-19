@@ -154,7 +154,7 @@ trait AddressIndexer { this: AddressFinder =>
           partialRes.foreach { case (_, pr) =>
             res ++= completePartial(pr)
           }
-          reduceResults(res).sortBy(_.editDistance)
+          reduceResults(res)
         } else {
           reduceResults(r)
         }
@@ -319,16 +319,12 @@ trait AddressIndexer { this: AddressFinder =>
           } else AB())
       } else {
         if (refs.exact.nonEmpty) {
-          if (origin.startsWith(p) ||
-            (if (origin.length > p.length)
-              editDistance(p, origin.substring(0, p.length))
-            else
-              editDistance(p, origin)) <= setEditDistance(p)) {
+          if (currentEditDistance <= setEditDistance(p)) {
             val key = p + " " + str
+            def partialEntry = (key, PartialFuzzyResult(p, refs.exact, currentEditDistance, str))
             partial.get(key).map { pr =>
-              if (currentEditDistance < pr.editDistance)
-                partial += (key -> PartialFuzzyResult(p, refs.exact, currentEditDistance, str))
-            }.getOrElse(partial += (key -> PartialFuzzyResult(p, refs.exact, currentEditDistance, str)))
+              if (currentEditDistance < pr.editDistance) partial += partialEntry
+            }.getOrElse(partial += partialEntry)
           }
           if (children == null) {
             val err = currentEditDistance + str.length

@@ -131,7 +131,9 @@ class IndexerTest extends FunSuite {
       "rīga",
       "brīvības",
       "brīvības rīga",
-      "brīvības iela rīga"
+      "brīvības iela rīga",
+      "brīvības valka",
+      "brīvības iela valka"
     )
     .zipWithIndex
     .map { case (addr, idx) =>
@@ -198,5 +200,9 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("brīvības rīga", "brīvības iela rīga"),0)))(search_fuzzy(word("rigabrivibas"), 0))
     assertResult(List((List("brīvības rīga", "brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbas"), 2))
     assertResult(List((List("brīvības iela rīga"),1)))(search_fuzzy(word("riiabrivibasiela"), 2))
+    assertResult(List((List("brīvības iela rīga", "brīvības iela valka"),2)))(search_fuzzy(word("brvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela valka"),3)))(search_fuzzy(word("vlkabrvbasiela"), 2))
   }
 }
