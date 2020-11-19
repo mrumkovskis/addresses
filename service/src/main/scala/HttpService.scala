@@ -9,7 +9,7 @@ import scala.language.postfixOps
 import spray.json._
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpResponse}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpResponse, MediaTypes}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.{ConnectionContext, Http, HttpsConnectionContext}
@@ -129,16 +129,18 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
             finder => finder.getAddressSource(types)
           }
         }
-      } ~ path("artifact") {
-        val file =
-          Try(conf.getString("address-artifact-file-name"))
-            .map(new File(_))
-            .filter(_.exists)
-            .getOrElse(null)
-
-        if (file != null) {
-          getFromFile(file, ContentTypes.`application/octet-stream`)
-        } else complete(NotFound)
+      } ~ path("adreses.jar") {
+        Try(conf.getString("address-artifact-file-name"))
+          .map(new File(_))
+          .filter(_.exists)
+          .map { file =>
+            respondWithHeader(
+              `Content-Disposition`(
+                ContentDispositionTypes.attachment, Map("filename" -> file.getName))) {
+              getFromFile(file, MediaTypes.`application/java-archive`)
+            }
+          }
+          .getOrElse(complete(NotFound))
       }
     } ~ reloadBlockedUsers ~ pathSuffixTest(
     """.*(\.js|\.css|\.html|\.png|\.gif|\.jpg|\.jpeg|\.svg|\.woff|\.ttf|\.woff2)$"""r) { p => //static web resources TODO - make extensions configurable
