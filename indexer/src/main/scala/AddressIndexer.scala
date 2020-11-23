@@ -118,7 +118,8 @@ trait AddressIndexer { this: AddressFinder =>
               .map[FuzzyResult] { case (_, searchResults) =>
                 searchResults.minBy(_.editDistance)
               }
-          AB.from(r).sortBy(_.editDistance)
+          //sort by edit distance asc first and then reference count desc
+          AB.from(r).sortBy(fr => (fr.editDistance << 24) - fr.refs.length)
         }
         def completePartial(pr: PartialFuzzyResult): AB[FuzzyResult] = {
 //          println(s"\nCOMPL PART: ${pr.word} ${pr.rest}, ED: ${pr.editDistance}, RC: ${pr.refs.size}")
@@ -128,8 +129,8 @@ trait AddressIndexer { this: AddressFinder =>
           val nr = fuzzySearch(pr.rest,0,
             Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
           val res = AB[FuzzyResult]()
-          if (nr.isEmpty && npartialRes.nonEmpty) {
-//            println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
+          if (npartialRes.nonEmpty) {
+//          println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
             npartialRes.foreach { case (_, npr) =>
               val is = intersect(Array(pr.refs, npr.refs), 1024, null)
               if (is.nonEmpty) {
@@ -139,16 +140,16 @@ trait AddressIndexer { this: AddressFinder =>
               }
             }
 //            println(s"COMPL PART DONE PART: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
-            res
-          } else {
+          }
+          if (nr.nonEmpty) {
             nr.foreach { fr =>
               val is = intersect(Array(pr.refs, fr.refs), 1024, null)
               if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
                 pr.editDistance + fr.editDistance)
             }
 //            println(s"COMPL PART DONE: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
-            res
           }
+          res
         }
         val partialRes = MM[String, PartialFuzzyResult]()
         val r = fuzzySearch(str,
@@ -324,7 +325,7 @@ trait AddressIndexer { this: AddressFinder =>
           } else AB())
       } else {
         if (refs.exact.nonEmpty) {
-          if (p.length > 1 && currentEditDistance <= setEditDistance(p)) {
+          if (currentEditDistance <= setEditDistance(p)) {
             val key = p + " " + str
             def partialEntry = (key, PartialFuzzyResult(p, refs.exact, currentEditDistance, str))
             partial.get(key).map { pr =>
@@ -444,6 +445,7 @@ trait AddressIndexer { this: AddressFinder =>
             //reset ref count
             refCount = 0
             val fuzzyRes = params map idx_vals_fuzzy
+            //println(s"${fuzzyRes.map(_.map{case FuzzyResult(w, r, d) => s"$w, $d, ${r.length}"}.mkString("[", ",", "]")).mkString("(", ",", ")")}")
             val fuzzyIntersection = AB[(AB[Int], Int)]()
             var productiveIntersectionCount = 0
             var intersectionCount = 0
@@ -461,6 +463,7 @@ trait AddressIndexer { this: AddressFinder =>
               },
               fuzzyIntersection,
               (r, cr) => {
+                //println(s"CURRENT WORDS: [${currentWords.mkString(",")}]")
                 val int_ed = (intersect(cr._1, limit), cr._2)
                 if (int_ed._1.nonEmpty) {
                   r += int_ed
@@ -469,7 +472,7 @@ trait AddressIndexer { this: AddressFinder =>
                 }
                 intersectionCount += 1
                 //println(s"INTERSECTION: ${currentWords.mkString(",")}, ${int_ed._1.size}")
-                if (intersectionCount > MaxIntersectionCount)
+                if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
                   logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
                     fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)
                       .mkString("(", ",", ")")).mkString(",")}")
