@@ -121,6 +121,7 @@ trait AddressIndexer { this: AddressFinder =>
           AB.from(r).sortBy(_.editDistance)
         }
         def completePartial(pr: PartialFuzzyResult): AB[FuzzyResult] = {
+//          println(s"\nCOMPL PART: ${pr.word} ${pr.rest}, ED: ${pr.editDistance}, RC: ${pr.refs.size}")
           if (pr.refs.isEmpty) return AB()
 
           val npartialRes = MM[String, PartialFuzzyResult]()
@@ -128,6 +129,7 @@ trait AddressIndexer { this: AddressFinder =>
             Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
           val res = AB[FuzzyResult]()
           if (nr.isEmpty && npartialRes.nonEmpty) {
+//            println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
             npartialRes.foreach { case (_, npr) =>
               val is = intersect(Array(pr.refs, npr.refs), 1024, null)
               if (is.nonEmpty) {
@@ -136,6 +138,7 @@ trait AddressIndexer { this: AddressFinder =>
                     pr.editDistance + npr.editDistance, npr.rest))
               }
             }
+//            println(s"COMPL PART DONE PART: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
             res
           } else {
             nr.foreach { fr =>
@@ -143,6 +146,7 @@ trait AddressIndexer { this: AddressFinder =>
               if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
                 pr.editDistance + fr.editDistance)
             }
+//            println(s"COMPL PART DONE: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
             res
           }
         }
@@ -151,6 +155,7 @@ trait AddressIndexer { this: AddressFinder =>
           0, maxEditDistance, "", partialRes, str)
         if (r.isEmpty && partialRes.nonEmpty) {
           val res = AB[FuzzyResult]()
+//          println(s"\nPARTIAL RES: ${partialRes.map{ case (k, pr) =>(pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
           partialRes.foreach { case (_, pr) =>
             res ++= completePartial(pr)
           }
@@ -162,7 +167,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
 
     def setEditDistance(word: String): Int = {
-      if (word.exists(_.isDigit)) 0 //no fuzzy search for words with digits in them
+      if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
       else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
     }
 
@@ -319,7 +324,7 @@ trait AddressIndexer { this: AddressFinder =>
           } else AB())
       } else {
         if (refs.exact.nonEmpty) {
-          if (currentEditDistance <= setEditDistance(p)) {
+          if (p.length > 1 && currentEditDistance <= setEditDistance(p)) {
             val key = p + " " + str
             def partialEntry = (key, PartialFuzzyResult(p, refs.exact, currentEditDistance, str))
             partial.get(key).map { pr =>
