@@ -196,6 +196,8 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 2))
     assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("venpils"), 2))
     assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("vencpils"), 2))
+    assertResult(List((List("kazdanga"), 2)))(search_fuzzy(word("sbazdanga"), 2))
+    assertResult(List((List("kazdanga"), 2)))(search_fuzzy(word("kazdangazi"), 2))
 
     //fuzzy search with search string split
     assertResult(List((List("brīvības rīga", "brīvības iela rīga"),0)))(search_fuzzy(word("rigabrivibas"), 0))
