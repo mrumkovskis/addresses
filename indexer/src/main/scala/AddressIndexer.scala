@@ -447,10 +447,10 @@ trait AddressIndexer { this: AddressFinder =>
       else {
         var count = 0
         var result = AB[(AB[Int], Int)]()
-        var editDistance = 0
         binCombinations(params.size - 1, spaces => {
           var i = 1
           var j = 0
+          var editDistance = 0
           val ab = AB[String](params(0))
           spaces foreach { s =>
             if (s == 0) { //separate word
