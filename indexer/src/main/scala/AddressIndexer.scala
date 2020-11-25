@@ -132,7 +132,7 @@ trait AddressIndexer { this: AddressFinder =>
           if (npartialRes.nonEmpty) {
 //          println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
             npartialRes.foreach { case (_, npr) =>
-              val is = intersect(Array(pr.refs, npr.refs), 1024, null)
+              val is = intersect(AB(pr.refs, npr.refs), 1024, null)
               if (is.nonEmpty) {
                 res ++= completePartial(
                   PartialFuzzyResult(pr.word + " " + npr.word, is,
@@ -143,7 +143,7 @@ trait AddressIndexer { this: AddressFinder =>
           }
           if (nr.nonEmpty) {
             nr.foreach { fr =>
-              val is = intersect(Array(pr.refs, fr.refs), 1024, null)
+              val is = intersect(AB(pr.refs, fr.refs), 1024, null)
               if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
                 pr.editDistance + fr.editDistance)
             }
@@ -404,27 +404,26 @@ trait AddressIndexer { this: AddressFinder =>
   /** Returns array of typles, each tuple consist of mathcing address codes and
    * edit distance from search parameters */
   def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): AB[(AB[Int], Int)] = {
-    def searchParams(words: Array[String]) = wordStatForSearch(words)
-      .map { case (w, c) => if (c == 1) w else s"$c*$w" }.toArray
+    def searchParams(words: Array[String]) = AB.from(wordStatForSearch(words)
+      .map { case (w, c) => if (c == 1) w else s"$c*$w" })
     def idx_vals(word: String) = _index(word)
     def idx_vals_fuzzy(word: String) = {
       _index(word, _index.setEditDistance(word))
     }
 
     def has_type(addr_idx: Int) = types(addressMap(_idxCode(addr_idx)).typ)
-    def intersect(idx: Array[AB[Int]], limit: Int): AB[Int] = {
+    def intersect(idx: AB[AB[Int]], limit: Int): AB[Int] = {
       this.intersect(idx, limit, if (types == null) null else has_type)
         .map(i => _idxCode(i))
     }
 
-    val params = searchParams(words)
-    (params map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty)) match {
-      case a if a.isEmpty => AB[(AB[Int], Int)]()
-      case result =>
+    def exactSearch(params: AB[String]): AB[(AB[Int], Int)] = {
+      def run(p: AB[String], editDistance: Int): AB[(AB[Int], Int)] = {
+        val result = (p map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty))
         var refCount = 0
         val intersection = AB[Int]()
-        val combInit = (new Array[AB[Int]](result.size), 0) //(refs, idx)
-        foldCombinations[AB[Int], (Array[AB[Int]], Int), AB[Int]](result,
+        val combInit = (AB.fill[AB[Int]](result.size)(null), 0) //(refs, idx)
+        foldCombinations[AB[Int], (AB[AB[Int]], Int), AB[Int]](result,
           combInit,
           (cr, d) => {
             cr._1(cr._2) = d
@@ -439,67 +438,99 @@ trait AddressIndexer { this: AddressFinder =>
           }
         )
         intersection match {
-          case intersected if intersected.nonEmpty => //exact result found
-            AB((if (intersected.size > limit) intersected.take(limit) else intersected, 0))
-          case _ =>
-            //reset ref count
-            refCount = 0
-            val fuzzyRes = params map idx_vals_fuzzy
-            //println(s"${fuzzyRes.map(_.map{case FuzzyResult(w, r, d) => s"$w, $d, ${r.length}"}.mkString("[", ",", "]")).mkString("(", ",", ")")}")
-            val fuzzyIntersection = AB[(AB[Int], Int)]()
-            var productiveIntersectionCount = 0
-            var intersectionCount = 0
-            val fuzzyCombInit = (new Array[AB[Int]](result.size), 0, 0) //(refs, editDistance, idx)
-            val currentWords = Array.fill(fuzzyRes.size)("")
-            val MaxProductiveIntersectionCount = 32
-            val MaxIntersectionCount = 1024
-            foldCombinations[FuzzyResult, (Array[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
-              fuzzyRes,
-              fuzzyCombInit,
-              (cr, d) => {
-                currentWords(cr._3) = d.word //for debugging purposes
-                cr._1(cr._3) = d.refs
-                (cr._1, cr._2 + d.editDistance, cr._3 + 1) //sum all edit distances from fuzzy results
-              },
-              fuzzyIntersection,
-              (r, cr) => {
-                //println(s"CURRENT WORDS: [${currentWords.mkString(",")}]")
-                val int_ed = (intersect(cr._1, limit), cr._2)
-                if (int_ed._1.nonEmpty) {
-                  r += int_ed
-                  refCount += int_ed._1.length
-                  productiveIntersectionCount += 1
-                }
-                intersectionCount += 1
-                //println(s"INTERSECTION: ${currentWords.mkString(",")}, ${int_ed._1.size}")
-                if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
-                  logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
-                    fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)
-                      .mkString("(", ",", ")")).mkString(",")}")
-
-                (r, refCount < limit &&
-                    intersectionCount < MaxIntersectionCount &&
-                    productiveIntersectionCount < MaxProductiveIntersectionCount
-                )
-              }
-            )
-            val res =
-              fuzzyIntersection
-                .groupBy(_._2)
-                .map[(AB[Int], Int)] {
-                  case (err, refs) => //parametrize map method so that iterable is returned
-                    merge(refs.map(_._1)) -> err
-                }
-                .toArray
-                .sortBy(_._2)
-                .unzip match {
-                  case (arr, errs) =>
-                    pruneRight(AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*))
-                      .zip (errs)
-                      .filter(_._1.nonEmpty)
-                }
-            if (res.size > limit) res.take(limit) else res
+          case a if a.isEmpty => AB()
+          case a =>
+            AB((if (a.size > limit) a.take(limit) else a, editDistance))
         }
+      }
+      if (params.isEmpty) AB()
+      else {
+        var count = 0
+        var result = AB[(AB[Int], Int)]()
+        var editDistance = 0
+        binCombinations(params.size - 1, spaces => {
+          var i = 1
+          var j = 0
+          val ab = AB[String](params(0))
+          spaces foreach { s =>
+            if (s == 0) { //separate word
+              ab += params(i)
+              j += 1
+            } else { //merge words
+              ab(j) = ab(j) + params(i)
+              editDistance += 1
+            }
+            i += 1
+          }
+          result = run(ab, editDistance)
+          count += 1
+          result.isEmpty && count < 32
+        })
+        result
+      }
+    }
+
+    val params = searchParams(words)
+    exactSearch(params) match {
+      case a if a.nonEmpty => a
+      case _ => // fuzzy search
+        //reset ref count
+        var refCount = 0
+        val fuzzyRes = params map idx_vals_fuzzy
+        //println(s"${fuzzyRes.map(_.map{case FuzzyResult(w, r, d) => s"$w, $d, ${r.length}"}.mkString("[", ",", "]")).mkString("(", ",", ")")}")
+        val fuzzyIntersection = AB[(AB[Int], Int)]()
+        var productiveIntersectionCount = 0
+        var intersectionCount = 0
+        val fuzzyCombInit = (AB.fill[AB[Int]](params.size)(null), 0, 0) //(refs, editDistance, idx)
+        val currentWords = Array.fill(fuzzyRes.size)("")
+        val MaxProductiveIntersectionCount = 32
+        val MaxIntersectionCount = 1024
+        foldCombinations[FuzzyResult, (AB[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
+          fuzzyRes,
+          fuzzyCombInit,
+          (cr, d) => {
+            currentWords(cr._3) = d.word //for debugging purposes
+            cr._1(cr._3) = d.refs
+            (cr._1, cr._2 + d.editDistance, cr._3 + 1) //sum all edit distances from fuzzy results
+          },
+          fuzzyIntersection,
+          (r, cr) => {
+            //println(s"CURRENT WORDS: [${currentWords.mkString(",")}]")
+            val int_ed = (intersect(cr._1, limit), cr._2)
+            if (int_ed._1.nonEmpty) {
+              r += int_ed
+              refCount += int_ed._1.length
+              productiveIntersectionCount += 1
+            }
+            intersectionCount += 1
+            //println(s"INTERSECTION: ${currentWords.mkString(",")}, ${int_ed._1.size}")
+            if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
+              logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
+                fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)
+                  .mkString("(", ",", ")")).mkString(",")}")
+
+            (r, refCount < limit &&
+                intersectionCount < MaxIntersectionCount &&
+                productiveIntersectionCount < MaxProductiveIntersectionCount
+            )
+          }
+        )
+        val res =
+          fuzzyIntersection
+            .groupBy(_._2)
+            .map[(AB[Int], Int)] {
+              case (err, refs) => //parametrize map method so that iterable is returned
+                merge(refs.map(_._1)) -> err
+            }
+            .toArray
+            .sortBy(_._2)
+            .unzip match {
+              case (arr, errs) =>
+                pruneRight(AB(scala.collection.immutable.ArraySeq.unsafeWrapArray(arr): _*))
+                  .zip (errs)
+                  .filter(_._1.nonEmpty)
+            }
+        if (res.size > limit) res.take(limit) else res
     }
   }
 
@@ -604,15 +635,17 @@ trait AddressIndexer { this: AddressFinder =>
     .map(_.toString)
     .toArray
 
-  def wordStatForSearch(words: Array[String]) =
-    ((words groupBy identity map {case (k, a) => k -> a.length} toArray) sortBy (_._1.length))
-      .unzip match {
-        case (w, c) =>
-          0 until w.length foreach { i =>
-            (i + 1) until w.length foreach { j => if (w(j) startsWith w(i)) c(i) += c(j) }
-          }
-          (w zip c) toMap
+  def wordStatForSearch(words: Array[String]): Array[(String, Int)] = {
+    val stats = Array.fill(words.size)(1)
+    0 until words.size foreach { i =>
+      (i + 1) until words.size foreach { j =>
+        if (words(j).length > words(i).length) {
+          if (words(j) startsWith words(i)) stats(i) += 1
+        } else if (words(i) startsWith words(j)) stats(j) += 1
       }
+    }
+    words zip stats
+  }
 
   def wordStatForIndex(phrase: String) = normalize(phrase)
     .foldLeft(Map[String, Int]())((stat, w) =>
@@ -669,7 +702,7 @@ trait AddressIndexer { this: AddressFinder =>
     -(from + 1)
   }
 
-  def intersect(idx: Array[AB[Int]], limit: Int, filter: Int => Boolean): AB[Int] = {
+  def intersect(idx: AB[AB[Int]], limit: Int, filter: Int => Boolean): AB[Int] = {
     val result = AB[Int]()
     val pos = Array.fill(idx.length)(0)
     def check_register = {
@@ -801,7 +834,7 @@ trait AddressIndexer { this: AddressFinder =>
     arrs
   }
 
-  def foldCombinations[A, B, C](data: Array[AB[A]],
+  def foldCombinations[A, B, C](data: AB[AB[A]],
                                 combInit: B,
                                 combFun: (B, A) => B,
                                 init: C,
@@ -840,5 +873,21 @@ trait AddressIndexer { this: AddressFinder =>
       }
     } while(neq)
     init
+  }
+
+  def binCombinations(n: Int, f: Array[Int] => Boolean): Unit = {
+    val a = new Array[Int](n)
+    var b = true
+    def go(d: Int): Unit = {
+      if (d == 0) b = f(a.clone) else {
+        var i = 0
+        while(i <= 1 && b) {
+          a(n - d) = i
+          go(d - 1)
+          i += 1
+        }
+      }
+    }
+    go(n)
   }
 }

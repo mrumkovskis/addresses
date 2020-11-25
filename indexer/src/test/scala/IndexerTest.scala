@@ -70,7 +70,8 @@ class IndexerTest extends FunSuite {
   }
 
   test("word stat for search") {
-    assertResult(Map("nov" -> 1, "Valles" -> 2, "pag" -> 1, "Vecumnieku" -> 1, "vidusskola" -> 1, "Valle" -> 3))(
+    assertResult(Array(("Valles", 1), ("vidusskola", 1), ("Valle", 3),
+      ("Valles" ,2), ("pag", 1), ("Vecumnieku", 1), ("nov", 1)))(
       finder.wordStatForSearch(Array("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
   }
 
