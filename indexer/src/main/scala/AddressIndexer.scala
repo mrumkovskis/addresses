@@ -590,7 +590,7 @@ trait AddressIndexer { this: AddressFinder =>
             index.updateChildren(w, idx, normalize(name).contains(w))
             //update synonyms
             Option(synonyms.getProperty(w))
-              .foreach(syn => extractWords(syn).foreach(index.updateChildren(_, idx, true)))
+              .foreach(extractWords(_).foreach(index.updateChildren(_, idx, true)))
           })
           idx_code += (idx -> code)
           idx += 1
