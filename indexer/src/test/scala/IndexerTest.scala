@@ -14,9 +14,9 @@ object IndexerTest {
   val finder = new TestAddressFinder(null, Set.empty, null, None)
 
   object IndexJsonProtocol extends DefaultJsonProtocol {
-    implicit object ABFormat extends RootJsonFormat[ArrayBuffer[Int]] {
-      override def write(obj: ArrayBuffer[Int]): JsValue = obj.toVector.toJson
-      override def read(json: JsValue): ArrayBuffer[Int] = ArrayBuffer.from(json.convertTo[Vector[Int]])
+    implicit def abFormat[T: JsonFormat] = new RootJsonFormat[ArrayBuffer[T]] {
+      override def write(obj: ArrayBuffer[T]): JsValue = obj.toVector.toJson
+      override def read(json: JsValue): ArrayBuffer[T] = ArrayBuffer.from(json.convertTo[Vector[T]])
     }
     implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
       implicit val refFormat = jsonFormat2(finder.Refs)
@@ -26,7 +26,7 @@ object IndexerTest {
         JsObject(Map(
           "word" -> Option(word).map(JsString(_)).getOrElse(JsNull),
           "refs" -> Option(refs).map(_.toJson).getOrElse(JsNull),
-          "children" -> Option(children).map(_.map(this.write).toVector).map(JsArray(_)).getOrElse(JsNull)
+          "children" -> NodeBaseFormat.write(obj)
         ))
       }
 
@@ -35,19 +35,34 @@ object IndexerTest {
           new finder.MutableIndexNode(
             fields("word").convertTo[String],
             fields("refs").convertTo[finder.Refs],
-            ArrayBuffer.from((fields("children"): @unchecked) match { case JsArray(ch) => ch.map(read)})
+            fields("children").convertTo[ArrayBuffer[finder.MutableIndexNode]]
           )
+      }
+    }
+    implicit object NodeBaseFormat extends RootJsonFormat[finder.MutableIndexBase] {
+      override def write(obj: finder.MutableIndexBase): JsValue = {
+        Option(obj.children).map(_.toJson).getOrElse(JsNull)
+      }
+
+      override def read(json: JsValue): finder.MutableIndexBase = (json: @unchecked) match {
+        case nodes => new finder.MutableIndexBase(nodes.convertTo[ArrayBuffer[finder.MutableIndexNode]])
       }
     }
     implicit object IndexFormat extends RootJsonFormat[finder.MutableIndex] {
       override def write(obj: finder.MutableIndex): JsValue = {
         import obj._
-        JsArray(Option(children).map(_.map(_.toJson).toVector).getOrElse(Vector()))
+        JsObject(Map(
+          "index" -> Option(children).map(_.toJson).getOrElse(JsNull),
+          "repeated_words_index" ->
+            Option(repeatedWordChildren).map(_.toJson).getOrElse(JsNull)
+        ))
       }
 
       override def read(json: JsValue): finder.MutableIndex = (json: @unchecked) match {
-        case JsArray(children) =>
-          new finder.MutableIndex(ArrayBuffer.from(children.map(_.convertTo[finder.MutableIndexNode])))
+        case JsObject(fields) =>
+          def nodes[T: JsonFormat](name: String) = fields(name).convertTo[ArrayBuffer[T]]
+          new finder.MutableIndex(nodes[finder.MutableIndexNode]("index"),
+            nodes[finder.MutableIndexBase]("repeated_words_index"))
       }
     }
   }
@@ -72,7 +87,7 @@ class IndexerTest extends FunSuite {
   test("word stat for search") {
     assertResult(Array(("Valles", 1), ("vidusskola", 1), ("Valle", 3),
       ("Valles" ,2), ("pag", 1), ("Vecumnieku", 1), ("nov", 1)))(
-      finder.wordStatForSearch(Array("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
+      finder.wordStatForSearch(ArrayBuffer("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
   }
 
   test("index") {
@@ -87,12 +102,15 @@ class IndexerTest extends FunSuite {
       "21 215"
     )
     .zipWithIndex
-    .foldLeft(new finder.MutableIndex(ArrayBuffer())) { (node, addrWithIdx) =>
+    .foldLeft(new finder.MutableIndex(null, null)) { (node, addrWithIdx) =>
       val (addr, idx) = addrWithIdx
       val words = finder.extractWords(addr)
       //check that duplicate word do not result in duplicate address code reference
       (if (words.exists(_ == "ak")) words ++ List("ak") else words)
-        .foreach(w => node.updateChildren(w, idx, finder.normalize(addr).contains(w)))
+        .foreach { w =>
+          val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
+          node.updateChildren(w, idx, finder.normalize(addr).contains(exactStr))
+        }
       node
     }
 
@@ -102,16 +120,16 @@ class IndexerTest extends FunSuite {
       .parseJson
 
     import IndexJsonProtocol._
-    //println(node.toJson.prettyPrint)
+    println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
 
-    assertResult(finder.IndexStats(25,51))(node.statistics)
+    assertResult(finder.IndexStats(finder.NodeStats(20,39),ArrayBuffer(finder.NodeStats(5,12))))(node.statistics)
     assertResult(ArrayBuffer())(node.invalidIndices)
     assertResult(ArrayBuffer())(node.invalidWords)
   }
 
   test("index search") {
-    val node = new finder.MutableIndex(ArrayBuffer())
+    val node = new finder.MutableIndex(null, null)
     val idx_val = List(
       "aknas",
       "akls",
@@ -140,7 +158,10 @@ class IndexerTest extends FunSuite {
     .zipWithIndex
     .map { case (addr, idx) =>
       val words = finder.extractWords(addr)
-      words.foreach(w => node.updateChildren(w, idx, finder.normalize(addr).contains(w)))
+      words.foreach { w =>
+        val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
+        node.updateChildren(w, idx, finder.normalize(addr).contains(exactStr))
+      }
       (idx, addr)
     }.toMap
 

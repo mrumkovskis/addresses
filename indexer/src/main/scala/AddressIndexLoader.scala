@@ -110,7 +110,7 @@ trait AddressIndexLoader { this: AddressFinder =>
       }.getOrElse(Map())
 
       val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-      val index = new MutableIndex(null)
+      val index = new MutableIndex(null, null)
       val spnpc = new Array[Int](in.readInt)
       //load pilseta, novads, pagasts, ciems
       var i = 0

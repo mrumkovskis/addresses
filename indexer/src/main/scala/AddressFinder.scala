@@ -60,7 +60,7 @@ trait AddressFinder
         index(am, ah)
         saveIndex
       }
-      spatialIndex(addressMap)
+      //spatialIndex(addressMap)
     }
   }
 
@@ -191,7 +191,7 @@ trait AddressFinder
   /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.
    * 0 is highest ranking meaning all words sequentially have exact match */
-  def rank(words: Array[String], code: Int) = {
+  def rank(words: AB[String], code: Int) = {
     val wl = Math.min(words.length, 32) //max 32 words can be processed in ranking
     def count(s: Int, n: Vector[String]) = {
       var idx = s >> 16 //idx are 16 oldest bits

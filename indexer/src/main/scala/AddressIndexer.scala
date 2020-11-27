@@ -53,7 +53,7 @@ trait AddressIndexer { this: AddressFinder =>
   case class Refs(exact: AB[Int] = AB(), approx: AB[Int] = AB()) {
     def add(ref: Int, exactMatch: Boolean): Refs = {
       def coll = if (exactMatch) exact else approx
-      if (coll.size == 0) coll += ref
+      if (coll.isEmpty) coll += ref
       else
         coll
           .lastOption.filterNot(_ == ref)
@@ -75,108 +75,28 @@ trait AddressIndexer { this: AddressFinder =>
     def depth = foldLeft(0)((d, _) => d + 1)
   }
 
-  case class IndexStats(nodeCount: Long, refCount: Long) {
-    def +(s: IndexStats): IndexStats = IndexStats(nodeCount + s.nodeCount, refCount + s.refCount)
+  case class IndexStats(nodeStats: NodeStats, repWordStats: AB[NodeStats]) {
+    def render: String = s"${nodeStats.render}. Repeated words stats: ${
+      repWordStats.zipWithIndex.map { case (s, i) => s"${i + 2}: ${s.render}"}.mkString(", ")
+    }"
+  }
+
+  case class NodeStats(nodeCount: Long, refCount: Long) {
+    def +(s: NodeStats): NodeStats = NodeStats(nodeCount + s.nodeCount, refCount + s.refCount)
     def render: String = s"Node count - $nodeCount, code ref count - $refCount"
   }
 
-  sealed class MutableIndex(var children: AB[MutableIndexNode]) {
-    private[this] var multiWordStartIdx = 0
-    def updateChildren(w: String, ref: Int, exact: Boolean): Unit = {
-      if (isEmpty) children = AB()
-      val i = binarySearch[MutableIndexNode, String](children, w, _.word, compPrefixes)
-      if (i < 0) {
-        children.insert(-(i + 1), new MutableIndexNode(w, Refs().add(ref, exact), null))
-        if (!w.contains("*")) multiWordStartIdx += 1
-      } else {
-        children(i).update(w, ref, exact)
-      }
-    }
-
-    /** Searches index down the tree */
-    def apply(str: String): Refs = {
-      if(str.contains("*")) {
-        val idx = binarySearchFromUntil[MutableIndexNode, String](
-          children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
-        if (idx < 0) Refs()
-        else children(idx).refs
-      } else search(str)
-    }
-
-    /** Searches index down the tree in fuzzy mode */
-    def apply(str: String, maxEditDistance: Int): AB[FuzzyResult] = {
-      if(str.contains("*")) {
-        val idx = binarySearchFromUntil[MutableIndexNode, String](
-          children, searchUntilIdx, children.length, str, _.word, _ compareTo _)
-        if (idx < 0) AB()
-        else AB(FuzzyResult(children(idx).word, children(idx).refs.exact, 0))
-      } else {
-        def reduceResults(res: AB[FuzzyResult]): AB[FuzzyResult] = {
-          val r =
-            res
-              .groupBy(_.word)
-              .map[FuzzyResult] { case (_, searchResults) =>
-                searchResults.minBy(_.editDistance)
-              }
-          //sort by edit distance asc first and then reference count desc
-          AB.from(r).sortBy(fr => (fr.editDistance << 24) - fr.refs.length)
-        }
-        def completePartial(pr: PartialFuzzyResult): AB[FuzzyResult] = {
-//          println(s"\nCOMPL PART: ${pr.word} ${pr.rest}, ED: ${pr.editDistance}, RC: ${pr.refs.size}")
-          if (pr.refs.isEmpty) return AB()
-
-          val npartialRes = MM[String, PartialFuzzyResult]()
-          val nr = fuzzySearch(pr.rest,0,
-            Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
-          val res = AB[FuzzyResult]()
-          if (npartialRes.nonEmpty) {
-//          println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
-            npartialRes.foreach { case (_, npr) =>
-              val is = intersect(AB(pr.refs, npr.refs), 1024, null)
-              if (is.nonEmpty) {
-                res ++= completePartial(
-                  PartialFuzzyResult(pr.word + " " + npr.word, is,
-                    pr.editDistance + npr.editDistance, npr.rest))
-              }
-            }
-//            println(s"COMPL PART DONE PART: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
-          }
-          if (nr.nonEmpty) {
-            nr.foreach { fr =>
-              val is = intersect(AB(pr.refs, fr.refs), 1024, null)
-              if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
-                pr.editDistance + fr.editDistance)
-            }
-//            println(s"COMPL PART DONE: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
-          }
-          res
-        }
-        val partialRes = MM[String, PartialFuzzyResult]()
-        val r = fuzzySearch(str,
-          0, maxEditDistance, "", partialRes, str)
-        if (r.isEmpty && partialRes.nonEmpty) {
-          val res = AB[FuzzyResult]()
-//          println(s"\nPARTIAL RES: ${partialRes.map{ case (k, pr) =>(pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
-          partialRes.foreach { case (_, pr) =>
-            res ++= completePartial(pr)
-          }
-          reduceResults(res)
-        } else {
-          reduceResults(r)
-        }
-      }
-    }
+  sealed class MutableIndexBase(var children: AB[MutableIndexNode]) {
 
     def setEditDistance(word: String): Int = {
       if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
       else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
     }
 
-    private[MutableIndex] def search(str: String): Refs = {
+    private[AddressIndexer] def search(str: String): Refs = {
       if (children == null) return Refs()
       val c = str.head
-      val idx = binarySearchFromUntil[MutableIndexNode, Char](
-        children, 0, searchUntilIdx, c, _.word.head, _ - _)
+      val idx = binarySearch[MutableIndexNode, Char](children, c, _.word.head, _ - _)
       if (idx < 0) Refs()
       else if (str.length == 1) children(idx).refs
       else children(idx).search(str.drop(1))
@@ -191,7 +111,7 @@ trait AddressIndexer { this: AddressFinder =>
       def tryTransformedSearch(excludeChar: Char): AB[FuzzyResult] = {
         def replaceOrPrefix(s: String) = {
           var fuzzyResult = AB[FuzzyResult]()
-          val l = searchUntilIdx
+          val l = children.size
           var i = 0
           while (i < l) {
             val charToTry = children(i).word.head
@@ -217,8 +137,7 @@ trait AddressIndexer { this: AddressFinder =>
 
       if (str.isEmpty) return AB()
       val c = str.head
-      val idx = binarySearchFromUntil[MutableIndexNode, Char](
-        children, 0, searchUntilIdx, c, _.word.head, _ - _)
+      val idx = binarySearch[MutableIndexNode, Char](children, c, _.word.head, _ - _)
       if (idx < 0) {
         tryTransformedSearch('\u0000') //no char excluded
       } else {
@@ -229,24 +148,22 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
-    private[AddressIndexer] def searchUntilIdx: Int = multiWordStartIdx
-
-    /* Strings are considered equal if they have common prefix but do not have multiplier '*' in them,
-    * otherwise standard comparator is used. Words with multiplier are placed at the end. */
-    private def compPrefixes(s1: String, s2: String) = {
-      val (s1Mult, s2Mult) = (s1.contains("*"), s2.contains("*"))
-      val multiplierComp = s1Mult compareTo s2Mult
-      if (multiplierComp == 0)
-        if (s1Mult || s1(0) != s2(0)) s1 compareTo s2 else 0
-      else
-        multiplierComp
-    }
-
     def isEmpty = children == null || children.isEmpty
     def nonEmpty = !isEmpty
 
+    def updateChildren(w: String, ref: Int, exact: Boolean): Unit = {
+      if (isEmpty) children = AB()
+      /* Strings are considered equal if they have common prefix */
+      val i = binarySearch[MutableIndexNode, String](children, w, _.word, _.head - _.head)
+      if (i < 0) {
+        children.insert(-(i + 1), new MutableIndexNode(w, Refs().add(ref, exact), null))
+      } else {
+        children(i).update(w, ref, exact)
+      }
+    }
+
     /** Restores node from path */
-    def load(path: Vector[Int], word: String, refs: Refs): Unit = {
+    private[AddressIndexer] def load(path: Vector[Int], word: String, refs: Refs): Unit = {
       val idx = path.head
       if (children == null) children = AB()
       if (idx > children.size)
@@ -255,23 +172,28 @@ trait AddressIndexer { this: AddressFinder =>
         val n = new MutableIndexNode(null, null, null)
         n.load(path.drop(1), word, refs)
         children += n
-        if (!word.contains("*")) multiWordStartIdx += 1 //increase multiword start position
       } else {
         children(idx).load(path.drop(1), word, refs)
       }
     }
 
     /** Calls writer function while traversing index */
-    def write(writer: (Vector[Int], String, Refs) => Unit): Unit = {
-      children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, Vector(i))}
+    private[AddressIndexer] def write(writer: (Vector[Int], String, Refs) => Unit, path: Vector[Int]): Unit = {
+      if (children == null) return
+      children.zipWithIndex.foreach {
+        case (node, i) =>
+          val np = path.appended(i)
+          node.writeNode(writer, np)
+          node.write(writer, np)
+      }
     }
 
     /** Debuging info */
-    def statistics: IndexStats = {
+    def nodeStatistics: NodeStats = {
       if (isEmpty)
-        IndexStats(0, 0)
+        NodeStats(0, 0)
       else
-        children.foldLeft(IndexStats(children.size, 0)){ (st, n) => st + n.statistics }
+        children.foldLeft(NodeStats(children.size, 0)){ (st, n) => st + n.nodeStatistics }
     }
     private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
       if (isEmpty) AB() else children.flatMap(_.validateNodeWord(path))
@@ -287,8 +209,148 @@ trait AddressIndexer { this: AddressFinder =>
     def invalidIndices: AB[(String, AB[Int])] = validateIndex("")
   }
 
+  final class MutableIndex(_children: AB[MutableIndexNode],
+                           var repeatedWordChildren: AB[MutableIndexBase])
+    extends MutableIndexBase(_children) {
+
+    /** Searches index down the tree */
+    def apply(str: String): Refs = {
+      val rep_w_idx = str.indexOf('*')
+      if(rep_w_idx != -1) { //repeated word found
+        //repeated words start with 2
+        val idx = str.substring(0, rep_w_idx).toInt - 2
+        if (idx < repeatedWordChildren.size) {
+          val ch = repeatedWordChildren(idx)
+          if (ch != null) ch.search(str.substring(rep_w_idx + 1)) else Refs()
+        } else Refs()
+      } else search(str)
+    }
+
+    /** Searches index down the tree in fuzzy mode */
+    def apply(str: String, maxEditDistance: Int): AB[FuzzyResult] = {
+      val rep_w_idx = str.indexOf('*')
+      if(rep_w_idx != -1) { //repeated word found
+        //repeated words start with 2
+        val idx = str.substring(0, rep_w_idx).toInt - 2
+        if (idx < repeatedWordChildren.size) {
+          val ch = repeatedWordChildren(idx)
+          if (ch != null) {
+            val partialRes = MM[String, PartialFuzzyResult]()
+            ch.fuzzySearch(str.substring(rep_w_idx + 1), 0, maxEditDistance,
+              "", partialRes, str)
+          } else AB()
+        } else AB()
+      } else {
+        def reduceResults(res: AB[FuzzyResult]): AB[FuzzyResult] = {
+          val r =
+            res
+              .groupBy(_.word)
+              .map[FuzzyResult] { case (_, searchResults) =>
+                searchResults.minBy(_.editDistance)
+              }
+          //sort by edit distance asc first and then reference count desc
+          AB.from(r).sortBy(fr => (fr.editDistance << 24) - fr.refs.length)
+        }
+        def completePartial(pr: PartialFuzzyResult): AB[FuzzyResult] = {
+          //          println(s"\nCOMPL PART: ${pr.word} ${pr.rest}, ED: ${pr.editDistance}, RC: ${pr.refs.size}")
+          if (pr.refs.isEmpty) return AB()
+
+          val npartialRes = MM[String, PartialFuzzyResult]()
+          val nr = fuzzySearch(pr.rest,0,
+            Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
+          val res = AB[FuzzyResult]()
+          if (npartialRes.nonEmpty) {
+            //          println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
+            npartialRes.foreach { case (_, npr) =>
+              val is = intersect(AB(pr.refs, npr.refs), 1024, null)
+              if (is.nonEmpty) {
+                res ++= completePartial(
+                  PartialFuzzyResult(pr.word + " " + npr.word, is,
+                    pr.editDistance + npr.editDistance, npr.rest))
+              }
+            }
+            //            println(s"COMPL PART DONE PART: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
+          }
+          if (nr.nonEmpty) {
+            nr.foreach { fr =>
+              val is = intersect(AB(pr.refs, fr.refs), 1024, null)
+              if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
+                pr.editDistance + fr.editDistance)
+            }
+            //            println(s"COMPL PART DONE: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
+          }
+          res
+        }
+        val partialRes = MM[String, PartialFuzzyResult]()
+        val r = fuzzySearch(str,
+          0, maxEditDistance, "", partialRes, str)
+        if (r.isEmpty && partialRes.nonEmpty) {
+          val res = AB[FuzzyResult]()
+          //          println(s"\nPARTIAL RES: ${partialRes.map{ case (k, pr) =>(pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
+          partialRes.foreach { case (_, pr) =>
+            res ++= completePartial(pr)
+          }
+          reduceResults(res)
+        } else {
+          reduceResults(r)
+        }
+      }
+    }
+
+    override def updateChildren(w: String, ref: Int, exact: Boolean): Unit = {
+      if (isEmpty) {
+        children = AB()
+        repeatedWordChildren = AB()
+      }
+      val rep_w_idx = w.indexOf('*')
+      if (rep_w_idx != -1) {
+        // repeated words start with 2
+        val idx = w.substring(0, rep_w_idx).toInt - 2
+        val repWord = w.substring(rep_w_idx + 1)
+        if (repeatedWordChildren.size <= idx) repeatedWordChildren.padToInPlace(idx + 1, null)
+        if (repeatedWordChildren(idx) == null) {
+          val n = new MutableIndexBase(null)
+          n.updateChildren(repWord, ref, exact)
+          repeatedWordChildren(idx) = n
+        } else repeatedWordChildren(idx).updateChildren(repWord, ref, exact)
+      } else {
+        super.updateChildren(w, ref, exact)
+      }
+    }
+
+    // FIXME somehow override modifier does not work if super method modifier is stricter access???
+    def load(path: Vector[Int], word: String, refs: Refs): Unit = {
+      val idx = path.head
+      val tail = path.tail
+      if (repeatedWordChildren == null) repeatedWordChildren = AB()
+      if (idx == -1) super.load(tail, word, refs)
+      else if (idx > repeatedWordChildren.size)
+        sys.error(s"Invalid index for repeated words: $idx, children size: ${
+          repeatedWordChildren.size}, cannot add node")
+      else if (idx == repeatedWordChildren.size) {
+        val n = new MutableIndexBase(null)
+        n.load(tail, word, refs)
+        repeatedWordChildren += n
+      } else {
+        repeatedWordChildren(idx).load(tail, word, refs)
+      }
+    }
+
+    /** Calls writer function while traversing index */
+    def write(writer: (Vector[Int], String, Refs) => Unit): Unit = {
+      write(writer, Vector(-1))
+      repeatedWordChildren.zipWithIndex.foreach { case (node, i) => node.write(writer, Vector(i)) }
+    }
+
+    def statistics: IndexStats = {
+      val st = nodeStatistics
+      val repSt = repeatedWordChildren.map(_.nodeStatistics)
+      IndexStats(st, repSt)
+    }
+  }
+
   final class MutableIndexNode(var word: String, var refs: Refs,
-                               _children: AB[MutableIndexNode]) extends MutableIndex(_children) {
+                               _children: AB[MutableIndexNode]) extends MutableIndexBase(_children) {
 
     def update(w: String, ref: Int, exact: Boolean): Unit = {
       val (commonPart, nodeRest, wordRest) = split(word, w)
@@ -297,8 +359,9 @@ trait AddressIndexer { this: AddressFinder =>
       } else {
         if (nodeRest.nonEmpty) { //make common part as nodes word, move remaining part deeper
           word = commonPart
-          val chRefs = refs
-          refs = Refs().add(ref, exact)
+          val onlyRep = commonPart.endsWith("*")
+          val chRefs = if (onlyRep) refs.add(ref, exact) else refs
+          refs = if (onlyRep) null else Refs().add(ref, exact)
           val nch = children
           children = AB(new MutableIndexNode(nodeRest, chRefs, nch)) //move children and refs to new child node
         }
@@ -315,6 +378,7 @@ trait AddressIndexer { this: AddressFinder =>
                                                      partial: MM[String, PartialFuzzyResult],
                                                      origin: String): AB[FuzzyResult] = {
       if (str.isEmpty) {
+        //println(s"'$p' '$str', max: $maxEditDistance, curr: ${currentEditDistance + str.length}, has refs: ${refs.exact.nonEmpty}")
         //add exact refs to fuzzy result
         (if (refs.exact.isEmpty) AB() else AB(FuzzyResult(p, refs.exact, currentEditDistance))) ++
           //add children word values if current edit distance is less than max edit distance
@@ -332,6 +396,7 @@ trait AddressIndexer { this: AddressFinder =>
               if (currentEditDistance < pr.editDistance) partial += partialEntry
             }.getOrElse(partial += partialEntry)
           }
+          //println(s"'$p' '$str', final ${children == null}, max: $maxEditDistance, curr: ${currentEditDistance + str.length}")
           if (children == null) {
             val err = currentEditDistance + str.length
             if (err <= maxEditDistance) AB(FuzzyResult(p, refs.exact, err))
@@ -343,15 +408,14 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
-    override private[AddressIndexer] def searchUntilIdx: Int = children.length
-
     /** returns (common part from two args, rest from first arg, rest from second arg) */
     def split(s1: String, s2: String): (String, String, String) = {
       val equalCharCount = s1 zip s2 count (t => t._1 == t._2)
       (s1.substring(0, equalCharCount), s1.substring(equalCharCount), s2.substring(equalCharCount))
     }
 
-    override def load(path: Vector[Int], word: String, refs: Refs): Unit = {
+    // FIXME somehow override modifier does not work if super method modifier is stricter access???
+    def load(path: Vector[Int], word: String, refs: Refs): Unit = {
       if (path.isEmpty) {
         this.word = word
         this.refs = refs
@@ -363,14 +427,12 @@ trait AddressIndexer { this: AddressFinder =>
     private[AddressIndexer] def writeNode(writer: (Vector[Int], String, Refs) => Unit,
                                           path: Vector[Int]): Unit = {
       writer(path, word, refs)
-      if (children != null)
-        children.zipWithIndex.foreach { case (node, i) => node.writeNode(writer, path.appended(i))}
     }
 
     /** Debuging info */
-    override def statistics: IndexStats = {
-      IndexStats(0, refs.exact.size + refs.approx.size) + super.statistics
-    }
+    override def nodeStatistics: NodeStats = Option(refs).map { r =>
+      NodeStats(0, r.exact.size + r.approx.size)
+    }.getOrElse(NodeStats(0, 0)) + super.nodeStatistics
 
     override private[AddressIndexer] def validateNodeWord(path: String): AB[(String, String, Int)] = {
       (if (word.length > 1 && !word.contains("*"))
@@ -387,10 +449,11 @@ trait AddressIndexer { this: AddressFinder =>
           curCode
         }
       }
-      findDuplicates(refs.exact)
-      findDuplicates(refs.approx)
-      (if (wrongCodes.nonEmpty) AB(s"$path|$word" -> wrongCodes.map(_idxCode)) else AB()) ++
-        super.validateIndex(path + word)
+      (if (refs != null) {
+        findDuplicates(refs.exact)
+        findDuplicates(refs.approx)
+        if (wrongCodes.nonEmpty) AB(s"$path|$word" -> wrongCodes.map(_idxCode)) else AB()
+      } else AB()) ++ super.validateIndex(path + word)
     }
   }
 
@@ -403,9 +466,15 @@ trait AddressIndexer { this: AddressFinder =>
 
   /** Returns array of typles, each tuple consist of mathcing address codes and
    * edit distance from search parameters */
-  def searchCodes(words: Array[String])(limit: Int, types: Set[Int] = null): AB[(AB[Int], Int)] = {
-    def searchParams(words: Array[String]) = AB.from(wordStatForSearch(words)
-      .map { case (w, c) => if (c == 1) w else s"$c*$w" })
+  def searchCodes(words: AB[String])(limit: Int, types: Set[Int] = null): AB[(AB[Int], Int)] = {
+    def searchParams(words: AB[String]) = {
+      val ws =
+        wordStatForSearch(words)
+          .groupBy(_._1)
+          .map[(String, Int)] { case (_, s) => s.sortBy(- _._2).head }
+          .map { case (w, c) => if (c == 1) w else s"$c*$w" }
+      AB.from(ws)
+    }
     def idx_vals(word: String) = _index(word)
     def idx_vals_fuzzy(word: String) = {
       _index(word, _index.setEditDistance(word))
@@ -462,7 +531,7 @@ trait AddressIndexer { this: AddressFinder =>
             }
             i += 1
           }
-          result = run(ab, editDistance)
+          result = run(searchParams(ab), editDistance)
           count += 1
           result.isEmpty && count < 32
         })
@@ -470,10 +539,10 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
-    val params = searchParams(words)
-    exactSearch(params) match {
+    exactSearch(words) match {
       case a if a.nonEmpty => a
       case _ => // fuzzy search
+        val params = searchParams(words)
         //reset ref count
         var refCount = 0
         val fuzzyRes = params map idx_vals_fuzzy
@@ -552,7 +621,7 @@ trait AddressIndexer { this: AddressFinder =>
 
     logger.info(s"Sorting ${addressMap.size} addresses...")
 
-    val index = new MutableIndex(null)
+    val index = new MutableIndex(null, null)
 
     //(addressCode, ordering weight, full space separated unnaccented address)
     var idx = 0
@@ -587,7 +656,8 @@ trait AddressIndexer { this: AddressFinder =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
           wordsLists foreach(_ foreach { w =>
-            index.updateChildren(w, idx, normalize(name).contains(w))
+            val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
+            index.updateChildren(w, idx, normalize(name).contains(exactStr))
             //update synonyms
             Option(synonyms.getProperty(w))
               .foreach(extractWords(_).foreach(index.updateChildren(_, idx, true)))
@@ -633,10 +703,9 @@ trait AddressIndexer { this: AddressFinder =>
          }
     }._1
     .map(_.toString)
-    .toArray
 
-  def wordStatForSearch(words: Array[String]): Array[(String, Int)] = {
-    val stats = Array.fill(words.size)(1)
+  def wordStatForSearch(words: AB[String]): AB[(String, Int)] = {
+    val stats = AB.fill(words.size)(1)
     0 until words.size foreach { i =>
       (i + 1) until words.size foreach { j =>
         if (words(j).length > words(i).length) {
