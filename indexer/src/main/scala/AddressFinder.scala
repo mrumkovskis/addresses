@@ -60,7 +60,7 @@ trait AddressFinder
         index(am, ah)
         saveIndex
       }
-      //spatialIndex(addressMap)
+      spatialIndex(addressMap)
     }
   }
 
