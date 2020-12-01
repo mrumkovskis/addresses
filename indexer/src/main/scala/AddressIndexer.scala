@@ -63,7 +63,10 @@ trait AddressIndexer { this: AddressFinder =>
   }
 
   sealed case class FuzzyResult(word: String, refs: AB[Int], editDistance: Int)
-  sealed case class PartialFuzzyResult(word: String, refs: AB[Int], editDistance: Int, rest: String)
+  sealed case class PartialFuzzyResult(word: String,
+                                       refs: AB[Int],
+                                       editDistance: Int,
+                                       rest: String)
 
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
@@ -228,19 +231,7 @@ trait AddressIndexer { this: AddressFinder =>
 
     /** Searches index down the tree in fuzzy mode */
     def apply(str: String, maxEditDistance: Int): AB[FuzzyResult] = {
-      val rep_w_idx = str.indexOf('*')
-      if(rep_w_idx != -1) { //repeated word found
-        //repeated words start with 2
-        val idx = str.substring(0, rep_w_idx).toInt - 2
-        if (idx < repeatedWordChildren.size) {
-          val ch = repeatedWordChildren(idx)
-          if (ch != null) {
-            val partialRes = MM[String, PartialFuzzyResult]()
-            ch.fuzzySearch(str.substring(rep_w_idx + 1), 0, maxEditDistance,
-              "", partialRes, str)
-          } else AB()
-        } else AB()
-      } else {
+      def fuzzySearchInternal(node: MutableIndexBase, str: String): AB[FuzzyResult] = {
         def reduceResults(res: AB[FuzzyResult]): AB[FuzzyResult] = {
           val r =
             res
@@ -248,52 +239,71 @@ trait AddressIndexer { this: AddressFinder =>
               .map[FuzzyResult] { case (_, searchResults) =>
                 searchResults.minBy(_.editDistance)
               }
-          //sort by edit distance asc first and then reference count desc
-          AB.from(r).sortBy(fr => (fr.editDistance << 24) - fr.refs.length)
+          AB.from(r)
         }
-        def completePartial(pr: PartialFuzzyResult): AB[FuzzyResult] = {
-          //          println(s"\nCOMPL PART: ${pr.word} ${pr.rest}, ED: ${pr.editDistance}, RC: ${pr.refs.size}")
+        def completePartial(pr: PartialFuzzyResult, depth: Int): AB[(FuzzyResult, Int)] = {
           if (pr.refs.isEmpty) return AB()
 
           val npartialRes = MM[String, PartialFuzzyResult]()
-          val nr = fuzzySearch(pr.rest,0,
-            Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
-          val res = AB[FuzzyResult]()
-          if (npartialRes.nonEmpty) {
-            //          println(s"\nPARTIAL RES: ${npartialRes.map{ case (k, pr) => (pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
-            npartialRes.foreach { case (_, npr) =>
-              val is = intersect(AB(pr.refs, npr.refs), 1024, null)
-              if (is.nonEmpty) {
-                res ++= completePartial(
-                  PartialFuzzyResult(pr.word + " " + npr.word, is,
-                    pr.editDistance + npr.editDistance, npr.rest))
+          val nr =
+            reduceResults(node.fuzzySearch(pr.rest,0,
+              Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
+            )
+
+          val presMap = MM[String, (FuzzyResult, Int)]()
+          npartialRes.foreach { case (_, npr) =>
+            val is = intersect(AB(pr.refs, npr.refs), 1024, null)
+            if (is.nonEmpty) {
+              val completedRes = completePartial(PartialFuzzyResult(pr.word + " " + npr.word, is,
+                pr.editDistance + npr.editDistance, npr.rest), depth + 1)
+              completedRes.foreach { case (fr, dpth) =>
+                //select results with minimal edit distance
+                presMap.get(fr.word).map { case (FuzzyResult(_, _, ed), _) =>
+                  if (fr.editDistance < ed) presMap(fr.word) = (fr, dpth)
+                }.getOrElse(presMap.addOne((fr.word, (fr, dpth))))
               }
             }
-            //            println(s"COMPL PART DONE PART: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
           }
-          if (nr.nonEmpty) {
-            nr.foreach { fr =>
+          val pres = AB.from(presMap.values)
+
+          if (nr.nonEmpty)
+            nr.flatMap { fr =>
               val is = intersect(AB(pr.refs, fr.refs), 1024, null)
-              if (is.nonEmpty) res += FuzzyResult(pr.word + " " + fr.word, is,
-                pr.editDistance + fr.editDistance)
-            }
-            //            println(s"COMPL PART DONE: ${pr.word} ${pr.rest}, ${res.map(fr => fr.word -> fr.editDistance).mkString(",")}")
-          }
-          res
+              if (is.nonEmpty)
+                AB((FuzzyResult(pr.word + " " + fr.word, is, pr.editDistance + fr.editDistance), depth))
+              else AB()
+            } ++ pres else pres
         }
         val partialRes = MM[String, PartialFuzzyResult]()
-        val r = fuzzySearch(str,
+        val r = node.fuzzySearch(str,
           0, maxEditDistance, "", partialRes, str)
         if (r.isEmpty && partialRes.nonEmpty) {
-          val res = AB[FuzzyResult]()
-          //          println(s"\nPARTIAL RES: ${partialRes.map{ case (k, pr) =>(pr.word + " " + pr.rest, pr.editDistance)}.mkString(",")}")
+          val res = AB[(FuzzyResult, Int)]()
           partialRes.foreach { case (_, pr) =>
-            res ++= completePartial(pr)
+            res ++= completePartial(pr, 0)
           }
-          reduceResults(res)
+          res
+            //sort by edit distance asc first and then depth desc and then reference count desc
+            .sortBy { case (fr, depth) => (fr.editDistance << 25) - (depth << 24) - fr.refs.length }
+            .map(_._1)
         } else {
           reduceResults(r)
+            //sort by edit distance asc first and then reference count desc
+            .sortBy(fr => (fr.editDistance << 24) - fr.refs.length)
         }
+      }
+      val rep_w_idx = str.indexOf('*')
+      if(rep_w_idx != -1) { //repeated word found
+        //repeated words start with 2
+        val idx = str.substring(0, rep_w_idx).toInt - 2
+        if (idx < repeatedWordChildren.size) {
+          val ch = repeatedWordChildren(idx)
+          if (ch != null) {
+            fuzzySearchInternal(ch, str.substring(rep_w_idx + 1))
+          } else AB()
+        } else AB()
+      } else {
+        fuzzySearchInternal(this, str)
       }
     }
 
@@ -352,6 +362,42 @@ trait AddressIndexer { this: AddressFinder =>
   final class MutableIndexNode(var word: String, var refs: Refs,
                                _children: AB[MutableIndexNode]) extends MutableIndexBase(_children) {
 
+    override private[AddressIndexer] def fuzzySearch(str: String,
+                                                     currentEditDistance: Int,
+                                                     maxEditDistance: Int,
+                                                     p: String,
+                                                     partial: MM[String, PartialFuzzyResult],
+                                                     origin: String): AB[FuzzyResult] = {
+      if (str.isEmpty) {
+        //add exact refs to fuzzy result
+        (if (refs.exact.isEmpty) AB() else AB(FuzzyResult(p, refs.exact, currentEditDistance))) ++
+          //add children word values if current edit distance is less than max edit distance
+          (if (currentEditDistance < maxEditDistance && children != null)  {
+            children.foldLeft(AB[FuzzyResult]()) { case (r, c) =>
+              r ++= c.fuzzySearch(str, currentEditDistance + 1, maxEditDistance, p + c.word, partial, origin)
+            }
+          } else AB())
+      } else {
+        if (refs.exact.nonEmpty) {
+          if (currentEditDistance <= setEditDistance(p)) {
+            val key = p + " " + str
+            def partialEntry =
+              (key, PartialFuzzyResult(p, refs.exact, currentEditDistance + 1 /*space added*/, str))
+            partial.get(key).map { pr =>
+              if (currentEditDistance < pr.editDistance) partial += partialEntry
+            }.getOrElse(partial += partialEntry)
+          }
+          if (children == null) {
+            val err = currentEditDistance + str.length
+            if (err <= maxEditDistance) AB(FuzzyResult(p, refs.exact, err))
+            else AB()
+          } else super.fuzzySearch(str, currentEditDistance, maxEditDistance, p, partial, origin)
+        }
+        else if (children == null) AB()
+        else super.fuzzySearch(str, currentEditDistance, maxEditDistance, p, partial, origin)
+      }
+    }
+
     def update(w: String, ref: Int, exact: Boolean): Unit = {
       val (commonPart, nodeRest, wordRest) = split(word, w)
       if (nodeRest.isEmpty && wordRest.isEmpty) { //update node codes
@@ -368,43 +414,6 @@ trait AddressIndexer { this: AddressFinder =>
         if (wordRest.nonEmpty) { //update children with remaining part of new word
           updateChildren(wordRest, ref, exact)
         }
-      }
-    }
-
-    override private[AddressIndexer] def fuzzySearch(str: String,
-                                                     currentEditDistance: Int,
-                                                     maxEditDistance: Int,
-                                                     p: String,
-                                                     partial: MM[String, PartialFuzzyResult],
-                                                     origin: String): AB[FuzzyResult] = {
-      if (str.isEmpty) {
-        //println(s"'$p' '$str', max: $maxEditDistance, curr: ${currentEditDistance + str.length}, has refs: ${refs.exact.nonEmpty}")
-        //add exact refs to fuzzy result
-        (if (refs.exact.isEmpty) AB() else AB(FuzzyResult(p, refs.exact, currentEditDistance))) ++
-          //add children word values if current edit distance is less than max edit distance
-          (if (currentEditDistance < maxEditDistance && children != null)  {
-            children.foldLeft(AB[FuzzyResult]()) { case (r, c) =>
-              r ++= c.fuzzySearch(str, currentEditDistance + 1, maxEditDistance, p + c.word, partial, origin)
-            }
-          } else AB())
-      } else {
-        if (refs.exact.nonEmpty) {
-          if (currentEditDistance <= setEditDistance(p)) {
-            val key = p + " " + str
-            def partialEntry = (key, PartialFuzzyResult(p, refs.exact, currentEditDistance, str))
-            partial.get(key).map { pr =>
-              if (currentEditDistance < pr.editDistance) partial += partialEntry
-            }.getOrElse(partial += partialEntry)
-          }
-          //println(s"'$p' '$str', final ${children == null}, max: $maxEditDistance, curr: ${currentEditDistance + str.length}")
-          if (children == null) {
-            val err = currentEditDistance + str.length
-            if (err <= maxEditDistance) AB(FuzzyResult(p, refs.exact, err))
-            else AB()
-          } else super.fuzzySearch(str, currentEditDistance, maxEditDistance, p, partial, origin)
-        }
-        else if (children == null) AB()
-        else super.fuzzySearch(str, currentEditDistance, maxEditDistance, p, partial, origin)
       }
     }
 
@@ -546,37 +555,32 @@ trait AddressIndexer { this: AddressFinder =>
         //reset ref count
         var refCount = 0
         val fuzzyRes = params map idx_vals_fuzzy
-        //println(s"${fuzzyRes.map(_.map{case FuzzyResult(w, r, d) => s"$w, $d, ${r.length}"}.mkString("[", ",", "]")).mkString("(", ",", ")")}")
         val fuzzyIntersection = AB[(AB[Int], Int)]()
         var productiveIntersectionCount = 0
         var intersectionCount = 0
-        val fuzzyCombInit = (AB.fill[AB[Int]](params.size)(null), 0, 0) //(refs, editDistance, idx)
-        val currentWords = Array.fill(fuzzyRes.size)("")
+        val fuzzyCombInit = (AB.fill[FuzzyResult](params.size)(null), 0, 0) //(fuzzyresult, editDistance, idx)
         val MaxProductiveIntersectionCount = 32
         val MaxIntersectionCount = 1024
-        foldCombinations[FuzzyResult, (AB[AB[Int]], Int, Int), AB[(AB[Int], Int)]](
+        foldCombinations[FuzzyResult, (AB[FuzzyResult], Int, Int), AB[(AB[Int], Int)]](
           fuzzyRes,
           fuzzyCombInit,
-          (cr, d) => {
-            currentWords(cr._3) = d.word //for debugging purposes
-            cr._1(cr._3) = d.refs
-            (cr._1, cr._2 + d.editDistance, cr._3 + 1) //sum all edit distances from fuzzy results
+          (cr, fr) => {
+            cr._1(cr._3) = fr
+            (cr._1, cr._2 + fr.editDistance, cr._3 + 1)
           },
           fuzzyIntersection,
           (r, cr) => {
-            //println(s"CURRENT WORDS: [${currentWords.mkString(",")}]")
-            val int_ed = (intersect(cr._1, limit), cr._2)
+            val int_ed = (intersect(cr._1.map(_.refs), limit), cr._2)
             if (int_ed._1.nonEmpty) {
               r += int_ed
               refCount += int_ed._1.length
               productiveIntersectionCount += 1
             }
             intersectionCount += 1
-            //println(s"INTERSECTION: ${currentWords.mkString(",")}, ${int_ed._1.size}")
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
               logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
                 fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)
-                  .mkString("(", ",", ")")).mkString(",")}")
+                  .mkString("(", ",", ")")).mkString("[", ",", "]")}")
 
             (r, refCount < limit &&
                 intersectionCount < MaxIntersectionCount &&
@@ -789,6 +793,10 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
     def find_equal(a_pos: Int, b_pos: Int) = {
+      def search(arr: AB[Int], from: Int, until: Int, code: Int) = {
+        val i = binarySearchFromUntil[Int, Int](arr, from, until, code, identity _, _ - _)
+        if (i < 0) -(i + 1) else i
+      }
       val a: AB[Int] = idx(a_pos)
       val b: AB[Int] = idx(b_pos)
       val al = a.length
@@ -796,7 +804,8 @@ trait AddressIndexer { this: AddressFinder =>
       var ai = pos(a_pos)
       var bi = pos(b_pos)
       while (ai < al && bi < bl && a(ai) != b(bi))
-        if (a(ai) < b(bi)) ai += 1 else bi += 1
+        if (a(ai) < b(bi)) ai = search(a, ai + 1, al, b(bi))
+        else bi = search(b, bi + 1, bl, a(ai))
       pos(a_pos) = ai
       pos(b_pos) = bi
     }
@@ -816,6 +825,21 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
     result
+  }
+
+  def hasIntersection(a: AB[Int], b: AB[Int]): Boolean = {
+    def search(arr: AB[Int], from: Int, until: Int, code: Int) = {
+      val i = binarySearchFromUntil[Int, Int](arr, from, until, code, identity _, _ - _)
+      if (i < 0) -(i + 1) else i
+    }
+    val al = a.length
+    val bl = b.length
+    var ai = 0
+    var bi = 0
+    while(ai < al && bi < bl && a(ai) != b(bi))
+      if (a(ai) < b(bi)) ai = search(a, ai + 1, al, b(bi))
+      else bi = search(b, bi + 1, bl, a(ai))
+    ai < al && bi < bl
   }
 
   /** Merge ordered collections removing duplicates */

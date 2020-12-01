@@ -120,7 +120,7 @@ class IndexerTest extends FunSuite {
       .parseJson
 
     import IndexJsonProtocol._
-    println(node.toJson.prettyPrint)
+    //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
 
     assertResult(finder.IndexStats(finder.NodeStats(20,39),ArrayBuffer(finder.NodeStats(5,12))))(node.statistics)
@@ -153,7 +153,8 @@ class IndexerTest extends FunSuite {
       "brīvības iela rīga",
       "brīvības valka",
       "brīvības iela valka",
-      "brīvības iela 2 valka"
+      "brīvības iela 2 valka",
+      "valles vidusskola, valle"
     )
     .zipWithIndex
     .map { case (addr, idx) =>
@@ -207,6 +208,7 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("kazdanga"), 1)))(search_fuzzy(word("vazdanga"), 1))
     assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("kentspils"), 1))
     assertResult(List((List("ķirša"), 0), (List("ķiršu"), 1), (List("ķirši"), 1)))(search_fuzzy(word("kirsa"), 1))
+    assertResult(List((List("valles vidusskola, valle"),1)))(search_fuzzy(word("2*vallez"), 1))
 
     //fuzzy search, edit distance 2
     assertResult(List((List("akls"), 2)))(search_fuzzy(word("akliss"), 2))
@@ -222,13 +224,14 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("kazdanga"), 2)))(search_fuzzy(word("kazdangazi"), 2))
 
     //fuzzy search with search string split
-    assertResult(List((List("brīvības rīga", "brīvības iela rīga"),0)))(search_fuzzy(word("rigabrivibas"), 0))
-    assertResult(List((List("brīvības rīga", "brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbas"), 2))
-    assertResult(List((List("brīvības iela rīga"),1)))(search_fuzzy(word("riiabrivibasiela"), 2))
-    assertResult(List((List("brīvības iela rīga", "brīvības iela valka", "brīvības iela 2 valka"),2)))(search_fuzzy(word("brvbasiela"), 2))
-    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbasiela"), 2))
-    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrvbasiela"), 2))
-    assertResult(List((List("brīvības iela valka", "brīvības iela 2 valka"),3)))(search_fuzzy(word("vlkabrvbasiela"), 2))
-    assertResult(List((List("brīvības iela 2 valka"),2), (List("brīvības iela valka", "brīvības iela 2 valka"),3)))(search_fuzzy(word("brvbasiela2valka"), 2))
+    //spaces are included in edit distance calculation
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 1)))(search_fuzzy(word("rigabrivibas"), 0))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 4)))(search_fuzzy(word("riiabrvbas"), 2))
+    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrivibasiela"), 2))
+    assertResult(List((List("brīvības iela rīga", "brīvības iela valka", "brīvības iela 2 valka"),3)))(search_fuzzy(word("brvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"),5)))(search_fuzzy(word("riiabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"),5)))(search_fuzzy(word("riiaielabrvbas"), 2))
+    assertResult(List((List("brīvības iela valka", "brīvības iela 2 valka"),5)))(search_fuzzy(word("vlkabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela 2 valka"),5),(List("brīvības iela valka", "brīvības iela 2 valka"),5)))(search_fuzzy(word("brvbasiela2valka"), 2))
   }
 }
