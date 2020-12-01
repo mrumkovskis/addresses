@@ -89,10 +89,9 @@ lazy val addresses = project
     Compile / run / mainClass := Some("lv.addresses.BootDispatcher"),
     assembly / mainClass := Some("lv.addresses.BootDispatcher"),
     assemblyMergeStrategy in assembly := {
-      case "application.conf" => MergeStrategy.concat
-      case x =>
-        val oldStrategy = (assemblyMergeStrategy in assembly).value
-        oldStrategy(x)
+      case x if x startsWith "application.conf" => MergeStrategy.discard
+      case x if x startsWith "logback.xml" => MergeStrategy.discard
+      case x => (assemblyMergeStrategy in assembly).value(x)
     }
   )
   .settings(
