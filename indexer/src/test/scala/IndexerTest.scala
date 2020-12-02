@@ -171,7 +171,7 @@ class IndexerTest extends FunSuite {
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
     def res(refs: finder.Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
     def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
-      res.map { case finder.FuzzyResult(_, r, e) => r.map(idx_val(_)).toList -> e }.toList
+      res.map { case finder.FuzzyResult(_, r, ed, sd) => (r.map(idx_val(_)).toList, ed, sd) }.toList
     }
 
     //exact search, edit distance 0
@@ -182,56 +182,56 @@ class IndexerTest extends FunSuite {
     assertResult(Nil)(search("ziz"))
 
     //fuzzy search, edit distance 1
-    assertResult(List((List("aka aka", "aka akācijas"), 0),
-      (List("ak ak", "ak aknīste"), 1)))(search_fuzzy(word("aka"), 1))
-    assertResult(List((List("aka akācijas"), 0)))(search_fuzzy(word("akācijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akcijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akucijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akaicijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("kakācijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("ukācijas"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijs"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijaz"), 1))
-    assertResult(List((List("aka akācijas"), 1)))(search_fuzzy(word("akācijass"), 1))
-    assertResult(List((List("akls"),1), (List("aknas"),1)))(search_fuzzy(word("aklas"), 1))
-    assertResult(List((List("akls"), 1)))(search_fuzzy(word("kakls"), 1))
-    assertResult(List((List("ventspils"), 0)))(search_fuzzy(word("ventspils"), 1))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 1))
+    assertResult(List((List("aka aka", "aka akācijas"), 0, 0),
+      (List("ak ak", "ak aknīste"), 1, 0)))(search_fuzzy(word("aka"), 1))
+    assertResult(List((List("aka akācijas"), 0, 0)))(search_fuzzy(word("akācijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akcijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akucijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akaicijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("kakācijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("ukācijas"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akācijs"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akācijaz"), 1))
+    assertResult(List((List("aka akācijas"), 1, 0)))(search_fuzzy(word("akācijass"), 1))
+    assertResult(List((List("akls"),1, 0), (List("aknas"),1, 0)))(search_fuzzy(word("aklas"), 1))
+    assertResult(List((List("akls"), 1, 0)))(search_fuzzy(word("kakls"), 1))
+    assertResult(List((List("ventspils"), 0, 0)))(search_fuzzy(word("ventspils"), 1))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("venspils"), 1))
     assertResult(Nil)(search_fuzzy(word("vencpils"), 1))
     assertResult(Nil)(search_fuzzy(word("kaklas"), 1))
 
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 1))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("ventpils"), 1))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("venspils"), 1))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("ventpils"), 1))
     assertResult(Nil)(search_fuzzy(word("venpils"), 1))
-    assertResult(List((List("kazdanga"), 1)))(search_fuzzy(word("bazdanga"), 1))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("bentspils"), 1))
-    assertResult(List((List("kazdanga"), 1)))(search_fuzzy(word("vazdanga"), 1))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("kentspils"), 1))
-    assertResult(List((List("ķirša"), 0), (List("ķiršu"), 1), (List("ķirši"), 1)))(search_fuzzy(word("kirsa"), 1))
-    assertResult(List((List("valles vidusskola, valle"),1)))(search_fuzzy(word("2*vallez"), 1))
+    assertResult(List((List("kazdanga"), 1, 0)))(search_fuzzy(word("bazdanga"), 1))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("bentspils"), 1))
+    assertResult(List((List("kazdanga"), 1, 0)))(search_fuzzy(word("vazdanga"), 1))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("kentspils"), 1))
+    assertResult(List((List("ķirša"), 0, 0), (List("ķiršu"), 1, 0), (List("ķirši"), 1, 0)))(search_fuzzy(word("kirsa"), 1))
+    assertResult(List((List("valles vidusskola, valle"), 1, 0)))(search_fuzzy(word("2*vallez"), 1))
 
     //fuzzy search, edit distance 2
-    assertResult(List((List("akls"), 2)))(search_fuzzy(word("akliss"), 2))
-    assertResult(List((List("akls"), 2), (List("aknas"), 2)))(search_fuzzy(word("kaklas"), 2))
-    assertResult(List((List("akls"), 2)))(search_fuzzy(word("kikls"), 2))
-    assertResult(List((List("akls"), 2)))(search_fuzzy(word("akliss"), 2))
+    assertResult(List((List("akls"), 2, 0)))(search_fuzzy(word("akliss"), 2))
+    assertResult(List((List("akls"), 2, 0), (List("aknas"), 2, 0)))(search_fuzzy(word("kaklas"), 2))
+    assertResult(List((List("akls"), 2, 0)))(search_fuzzy(word("kikls"), 2))
+    assertResult(List((List("akls"), 2, 0)))(search_fuzzy(word("akliss"), 2))
     assertResult(Nil)(search_fuzzy(word("kakliss"), 2))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("ventpils"), 2))
-    assertResult(List((List("ventspils"), 1)))(search_fuzzy(word("venspils"), 2))
-    assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("venpils"), 2))
-    assertResult(List((List("ventspils"), 2)))(search_fuzzy(word("vencpils"), 2))
-    assertResult(List((List("kazdanga"), 2)))(search_fuzzy(word("sbazdanga"), 2))
-    assertResult(List((List("kazdanga"), 2)))(search_fuzzy(word("kazdangazi"), 2))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("ventpils"), 2))
+    assertResult(List((List("ventspils"), 1, 0)))(search_fuzzy(word("venspils"), 2))
+    assertResult(List((List("ventspils"), 2, 0)))(search_fuzzy(word("venpils"), 2))
+    assertResult(List((List("ventspils"), 2, 0)))(search_fuzzy(word("vencpils"), 2))
+    assertResult(List((List("kazdanga"), 2, 0)))(search_fuzzy(word("sbazdanga"), 2))
+    assertResult(List((List("kazdanga"), 2, 0)))(search_fuzzy(word("kazdangazi"), 2))
 
     //fuzzy search with search string split
     //spaces are included in edit distance calculation
-    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 1)))(search_fuzzy(word("rigabrivibas"), 0))
-    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 4)))(search_fuzzy(word("riiabrvbas"), 2))
-    assertResult(List((List("brīvības iela rīga"),3)))(search_fuzzy(word("riiabrivibasiela"), 2))
-    assertResult(List((List("brīvības iela rīga", "brīvības iela valka", "brīvības iela 2 valka"),3)))(search_fuzzy(word("brvbasiela"), 2))
-    assertResult(List((List("brīvības iela rīga"),5)))(search_fuzzy(word("riiabrvbasiela"), 2))
-    assertResult(List((List("brīvības iela rīga"),5)))(search_fuzzy(word("riiaielabrvbas"), 2))
-    assertResult(List((List("brīvības iela valka", "brīvības iela 2 valka"),5)))(search_fuzzy(word("vlkabrvbasiela"), 2))
-    assertResult(List((List("brīvības iela 2 valka"),5),(List("brīvības iela valka", "brīvības iela 2 valka"),5)))(search_fuzzy(word("brvbasiela2valka"), 2))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 1, 1)))(search_fuzzy(word("rigabrivibas"), 0))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 4, 1)))(search_fuzzy(word("riiabrvbas"), 2))
+    assertResult(List((List("brīvības iela rīga"), 3, 2)))(search_fuzzy(word("riiabrivibasiela"), 2))
+    assertResult(List((List("brīvības iela rīga", "brīvības iela valka", "brīvības iela 2 valka"), 3, 1)))(search_fuzzy(word("brvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"), 5, 2)))(search_fuzzy(word("riiabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela rīga"), 5, 2)))(search_fuzzy(word("riiaielabrvbas"), 2))
+    assertResult(List((List("brīvības iela valka", "brīvības iela 2 valka"), 5, 2)))(search_fuzzy(word("vlkabrvbasiela"), 2))
+    assertResult(List((List("brīvības iela 2 valka"), 5, 3),(List("brīvības iela valka", "brīvības iela 2 valka"), 5, 2)))(search_fuzzy(word("brvbasiela2valka"), 2))
   }
 }

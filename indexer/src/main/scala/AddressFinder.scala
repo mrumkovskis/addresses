@@ -115,8 +115,8 @@ trait AddressFinder
       val addresses = new AB[Address]()
       var i = 0
       while (i < length && addresses.length < limit) {
-        val (codes, err) = resultCodes(i)
-        addresses ++= codesToAddr(codes, err)
+        val fuzzyRes = resultCodes(i)
+        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance)
         i += 1
       }
       val size = Math.min(limit, addresses.length)
