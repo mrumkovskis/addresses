@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
-import scala.collection.mutable.{ArrayBuffer => AB}
+import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.util.Using
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
@@ -90,16 +90,19 @@ trait AddressFinder
       }
     else {
       val words = normalize(str)
-      def codesToAddr(codes: AB[Int], editDistance: Int) = {
+      def codesToAddr(codes: AB[Int], editDistance: Int, existingCodes: MS[Int]) = {
         var (perfectRankCount, i) = (0, 0)
         val size = Math.min(codes.length, limit)
         val result = new AB[Long](size)
         while (perfectRankCount < size && i < codes.length) {
           val code = codes(i)
-          val r = rank(words, code)
-          if (r == 0) perfectRankCount += 1
-          val key = r.toLong << 53 | i.toLong << 32 | code
-          insertIntoHeap(result, key)
+          if (!existingCodes.contains(code)) {
+            val r = rank(words, code)
+            if (r == 0) perfectRankCount += 1
+            val key = r.toLong << 53 | i.toLong << 32 | code
+            insertIntoHeap(result, key)
+            existingCodes += code
+          }
           i += 1
         }
         val res =
@@ -114,9 +117,10 @@ trait AddressFinder
       val length = resultCodes.length
       val addresses = new AB[Address]()
       var i = 0
+      val existingCodes = MS[Int]()
       while (i < length && addresses.length < limit) {
         val fuzzyRes = resultCodes(i)
-        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance)
+        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance, existingCodes)
         i += 1
       }
       val size = Math.min(limit, addresses.length)
