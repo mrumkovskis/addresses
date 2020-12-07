@@ -227,6 +227,9 @@ class IndexerTest extends FunSuite {
     //spaces are included in edit distance calculation
     assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 1, 1)))(search_fuzzy(word("rigabrivibas"), 0))
     assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 4, 1)))(search_fuzzy(word("riiabrvbas"), 2))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 2, 1)))(search_fuzzy(word("riiabriv"), 2))
+    assertResult(List((List("brīvības rīga", "brīvības iela rīga"), 2, 1)))(search_fuzzy(word("riiabrivi"), 2))
+    assertResult(List((List("brīvības iela rīga"), 2, 1)))(search_fuzzy(word("riiaie"), 2))
     assertResult(List((List("brīvības iela rīga"), 3, 2)))(search_fuzzy(word("riiabrivibasiela"), 2))
     assertResult(List((List("brīvības iela rīga", "brīvības iela valka", "brīvības iela 2 valka"), 3, 1)))(search_fuzzy(word("brvbasiela"), 2))
     assertResult(List((List("brīvības iela rīga"), 5, 2)))(search_fuzzy(word("riiabrvbasiela"), 2))

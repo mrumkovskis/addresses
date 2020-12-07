@@ -375,7 +375,8 @@ trait AddressIndexer { this: AddressFinder =>
                                                      origin: String): AB[FuzzyResult] = {
       if (str.isEmpty) {
         //add exact refs to fuzzy result
-        (if (refs.exact.isEmpty) AB() else AB(FuzzyResult(p, refs.exact, currentEditDistance))) ++
+        (if (currentEditDistance > 0 && refs.exact.isEmpty) AB() else
+          AB(FuzzyResult(p, if (refs.exact.nonEmpty) refs.exact else refs.approx, currentEditDistance))) ++
           //add children word values if current edit distance is less than max edit distance
           (if (currentEditDistance < maxEditDistance && children != null)  {
             children.foldLeft(AB[FuzzyResult]()) { case (r, c) =>
