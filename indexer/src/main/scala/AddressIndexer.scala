@@ -62,6 +62,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
 
+  sealed case class Result(word: String, codes: AB[Int], editDistance: Int)
   sealed case class FuzzyResult(word: String,
                                 refs: AB[Int],
                                 editDistance: Int,
@@ -481,7 +482,9 @@ trait AddressIndexer { this: AddressFinder =>
 
   /** Returns array of typles, each tuple consist of mathcing address codes and
    * edit distance from search parameters */
-  def searchCodes(words: AB[String])(limit: Int, types: Set[Int] = null): AB[FuzzyResult] = {
+  def searchCodes(words: AB[String],
+                  index: MutableIndex)(limit: Int,
+                                       types: Set[Int] = null): AB[Result] = {
     def searchParams(words: AB[String]) = {
       val ws =
         wordStatForSearch(words)
@@ -490,9 +493,9 @@ trait AddressIndexer { this: AddressFinder =>
           .map { case (w, c) => if (c == 1) w else s"$c*$w" }
       AB.from(ws)
     }
-    def idx_vals(word: String) = _index(word)
+    def idx_vals(word: String) = index(word)
     def idx_vals_fuzzy(word: String) = {
-      _index(word, _index.setEditDistance(word))
+      index(word, index.setEditDistance(word))
     }
 
     def has_type(addr_idx: Int) = types(addressMap(idxCode(addr_idx)).typ)
@@ -501,8 +504,8 @@ trait AddressIndexer { this: AddressFinder =>
         .map(i => idxCode(i))
     }
 
-    def exactSearch(params: AB[String]): AB[FuzzyResult] = {
-      def run(p: AB[String], editDistance: Int): AB[FuzzyResult] = {
+    def exactSearch(params: AB[String]): AB[Result] = {
+      def run(p: AB[String], editDistance: Int): AB[Result] = {
         val result = (p map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty))
         var refCount = 0
         val intersection = AB[Int]()
@@ -523,13 +526,13 @@ trait AddressIndexer { this: AddressFinder =>
         )
         intersection match {
           case a if a.isEmpty => AB()
-          case a => AB(FuzzyResult(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance))
+          case a => AB(Result(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance))
         }
       }
       if (params.isEmpty) AB()
       else {
         var count = 0
-        var result = AB[FuzzyResult]()
+        var result = AB[Result]()
         binCombinations(params.size - 1, spaces => {
           var i = 1
           var j = 0
@@ -566,7 +569,7 @@ trait AddressIndexer { this: AddressFinder =>
         def fuzzyCombInit = new MutableFuzzyComb("", AB(), 0, 0)
         val MaxProductiveIntersectionCount = 32
         val MaxIntersectionCount = 1024
-        foldCombinations[FuzzyResult, MutableFuzzyComb, AB[FuzzyResult]](
+        foldCombinations[FuzzyResult, MutableFuzzyComb, AB[Result]](
           fuzzyRes,
           fuzzyCombInit,
           (mfc, fr) => {
@@ -576,11 +579,11 @@ trait AddressIndexer { this: AddressFinder =>
             mfc.splitDepth += fr.splitDepth
             mfc
           },
-          AB[FuzzyResult](),
+          AB[Result](),
           (r, mfc) => {
             val refs = intersect(mfc.refs, limit)
             if (refs.nonEmpty) {
-              r += FuzzyResult(mfc.word.trim, refs, mfc.editDistance, mfc.splitDepth)
+              r += Result(mfc.word.trim, refs, mfc.editDistance)
               refCount += refs.length
               productiveIntersectionCount += 1
             }

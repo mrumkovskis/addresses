@@ -113,14 +113,14 @@ trait AddressFinder
           .map(_.toInt)
           .map(address(_, editDistance))
       }
-      val resultCodes = searchCodes(words)(1024, types)
+      val resultCodes = searchCodes(words, indexNode)(1024, types)
       val length = resultCodes.length
       val addresses = new AB[Address]()
       var i = 0
       val existingCodes = MS[Int]()
       while (i < length && addresses.length < limit) {
         val fuzzyRes = resultCodes(i)
-        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance, existingCodes)
+        addresses ++= codesToAddr(fuzzyRes.codes, fuzzyRes.editDistance, existingCodes)
         i += 1
       }
       val size = Math.min(limit, addresses.length)
