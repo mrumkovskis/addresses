@@ -167,19 +167,23 @@ class IndexerTest extends FunSuite {
     }.toMap
 
     def word(str: String) = finder.normalize(str).head
-    def search(str: String) = res(node(str))
+    def search_exact(str: String) = res(node(str))
     def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
     def res(refs: finder.Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
     def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
       res.map { case finder.FuzzyResult(_, r, ed, sd) => (r.map(idx_val(_)).toList, ed, sd) }.toList
     }
 
+    def search(str: String) =
+      finder.searchCodes(finder.normalize(str), node, identity)(1024)
+        .map(r => (r.codes.map(idx_val).toList, r.editDistance)).toList
+
     //exact search, edit distance 0
-    assertResult(List("ak ak", "ak aknīste", "aknas", "akls", "aknīste", "aka aka", "aka akācijas"))(search("ak"))
-    assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search("2*ak"))
-    assertResult(List("aknas"))(search("akna"))
-    assertResult(Nil)(search("aknass"))
-    assertResult(Nil)(search("ziz"))
+    assertResult(List("ak ak", "ak aknīste", "aknas", "akls", "aknīste", "aka aka", "aka akācijas"))(search_exact("ak"))
+    assertResult(List("ak ak", "ak aknīste", "aka aka", "aka akācijas"))(search_exact("2*ak"))
+    assertResult(List("aknas"))(search_exact("akna"))
+    assertResult(Nil)(search_exact("aknass"))
+    assertResult(Nil)(search_exact("ziz"))
 
     //fuzzy search, edit distance 1
     assertResult(List((List("aka aka", "aka akācijas"), 0, 0),
@@ -236,5 +240,11 @@ class IndexerTest extends FunSuite {
     assertResult(List((List("brīvības iela rīga"), 5, 2)))(search_fuzzy(word("riiaielabrvbas"), 2))
     assertResult(List((List("brīvības iela valka", "brīvības iela 2 valka"), 5, 2)))(search_fuzzy(word("vlkabrvbasiela"), 2))
     assertResult(List((List("brīvības iela 2 valka"), 5, 3),(List("brīvības iela valka", "brīvības iela 2 valka"), 5, 2)))(search_fuzzy(word("brvbasiela2valka"), 2))
+
+    //fuzzy search merge words
+    assertResult(List((List("aknas"), 1)))(search("ak nas"))
+    assertResult(List((List("aknas"), 4)))(search("a k n a s"))
+    //repeated word search
+    assertResult(List((List("valles vidusskola, valle"), 1)))(search("vallez vallez"))
   }
 }

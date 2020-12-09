@@ -483,8 +483,9 @@ trait AddressIndexer { this: AddressFinder =>
   /** Returns array of typles, each tuple consist of mathcing address codes and
    * edit distance from search parameters */
   def searchCodes(words: AB[String],
-                  index: MutableIndex)(limit: Int,
-                                       types: Set[Int] = null): AB[Result] = {
+                  index: MutableIndex,
+                  refToCode: Int => Int)(limit: Int,
+                                         types: Set[Int] = null): AB[Result] = {
     def searchParams(words: AB[String]) = {
       val ws =
         wordStatForSearch(words)
@@ -498,10 +499,10 @@ trait AddressIndexer { this: AddressFinder =>
       index(word, index.setEditDistance(word))
     }
 
-    def has_type(addr_idx: Int) = types(addressMap(idxCode(addr_idx)).typ)
+    def has_type(addr_idx: Int) = types(addressMap(refToCode(addr_idx)).typ)
     def intersect(idx: AB[AB[Int]], limit: Int): AB[Int] = {
       this.intersect(idx, limit, if (types == null) null else has_type)
-        .map(i => idxCode(i))
+        .map(i => refToCode(i))
     }
 
     def exactSearch(params: AB[String]): AB[Result] = {
@@ -822,19 +823,49 @@ trait AddressIndexer { this: AddressFinder =>
     result
   }
 
-  def hasIntersection(a: AB[Int], b: AB[Int]): Boolean = {
-    def search(arr: AB[Int], from: Int, until: Int, code: Int) = {
-      val i = binarySearchFromUntil[Int, Int](arr, from, until, code, identity _, _ - _)
-      if (i < 0) -(i + 1) else i
+  def hasIntersection(idx: AB[AB[Int]]): Boolean = {
+    val pos = Array.fill(idx.length)(0)
+    var hasCommon = false
+    def checkEquals = {
+      val v = idx(0)(pos(0))
+      val l = pos.length
+      var i = 1
+      while (i < l && v == idx(i)(pos(i))) i += 1
+      hasCommon = i == l
+      hasCommon
     }
-    val al = a.length
-    val bl = b.length
-    var ai = 0
-    var bi = 0
-    while(ai < al && bi < bl && a(ai) != b(bi))
-      if (a(ai) < b(bi)) ai = search(a, ai + 1, al, b(bi))
-      else bi = search(b, bi + 1, bl, a(ai))
-    ai < al && bi < bl
+    def find_equal(a_pos: Int, b_pos: Int) = {
+      def search(arr: AB[Int], from: Int, until: Int, code: Int) = {
+        val i = binarySearchFromUntil[Int, Int](arr, from, until, code, identity _, _ - _)
+        if (i < 0) -(i + 1) else i
+      }
+      val a: AB[Int] = idx(a_pos)
+      val b: AB[Int] = idx(b_pos)
+      val al = a.length
+      val bl = b.length
+      var ai = pos(a_pos)
+      var bi = pos(b_pos)
+      while (ai < al && bi < bl && a(ai) != b(bi))
+        if (a(ai) < b(bi)) ai = search(a, ai + 1, al, b(bi))
+        else bi = search(b, bi + 1, bl, a(ai))
+      pos(a_pos) = ai
+      pos(b_pos) = bi
+    }
+    def continue = {
+      var i = 0
+      val l = pos.length
+      while (i < l && pos(i) < idx(i).length) i += 1
+      i == l && !checkEquals
+    }
+    while (continue) {
+      var i = 0
+      val l = pos.length - 1
+      while(i < l) {
+        find_equal(i, i + 1)
+        i += 1
+      }
+    }
+    hasCommon
   }
 
   /** Merge ordered collections removing duplicates */
