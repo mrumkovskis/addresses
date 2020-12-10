@@ -100,7 +100,9 @@ trait AddressIndexer { this: AddressFinder =>
 
     def setEditDistance(word: String): Int = {
       if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
-      else WordLengthEditDistances.getOrElse(word.length, DefaultEditDistance)
+      else {
+        WordLengthEditDistances.getOrElse(word.length - (word.indexOf('*') + 1), DefaultEditDistance)
+      }
     }
 
     private[AddressIndexer] def search(str: String): Refs = {
@@ -305,7 +307,9 @@ trait AddressIndexer { this: AddressFinder =>
         if (idx < repeatedWordChildren.size) {
           val ch = repeatedWordChildren(idx)
           if (ch != null) {
+            val wc = s"${idx + 2}*"
             fuzzySearchInternal(ch, str.substring(rep_w_idx + 1))
+              .map(fr => fr.copy(word = wc + fr.word))
           } else AB()
         } else AB()
       } else {
@@ -505,31 +509,33 @@ trait AddressIndexer { this: AddressFinder =>
         .map(i => refToCode(i))
     }
 
-    def exactSearch(params: AB[String]): AB[Result] = {
-      def run(p: AB[String], editDistance: Int): AB[Result] = {
-        val result = (p map idx_vals).map(r => AB(r.exact, r.approx).filter(_.nonEmpty))
-        var refCount = 0
-        val intersection = AB[Int]()
-        val combInit = (AB.fill[AB[Int]](result.size)(null), 0) //(refs, idx)
-        foldCombinations[AB[Int], (AB[AB[Int]], Int), AB[Int]](result,
-          combInit,
-          (cr, d) => {
-            cr._1(cr._2) = d
-            (cr._1, cr._2 + 1)
-          },
-          intersection,
-          (r, cr) => {
-            val intr = intersect(cr._1, limit)
-            r ++= intr
-            refCount += intr.length
-            (r, refCount < limit)
-          }
-        )
-        intersection match {
-          case a if a.isEmpty => AB()
-          case a => AB(Result(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance))
+    def exactSearch(p: AB[String], editDistance: Int, exactMatch: Boolean): AB[Result] = {
+      val result = (p map idx_vals)
+        .map(r => if (exactMatch) AB(r.exact) else AB(r.exact, r.approx).filter(_.nonEmpty))
+      var refCount = 0
+      val intersection = AB[Int]()
+      val combInit = (AB.fill[AB[Int]](result.size)(null), 0) //(refs, idx)
+      foldCombinations[AB[Int], (AB[AB[Int]], Int), AB[Int]](result,
+        combInit,
+        (cr, d) => {
+          cr._1(cr._2) = d
+          (cr._1, cr._2 + 1)
+        },
+        intersection,
+        (r, cr) => {
+          val intr = intersect(cr._1, limit)
+          r ++= intr
+          refCount += intr.length
+          (r, refCount < limit)
         }
+      )
+      intersection match {
+        case a if a.isEmpty => AB()
+        case a => AB(Result(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance))
       }
+    }
+
+    def exactSearchWithMerge(params: AB[String]): AB[Result] = {
       if (params.isEmpty) AB()
       else {
         var count = 0
@@ -549,7 +555,7 @@ trait AddressIndexer { this: AddressFinder =>
             }
             i += 1
           }
-          result = run(searchParams(ab), editDistance)
+          result = exactSearch(searchParams(ab), editDistance, false)
           count += 1
           result.isEmpty && count < 32
         })
@@ -557,7 +563,7 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
-    exactSearch(words) match {
+    exactSearchWithMerge(words) match {
       case a if a.nonEmpty => a
       case _ => // fuzzy search
         val params = searchParams(words)
@@ -582,10 +588,11 @@ trait AddressIndexer { this: AddressFinder =>
           },
           AB[Result](),
           (r, mfc) => {
-            val refs = intersect(mfc.refs, limit)
-            if (refs.nonEmpty) {
-              r += Result(mfc.word.trim, refs, mfc.editDistance)
-              refCount += refs.length
+            val searchString = mfc.word.trim
+            val res = exactSearch(searchParams(AB.from(searchString.split(' '))), mfc.editDistance, true)
+            if (res.nonEmpty) {
+              r ++= res
+              refCount += res.foldLeft(0)(_ + _.codes.length)
               productiveIntersectionCount += 1
             }
             intersectionCount += 1
