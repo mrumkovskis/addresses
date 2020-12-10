@@ -98,7 +98,7 @@ trait AddressIndexer { this: AddressFinder =>
 
   sealed class MutableIndexBase(var children: AB[MutableIndexNode]) {
 
-    def setEditDistance(word: String): Int = {
+    def maxEditDistance(word: String): Int = {
       if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
       else {
         WordLengthEditDistances.getOrElse(word.length - (word.indexOf('*') + 1), DefaultEditDistance)
@@ -256,7 +256,7 @@ trait AddressIndexer { this: AddressFinder =>
           val npartialRes = MM[String, PartialFuzzyResult]()
           val nr =
             reduceResults(node.fuzzySearch(pr.rest,0,
-              Math.min(maxEditDistance, setEditDistance(pr.rest)), "", npartialRes, pr.rest)
+              Math.min(maxEditDistance, this.maxEditDistance(pr.rest)), "", npartialRes, pr.rest)
             )
 
           val presMap = MM[String, FuzzyResult]()
@@ -390,7 +390,7 @@ trait AddressIndexer { this: AddressFinder =>
           } else AB())
       } else {
         if (refs.exact.nonEmpty) {
-          if (currentEditDistance <= setEditDistance(p)) {
+          if (currentEditDistance <= this.maxEditDistance(p)) {
             val key = p + " " + str
             def partialEntry =
               (key, PartialFuzzyResult(p, refs.exact, currentEditDistance + 1 /*space added*/, str))
@@ -500,7 +500,7 @@ trait AddressIndexer { this: AddressFinder =>
     }
     def idx_vals(word: String) = index(word)
     def idx_vals_fuzzy(word: String) = {
-      index(word, index.setEditDistance(word))
+      index(word, index.maxEditDistance(word))
     }
 
     def has_type(addr_idx: Int) = types(addressMap(refToCode(addr_idx)).typ)
