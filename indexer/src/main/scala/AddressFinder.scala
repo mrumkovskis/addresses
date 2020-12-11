@@ -14,7 +14,7 @@ import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.util.Using
 
 case class Address(code: Int, address: String, zipCode: String, typ: Int,
-                   coordX: BigDecimal, coordY: BigDecimal, history: List[String],
+                   lksCoordX: BigDecimal, lksCoordY: BigDecimal, history: List[String],
                    editDistance: Option[Int])
 case class AddressStruct(
                           pilCode: Option[Int] = None, pilName: Option[String] = None,

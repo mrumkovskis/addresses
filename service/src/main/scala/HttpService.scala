@@ -29,16 +29,16 @@ object MyJsonProtocol extends DefaultJsonProtocol {
 }
 
 case class AddressFull(
-  code: Int, address: String, zipCode: Option[String], typ: Int,
-  coordX: Option[BigDecimal], coordY: Option[BigDecimal], history: List[String],
-  pilCode: Option[Int] = None, pilName: Option[String] = None,
-  novCode: Option[Int] = None, novName: Option[String] = None,
-  pagCode: Option[Int] = None, pagName: Option[String] = None,
-  cieCode: Option[Int] = None, cieName: Option[String] = None,
-  ielCode: Option[Int] = None, ielName: Option[String] = None,
-  nltCode: Option[Int] = None, nltName: Option[String] = None,
-  dzvCode: Option[Int] = None, dzvName: Option[String] = None,
-  editDistance: Option[Int])
+                        code: Int, address: String, zipCode: Option[String], typ: Int,
+                        lksCoordX: Option[BigDecimal], lksCoordY: Option[BigDecimal], history: List[String],
+                        pilCode: Option[Int] = None, pilName: Option[String] = None,
+                        novCode: Option[Int] = None, novName: Option[String] = None,
+                        pagCode: Option[Int] = None, pagName: Option[String] = None,
+                        cieCode: Option[Int] = None, cieName: Option[String] = None,
+                        ielCode: Option[Int] = None, ielName: Option[String] = None,
+                        nltCode: Option[Int] = None, nltName: Option[String] = None,
+                        dzvCode: Option[Int] = None, dzvName: Option[String] = None,
+                        editDistance: Option[Int])
 
  case class ResolvedAddressFull(address: String, resolvedAddress: Option[AddressFull])
 
@@ -67,7 +67,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
   // Address to CSV marshaller
   implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.Address, ByteString] { a =>
     Marshalling.WithFixedContentType(ContentTypes.`text/csv(UTF-8)`, () => {
-      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.coordX, a.coordY).mkString(";"))
+      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.lksCoordX, a.lksCoordY).mkString(";"))
     })
   }
   // enable csv streaming:
@@ -93,8 +93,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
         val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
         val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
-        val coordX: BigDecimal = params.get("x") map(x => BigDecimal(x.head)) getOrElse -1
-        val coordY: BigDecimal = params.get("y") map(y => BigDecimal(y.head)) getOrElse -1
+        val coordX: BigDecimal = params.get("lks_x") map(x => BigDecimal(x.head)) getOrElse -1
+        val coordY: BigDecimal = params.get("lks_y") map(y => BigDecimal(y.head)) getOrElse -1
         respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
           response {
             finder => (pattern match {
@@ -163,7 +163,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
     ) = {
       import struct._
       AddressFull(a.code, a.address.replace("\n", separator), Option(a.zipCode), a.typ,
-        Option(a.coordX), Option(a.coordY), a.history,
+        Option(a.lksCoordX), Option(a.lksCoordY), a.history,
         pilCode, pilName,
         novCode, novName,
         pagCode, pagName,
