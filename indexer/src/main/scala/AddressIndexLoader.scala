@@ -14,6 +14,7 @@ import java.sql.DriverManager
 
 import scala.util.Using
 import scala.collection.mutable.{ArrayBuffer => AB}
+import lv.addresses.index.Index._
 
 trait AddressIndexLoader { this: AddressFinder =>
   def save(addressMap: Map[Int, AddrObj],

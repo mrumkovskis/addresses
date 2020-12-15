@@ -7,6 +7,8 @@ import org.tresql._
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
+import lv.addresses.index.Index._
+
 trait AddressLoader { this: AddressFinder =>
 
   def loadAddresses(addressZipFile: String = addressFileName, hcf: String = houseCoordFile) = {

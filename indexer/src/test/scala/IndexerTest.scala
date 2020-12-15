@@ -7,6 +7,8 @@ import spray.json._
 
 import scala.io.Source
 
+import lv.addresses.index.Index._
+
 object IndexerTest {
   class TestAddressFinder(val addressFileName: String, val blackList: Set[String],
                           val houseCoordFile: String, val dbConfig: Option[DbConfig]) extends AddressFinder
@@ -18,9 +20,9 @@ object IndexerTest {
       override def write(obj: ArrayBuffer[T]): JsValue = obj.toVector.toJson
       override def read(json: JsValue): ArrayBuffer[T] = ArrayBuffer.from(json.convertTo[Vector[T]])
     }
-    implicit object NodeFormat extends RootJsonFormat[finder.MutableIndexNode] {
-      implicit val refFormat = jsonFormat2(finder.Refs)
-      override def write(obj: finder.MutableIndexNode): JsValue = {
+    implicit object NodeFormat extends RootJsonFormat[MutableIndexNode] {
+      implicit val refFormat = jsonFormat2(Refs)
+      override def write(obj: MutableIndexNode): JsValue = {
         import obj._
 
         JsObject(Map(
@@ -30,26 +32,26 @@ object IndexerTest {
         ))
       }
 
-      override def read(json: JsValue): finder.MutableIndexNode = (json: @unchecked) match {
+      override def read(json: JsValue): MutableIndexNode = (json: @unchecked) match {
         case JsObject(fields) =>
-          new finder.MutableIndexNode(
+          new MutableIndexNode(
             fields("word").convertTo[String],
-            fields("refs").convertTo[finder.Refs],
-            fields("children").convertTo[ArrayBuffer[finder.MutableIndexNode]]
+            fields("refs").convertTo[Refs],
+            fields("children").convertTo[ArrayBuffer[MutableIndexNode]]
           )
       }
     }
-    implicit object NodeBaseFormat extends RootJsonFormat[finder.MutableIndexBase] {
-      override def write(obj: finder.MutableIndexBase): JsValue = {
+    implicit object NodeBaseFormat extends RootJsonFormat[MutableIndexBase] {
+      override def write(obj: MutableIndexBase): JsValue = {
         Option(obj.children).map(_.toJson).getOrElse(JsNull)
       }
 
-      override def read(json: JsValue): finder.MutableIndexBase = (json: @unchecked) match {
-        case nodes => new finder.MutableIndexBase(nodes.convertTo[ArrayBuffer[finder.MutableIndexNode]])
+      override def read(json: JsValue): MutableIndexBase = (json: @unchecked) match {
+        case nodes => new MutableIndexBase(nodes.convertTo[ArrayBuffer[MutableIndexNode]])
       }
     }
-    implicit object IndexFormat extends RootJsonFormat[finder.MutableIndex] {
-      override def write(obj: finder.MutableIndex): JsValue = {
+    implicit object IndexFormat extends RootJsonFormat[MutableIndex] {
+      override def write(obj: MutableIndex): JsValue = {
         import obj._
         JsObject(Map(
           "index" -> Option(children).map(_.toJson).getOrElse(JsNull),
@@ -58,11 +60,11 @@ object IndexerTest {
         ))
       }
 
-      override def read(json: JsValue): finder.MutableIndex = (json: @unchecked) match {
+      override def read(json: JsValue): MutableIndex = (json: @unchecked) match {
         case JsObject(fields) =>
           def nodes[T: JsonFormat](name: String) = fields(name).convertTo[ArrayBuffer[T]]
-          new finder.MutableIndex(nodes[finder.MutableIndexNode]("index"),
-            nodes[finder.MutableIndexBase]("repeated_words_index"))
+          new MutableIndex(nodes[MutableIndexNode]("index"),
+            nodes[MutableIndexBase]("repeated_words_index"))
       }
     }
   }
@@ -80,14 +82,14 @@ class IndexerTest extends FunSuite {
       "v" -> 5, "pag" -> 1, "valle" -> 3,
       "vecum" -> 1, "ve" -> 1, "vidusskol" -> 1, "vidussk" -> 1, "p" -> 1, "val" -> 3,
       "vecumnieku" -> 1, "valles" -> 2)) {
-        finder.wordStatForIndex("Valles vidusskola, Valle, Valles pag., Vecumnieku nov.")
+        wordStatForIndex("Valles vidusskola, Valle, Valles pag., Vecumnieku nov.")
     }
   }
 
   test("word stat for search") {
     assertResult(Array(("Valles", 1), ("vidusskola", 1), ("Valle", 3),
       ("Valles" ,2), ("pag", 1), ("Vecumnieku", 1), ("nov", 1)))(
-      finder.wordStatForSearch(ArrayBuffer("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
+      wordStatForSearch(ArrayBuffer("Valles", "vidusskola", "Valle", "Valles", "pag", "Vecumnieku", "nov")))
   }
 
   test("index") {
@@ -102,14 +104,14 @@ class IndexerTest extends FunSuite {
       "21 215"
     )
     .zipWithIndex
-    .foldLeft(new finder.MutableIndex(null, null)) { (node, addrWithIdx) =>
+    .foldLeft(new MutableIndex(null, null)) { (node, addrWithIdx) =>
       val (addr, idx) = addrWithIdx
-      val words = finder.extractWords(addr)
+      val words = extractWords(addr)
       //check that duplicate word do not result in duplicate address code reference
       (if (words.exists(_ == "ak")) words ++ List("ak") else words)
         .foreach { w =>
           val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
-          node.updateChildren(w, idx, finder.normalize(addr).contains(exactStr))
+          node.updateChildren(w, idx, normalize(addr).contains(exactStr))
         }
       node
     }
@@ -123,13 +125,13 @@ class IndexerTest extends FunSuite {
     //println(node.toJson.prettyPrint)
     assertResult(expectedResult)(node.toJson)
 
-    assertResult(finder.IndexStats(finder.NodeStats(20,39),ArrayBuffer(finder.NodeStats(5,12))))(node.statistics)
+    assertResult(IndexStats(NodeStats(20,39),ArrayBuffer(NodeStats(5,12))))(node.statistics)
     assertResult(ArrayBuffer())(node.invalidIndices)
     assertResult(ArrayBuffer())(node.invalidWords)
   }
 
   test("index search") {
-    val node = new finder.MutableIndex(null, null)
+    val node = new MutableIndex(null, null)
     val idx_val = List(
       "aknas",
       "akls",
@@ -158,25 +160,26 @@ class IndexerTest extends FunSuite {
     )
     .zipWithIndex
     .map { case (addr, idx) =>
-      val words = finder.extractWords(addr)
+      val words = extractWords(addr)
       words.foreach { w =>
         val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
-        node.updateChildren(w, idx, finder.normalize(addr).contains(exactStr))
+        node.updateChildren(w, idx, normalize(addr).contains(exactStr))
       }
       (idx, addr)
     }.toMap
 
-    def word(str: String) = finder.normalize(str).head
+    def word(str: String) = normalize(str).head
     def search_exact(str: String) = res(node(str))
-    def search_fuzzy(str: String, ed: Int) = res_fuzzy(node(str, ed))
-    def res(refs: finder.Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
-    def res_fuzzy(res: ArrayBuffer[finder.FuzzyResult]) = {
-      res.map { case finder.FuzzyResult(_, r, ed, sd) => (r.map(idx_val(_)).toList, ed, sd) }.toList
+    def search_fuzzy(str: String, ed: Int) =
+      res_fuzzy(node(str, ed, finder.maxEditDistance))
+    def res(refs: Refs) = (refs.exact ++ refs.approx).map(idx_val(_)).toList
+    def res_fuzzy(res: ArrayBuffer[FuzzyResult]) = {
+      res.map { case FuzzyResult(_, r, ed, sd) => (r.map(idx_val(_)).toList, ed, sd) }.toList
     }
 
     def search(str: String) =
-      finder.searchCodes(finder.normalize(str), node, identity)(1024)
-        .map(r => (r.codes.map(idx_val).toList, r.editDistance)).toList
+      searchCodes(normalize(str), node, finder.maxEditDistance)(1024)
+        .map(r => (r.refs.map(idx_val).toList, r.editDistance)).toList
 
     //exact search, edit distance 0
     assertResult(List("ak ak", "ak aknīste", "aknas", "akls", "aknīste", "aka aka", "aka akācijas"))(search_exact("ak"))

@@ -72,6 +72,7 @@ trait AddressFinder
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
   def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
+    import lv.addresses.index.Index._
     checkIndex
     if (str.trim.length == 0) //search string empty, search only big units - PIL, NOV, PAG, CIE
       if (types == null || (types -- big_unit_types) != Set.empty)
@@ -90,12 +91,12 @@ trait AddressFinder
       }
     else {
       val words = normalize(str)
-      def codesToAddr(codes: AB[Int], editDistance: Int, existingCodes: MS[Int]) = {
+      def codesToAddr(refs: AB[Int], editDistance: Int, existingCodes: MS[Int]) = {
         var (perfectRankCount, i) = (0, 0)
-        val size = Math.min(codes.length, limit)
+        val size = Math.min(refs.length, limit)
         val result = new AB[Long](size)
-        while (perfectRankCount < size && i < codes.length) {
-          val code = codes(i)
+        while (perfectRankCount < size && i < refs.length) {
+          val code = idxCode(refs(i))
           if (!existingCodes.contains(code)) {
             val r = rank(words, code)
             if (r == 0) perfectRankCount += 1
@@ -113,14 +114,14 @@ trait AddressFinder
           .map(_.toInt)
           .map(address(_, editDistance))
       }
-      val resultCodes = searchCodes(words, indexNode, idxCode.apply)(1024, types)
+      val resultCodes = searchCodes(words, indexNode, maxEditDistance)(1024, types)
       val length = resultCodes.length
       val addresses = new AB[Address]()
       var i = 0
       val existingCodes = MS[Int]()
       while (i < length && addresses.length < limit) {
         val fuzzyRes = resultCodes(i)
-        addresses ++= codesToAddr(fuzzyRes.codes, fuzzyRes.editDistance, existingCodes)
+        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance, existingCodes)
         i += 1
       }
       val size = Math.min(limit, addresses.length)
