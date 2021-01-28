@@ -86,14 +86,23 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         unsubscribe(subscriber)
         as.log.info(s"$subscriber unsubscribed from version update.")
     }
-    private def deleteOldIndexes = for {
-      afinder <- Option(af)
-      index <- afinder.indexFiles
-    } {
-      if (index.addresses.delete) as.log.info(s"Deleted address cache: ${index.addresses}")
-      else as.log.warning(s"Unable to delete address cache file ${index.addresses}")
-      if (index.index.delete) as.log.info(s"Deleted address index: ${index.index}")
-      else as.log.warning(s"Unable to delete address index: ${index.index}")
+    private def deleteOldIndexes = {
+      dbConfig
+        .map(c => new File(c.indexDir))
+        .orElse(Option(addressFileName).flatMap(f => Option(new File(f).getParentFile)))
+        .foreach { dir =>
+          def delIdx(postfix: String) =
+            dir.listFiles(new FileFilter {
+              def accept(f: File) = f.getName.endsWith(postfix)
+            }).sortBy(_.getName)
+              .dropRight(1) // keep newest index file
+              .foreach { f =>
+                if (f.delete()) as.log.info(s"Deleted address cache file: $f")
+                else as.log.warning(s"Unable to delete address cache file: $f")
+              }
+          delIdx(AddressesPostfix)
+          delIdx(IndexPostfix)
+        }
     }
 
     override def postStop() = af = null
