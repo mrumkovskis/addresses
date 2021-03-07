@@ -1,7 +1,6 @@
 package lv.addresses.service
 
 import java.io.{File, FileFilter}
-
 import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
@@ -11,12 +10,13 @@ import akka.pattern.ask
 import akka.event.EventBus
 import akka.event.LookupClassification
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.Logger
+import com.typesafe.config.Config
 import lv.addresses.indexer.DbConfig
 import org.slf4j.LoggerFactory
 
@@ -172,15 +172,21 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
 
   override def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
 
-  def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
-
-  override def dbConfig: Option[DbConfig] =
-    Some(DbConfig(
-      c("db.driver", "org.h2.Driver"),
-      c("db.url", "jdbc:h2:./addresses.h2"),
-      c("db.user", ""),
-      c("db.password", ""),
-      c("db.index-dir", ".")))
+  override def dbConfig: Option[DbConfig] = {
+    def c(config: Config, key: String, default: String): String =
+      scala.util.Try(config.getString(key)).toOption.getOrElse(default)
+    Try(conf.getConfig("db"))
+      .map { dbConf =>
+        val dc = c(dbConf, _, _)
+        DbConfig(
+          dc("driver", "org.h2.Driver"),
+          dc("url", "jdbc:h2:./addresses.h2"),
+          dc("user", ""),
+          dc("password", ""),
+          dc("index-dir", "."))
+      }
+      .toOption
+  }
 }
 
 class AddressFinder(val addressFileName: String, val blackList: Set[String],
