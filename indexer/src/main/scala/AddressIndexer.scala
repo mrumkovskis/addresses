@@ -59,13 +59,6 @@ trait AddressIndexer { this: AddressFinder =>
     def depth = foldLeft(0)((d, _) => d + 1)
   }
 
-  protected var _idxCode: scala.collection.mutable.HashMap[Int, Int] = null
-  protected var _index: MutableIndex = null
-  def idxCode = _idxCode
-  def indexNode = _index
-  //filtering without search string, only by object type code support for (pilsēta, novads, pagasts, ciems)
-  protected var _sortedPilsNovPagCiem: Vector[Int] = null
-
   def maxEditDistance(word: String): Int = {
     if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
     else {
@@ -73,17 +66,14 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
 
-  def index(addressMap: Map[Int, AddrObj], history: Map[Int, List[String]]) = {
+  case class Index(idxCode: scala.collection.mutable.HashMap[Int, Int],
+                   index: MutableIndex)
 
+  def index(addressMap: Map[Int, AddrObj],
+            history: Map[Int, List[String]],
+            synonyms: Properties,
+            filter: AddrObj => Boolean): Index = {
     logger.info("Starting address indexing...")
-    logger.info("Loading address synonyms...")
-    val synonyms: Properties = {
-      val props = new Properties()
-      val in = getClass.getResourceAsStream("/synonyms.properties")
-      if (in != null) props.load(in)
-      props
-    }
-    logger.info(s"${synonyms.size} address synonym(s) loaded")
 
     logger.info(s"Sorting ${addressMap.size} addresses...")
 
@@ -96,22 +86,18 @@ trait AddressIndexer { this: AddressFinder =>
         case PIL if !addressMap.contains(addressMap(code).superCode) => 0 // top level cities
         case _ => typeOrderMap(typ)
       }
-      val addresses = new Array[(Int, Int, String)](addressMap.size)
+      val addresses = AB[(Int, Int, String)]()
       addressMap.foreach { case (code, addr) =>
-        addresses(idx) = (code, typeOrder(code, addr.typ) * 100 + addr.depth,
-          addr.foldRight(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" "))
-        idx += 1
+        if (filter == null || filter(addr)) {
+          addresses.append((code, typeOrder(code, addr.typ) * 100 + addr.depth,
+            addr.foldRight(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" ")))
+          idx += 1
+        }
       }
       addresses.sortWith { case ((_, ord1, a1), (_, ord2, a2)) =>
         ord1 < ord2 || (ord1 == ord2 && (a1.length < a2.length || (a1.length == a2.length && a1 < a2)))
       }
     }
-
-    _sortedPilsNovPagCiem =
-      sortedAddresses
-        .collect { case (a, _, _) if big_unit_types.contains(addressMap(a).typ) => a }
-        .toVector
-    logger.info(s"Total size of pilseta, novads, pagasts, ciems - ${_sortedPilsNovPagCiem.size}")
 
     logger.info("Creating index...")
     val idx_code = scala.collection.mutable.HashMap[Int, Int]()
@@ -134,16 +120,14 @@ trait AddressIndexer { this: AddressFinder =>
       }
 
     logger.info(s"Address objects processed: $idx; index statistics: ${index.statistics}")
-
-    this._idxCode = idx_code
-    this._index = index
+    Index(idx_code, index)
   }
 
   /** Node word must be of one character length if it does not contains multiplier '*'.
    * Returns tuple - (path, word, first address code) */
-  def invalidWords: AB[(String, String, Int)] = _index.invalidWords
+  def invalidWords(idx: MutableIndex): AB[(String, String, Int)] = idx.invalidWords
 
   /** Address codes in node must be unique and in ascending order.
    * Returns (invalid path|word, address codes) */
-  def invalidIndices: AB[(String, AB[Int])] = _index.invalidIndices
+  def invalidIndices(idx: MutableIndex): AB[(String, AB[Int])] = idx.invalidIndices
 }

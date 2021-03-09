@@ -3,13 +3,13 @@ package lv.addresses.indexer
 import java.io.File
 import java.sql.DriverManager
 import java.time.LocalDateTime
-
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
+import java.util.Properties
 import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.util.Using
 
@@ -45,21 +45,43 @@ trait AddressFinder
   def addressMap = _addressMap
   def addressHistory = _addressHistory
 
+  private[this] var _index: Index = null
+  private[this] var _bigObjIndex: Index = null
+
+  def index = _index
+  def bigObjIndex = _bigObjIndex
+
   def init: Unit = {
     if (ready) return
 
     if (addressFileName == null && (dbConfig.isEmpty || dbDataVersion == null))
       logger.error("Address file not set nor database connection parameters specified")
     else {
-      if (indexFiles.isDefined) loadIndex else {
+      logger.info("Loading address synonyms...")
+      val synonyms: Properties = {
+        val props = new Properties()
+        val in = getClass.getResourceAsStream("/synonyms.properties")
+        if (in != null) props.load(in)
+        props
+      }
+      logger.info(s"${synonyms.size} address synonym(s) loaded")
+      if (indexFiles.isDefined) {
+        val cachedIndex = load()
+        _addressMap = cachedIndex.addresses
+        _addressHistory = cachedIndex.history
+        _index = Index(cachedIndex.idxCode, cachedIndex.index)
+      } else {
         val (am, ah) = dbConfig
           .map(loadAddressesFromDb) //load from db
           .getOrElse(loadAddresses() -> Map[Int, List[String]]()) //load from file
         _addressMap = am
         _addressHistory = ah
-        index(am, ah)
+        _index = index(am, ah, synonyms, null)
         saveIndex
       }
+      logger.info("Creating big object index...")
+      _bigObjIndex = index(addressMap, addressHistory, synonyms, ao => big_unit_types(ao.typ))
+      logger.info("Creating big object index done")
       spatialIndex(addressMap)
     }
   }
@@ -72,69 +94,56 @@ trait AddressFinder
            VZD.{driver, user, password} and db properties are set.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
-  def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
+  def searchIndex(str: String, limit: Int, types: Set[Int], idx: Index): Array[Address] = {
     import lv.addresses.index.Index._
     checkIndex
-    if (str.trim.length == 0) //search string empty, search only big units - PIL, NOV, PAG, CIE
-      if (types == null || (types -- big_unit_types) != Set.empty)
-        Array[Address]()
-      else {
-        val result = new AB[Int]()
-        var (s, i) = (0, 0)
-        while (i < _sortedPilsNovPagCiem.size && s < limit) {
-          if(types contains _addressMap(_sortedPilsNovPagCiem(i)).typ) {
-            result += _sortedPilsNovPagCiem(i)
-            s += 1
-          }
-          i += 1
+    val words = normalize(str)
+    def codesToAddr(refs: AB[Int], editDistance: Int, existingCodes: MS[Int]) = {
+      var (perfectRankCount, i) = (0, 0)
+      val size = Math.min(refs.length, limit)
+      val result = new AB[Long](size)
+      while (perfectRankCount < size && i < refs.length) {
+        val code = idx.idxCode(refs(i))
+        if (!existingCodes.contains(code)) {
+          val r = rank(words, code)
+          if (r == 0) perfectRankCount += 1
+          val key = r.toLong << 53 | i.toLong << 32 | code
+          insertIntoHeap(result, key)
+          existingCodes += code
         }
-        result.map(address(_)).toArray
-      }
-    else {
-      val words = normalize(str)
-      def codesToAddr(refs: AB[Int], editDistance: Int, existingCodes: MS[Int]) = {
-        var (perfectRankCount, i) = (0, 0)
-        val size = Math.min(refs.length, limit)
-        val result = new AB[Long](size)
-        while (perfectRankCount < size && i < refs.length) {
-          val code = idxCode(refs(i))
-          if (!existingCodes.contains(code)) {
-            val r = rank(words, code)
-            if (r == 0) perfectRankCount += 1
-            val key = r.toLong << 53 | i.toLong << 32 | code
-            insertIntoHeap(result, key)
-            existingCodes += code
-          }
-          i += 1
-        }
-        val res =
-          if (size < result.size / 2) heap_topx(result, size)
-          else if (size < result.size) result.sorted.take(size) else result.sorted
-        res
-          .map(_ & 0x00000000FFFFFFFFL)
-          .map(_.toInt)
-          .map(address(_, editDistance))
-      }
-      val resultCodes = searchCodes(words, indexNode, maxEditDistance)(1024,
-        Option(types).map(t => (idx: Int) => t(addressMap(idxCode(idx)).typ)).orNull)
-      val length = resultCodes.length
-      val addresses = new AB[Address]()
-      var i = 0
-      val existingCodes = MS[Int]()
-      while (i < length && addresses.length < limit) {
-        val fuzzyRes = resultCodes(i)
-        addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance, existingCodes)
         i += 1
       }
-      val size = Math.min(limit, addresses.length)
-      val result = new Array[Address](size)
-      i = 0
-      while (i < size) {
-        result(i) = addresses(i)
-        i += 1
-      }
-      result
+      val res =
+        if (size < result.size / 2) heap_topx(result, size)
+        else if (size < result.size) result.sorted.take(size) else result.sorted
+      res
+        .map(_ & 0x00000000FFFFFFFFL)
+        .map(_.toInt)
+        .map(address(_, editDistance))
     }
+    val resultCodes = searchCodes(words, idx.index, maxEditDistance)(1024,
+      Option(types).map(t => (i: Int) => t(addressMap(idx.idxCode(i)).typ)).orNull)
+    val length = resultCodes.length
+    val addresses = new AB[Address]()
+    var i = 0
+    val existingCodes = MS[Int]()
+    while (i < length && addresses.length < limit) {
+      val fuzzyRes = resultCodes(i)
+      addresses ++= codesToAddr(fuzzyRes.refs, fuzzyRes.editDistance, existingCodes)
+      i += 1
+    }
+    val size = Math.min(limit, addresses.length)
+    val result = new Array[Address](size)
+    i = 0
+    while (i < size) {
+      result(i) = addresses(i)
+      i += 1
+    }
+    result
+  }
+
+  def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
+    searchIndex(str, limit, types, if (types == null || types.isEmpty) index else bigObjIndex)
   }
 
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
@@ -235,16 +244,7 @@ trait AddressFinder
 
   def saveIndex = {
     checkIndex
-    save(addressMap, _idxCode, _index, _sortedPilsNovPagCiem)
-  }
-
-  def loadIndex = {
-    val idx = load()
-    _addressMap = idx.addresses
-    _idxCode = idx.idxCode
-    _index = idx.index
-    _sortedPilsNovPagCiem = idx.sortedBigObjs
-    _addressHistory = idx.history
+    save(addressMap, index.idxCode, index.index)
   }
 
   def insertIntoHeap(h: AB[Long], el: Long) = {

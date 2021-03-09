@@ -19,8 +19,7 @@ import lv.addresses.index.Index._
 trait AddressIndexLoader { this: AddressFinder =>
   def save(addressMap: Map[Int, AddrObj],
            idxCode: scala.collection.mutable.HashMap[Int, Int],
-           index: MutableIndex,
-           sortedPilNovPagCiem: Vector[Int]) = {
+           index: MutableIndex) = {
 
     val IndexFiles(addrFile, idxFile) = newIndexFiles
 
@@ -40,10 +39,6 @@ trait AddressIndexLoader { this: AddressFinder =>
     Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
       var maxRefArrayWord: String = null
       var maxRefArrayLength = 0
-      //write big object count
-      os.writeInt(sortedPilNovPagCiem.size)
-      //write big objects
-      sortedPilNovPagCiem foreach os.writeInt
       //write address count
       os.writeInt(idxCode.size)
       //write addr_idx->addr_code map
@@ -73,13 +68,12 @@ trait AddressIndexLoader { this: AddressFinder =>
     logger.info(s"Address index saved.")
   }
 
-  case class Index(addresses: Map[Int, AddrObj],
-                   idxCode: scala.collection.mutable.HashMap[Int, Int],
-                   index: MutableIndex,
-                   sortedBigObjs: Vector[Int],
-                   history: Map[Int, List[String]])
+  case class CachedIndex(addresses: Map[Int, AddrObj],
+                         idxCode: scala.collection.mutable.HashMap[Int, Int],
+                         index: MutableIndex,
+                         history: Map[Int, List[String]])
 
-  def load(): Index = {
+  def load(): CachedIndex = {
     val IndexFiles(addrFile, idxFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
     logger.info(s"Loading address index from $idxFile...")
     Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
@@ -112,16 +106,9 @@ trait AddressIndexLoader { this: AddressFinder =>
 
       val idx_code = scala.collection.mutable.HashMap[Int, Int]()
       val index = new MutableIndex(null, null)
-      val spnpc = new Array[Int](in.readInt)
-      //load pilseta, novads, pagasts, ciems
-      var i = 0
-      while(i < spnpc.length) {
-        spnpc(i) = in.readInt
-        i += 1
-      }
       //load addr_idx->addr_code map
       val count = in.readInt
-      i = 0
+      var i = 0
       while (i < count) {
         idx_code += (in.readInt -> in.readInt)
         i += 1
@@ -143,7 +130,7 @@ trait AddressIndexLoader { this: AddressFinder =>
 
       logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
         s"index stats - ${index.statistics.render}.")
-      Index(addressMap, idx_code, index, spnpc.toVector, history)
+      CachedIndex(addressMap, idx_code, index, history)
     }.get
   }
 

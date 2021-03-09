@@ -15,10 +15,7 @@ addresses.controller('AddressesCtrl',
     {value: '104', selected: false, name: 'pilsēta'},
     {value: '113', selected: false, name: 'novads'},
     {value: '105', selected: false, name: 'pagasts'},
-    {value: '106', selected: false, name: 'ciems'},
-    {value: '107', selected: false, name: 'iela'},
-    {value: '108', selected: false, name: 'māja'},
-    {value: '109', selected: false, name: 'dzīvoklis'}];
+    {value: '106', selected: false, name: 'ciems'}];
 
   $scope.limit = {value: 20, selected: false, name: 'limits'};
 
