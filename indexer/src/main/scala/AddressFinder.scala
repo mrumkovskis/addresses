@@ -68,7 +68,8 @@ trait AddressFinder
 
   def checkIndex = if (_index == null || addressMap == null)
     sys.error("""
-           Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file.
+           Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file or
+           VZD.{driver, user, password} and db properties are set.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
   def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
