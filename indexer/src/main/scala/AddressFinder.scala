@@ -115,7 +115,8 @@ trait AddressFinder
           .map(_.toInt)
           .map(address(_, editDistance))
       }
-      val resultCodes = searchCodes(words, indexNode, maxEditDistance)(1024, types)
+      val resultCodes = searchCodes(words, indexNode, maxEditDistance)(1024,
+        Option(types).map(t => (idx: Int) => t(addressMap(idxCode(idx)).typ)).orNull)
       val length = resultCodes.length
       val addresses = new AB[Address]()
       var i = 0
