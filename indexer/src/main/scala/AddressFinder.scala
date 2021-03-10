@@ -143,7 +143,11 @@ trait AddressFinder
   }
 
   def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
-    searchIndex(str, limit, types, if (types == null || types.isEmpty) index else bigObjIndex)
+    if (str == null || str.trim.isEmpty) {
+      Array()
+    } else {
+      searchIndex(str, limit, types, if (types == null || types.isEmpty) index else bigObjIndex)
+    }
   }
 
   def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
