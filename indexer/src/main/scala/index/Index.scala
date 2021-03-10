@@ -538,11 +538,14 @@ object Index {
           AB[Result](),
           (r, mfc) => {
             val searchString = mfc.word.trim
-            val res = exactSearch(searchParams(AB.from(searchString.split(' '))), mfc.editDistance, true)
-            if (res.nonEmpty) {
-              r ++= res
-              refCount += res.foldLeft(0)(_ + _.refs.length)
-              productiveIntersectionCount += 1
+            if (searchString.nonEmpty) {
+              val res = exactSearch(searchParams(AB.from(searchString.split(' '))),
+                mfc.editDistance, true)
+              if (res.nonEmpty) {
+                r ++= res
+                refCount += res.foldLeft(0)(_ + _.refs.length)
+                productiveIntersectionCount += 1
+              }
             }
             intersectionCount += 1
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
