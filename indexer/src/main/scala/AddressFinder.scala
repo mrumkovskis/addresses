@@ -13,8 +13,10 @@ import java.util.Properties
 import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.util.Using
 
-case class Address(code: Int, address: String, zipCode: String, typ: Int,
-                   lksCoordX: BigDecimal, lksCoordY: BigDecimal, history: List[String],
+case class Address(code: Int, address: String, zipCode: Option[String], typ: Int,
+                   lksCoordX: Option[BigDecimal], lksCoordY: Option[BigDecimal],
+                   atvk: Option[String],
+                   history: List[String],
                    editDistance: Option[Int])
 case class AddressStruct(
                           pilCode: Option[Int] = None, pilName: Option[String] = None,
@@ -203,7 +205,8 @@ trait AddressFinder
     ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
     ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
     ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
-    Address(addrObj.code, as.toString, zip, typ, coordX, coordY,
+    Address(addrObj.code, as.toString, Option(zip), typ,
+      Option(coordX), Option(coordY), Option(addrObj.atvk),
       addressHistory.getOrElse(addrObj.code, Nil), Option(editDistance).filter(_ > 0))
   }
   def address(code: Int, editDistance: Int = 0): Address = addressOption(code, editDistance).get

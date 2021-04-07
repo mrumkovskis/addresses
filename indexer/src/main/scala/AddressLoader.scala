@@ -12,7 +12,9 @@ import lv.addresses.index.Index._
 trait AddressLoader { this: AddressFinder =>
 
   def loadAddresses(addressZipFile: String = addressFileName, hcf: String = houseCoordFile) = {
-    def conv(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(2), line(3).toInt, null,
+    def conv_pil_pag_nov(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(2), line(3).toInt, null,
+      normalize(line(2)).toVector, null, null, line(12))
+    def conv_cie_iel_raj(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(2), line(3).toInt, null,
       normalize(line(2)).toVector)
     def conv_nlt(line: Array[String]) = AddrObj(line(0).toInt, line(1).toInt, line(7), line(5).toInt, line(9),
       normalize(line(7)).toVector)
@@ -20,14 +22,14 @@ trait AddressLoader { this: AddressFinder =>
       normalize(line(7)).toVector)
 
     val files: Map[String, (Array[String]) => AddrObj] =
-      Map("AW_CIEMS.CSV" -> conv _,
+      Map("AW_CIEMS.CSV" -> conv_cie_iel_raj _,
         "AW_DZIV.CSV" -> conv_dziv _,
-        "AW_IELA.CSV" -> conv _,
+        "AW_IELA.CSV" -> conv_cie_iel_raj _,
         "AW_NLIETA.CSV" -> conv_nlt _,
-        "AW_NOVADS.CSV" -> conv _,
-        "AW_PAGASTS.CSV" -> conv _,
-        "AW_PILSETA.CSV" -> conv _,
-        "AW_RAJONS.CSV" -> conv _).filter(t => !(blackList contains t._1))
+        "AW_NOVADS.CSV" -> conv_pil_pag_nov _,
+        "AW_PAGASTS.CSV" -> conv_pil_pag_nov _,
+        "AW_PILSETA.CSV" -> conv_pil_pag_nov _,
+        "AW_RAJONS.CSV" -> conv_cie_iel_raj _).filter(t => !(blackList contains t._1))
 
     logger.info(s"Loading addreses from file $addressZipFile, house coordinates from file $houseCoordFile...")
     var currentFile: String = null
@@ -82,9 +84,9 @@ trait AddressLoader { this: AddressFinder =>
 
       logger.info("Loading address objects")
       val queries = List(
-        "art_vieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null zip_code}",
-        "art_nlieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, atrib zip_code}",
-        "art_dziv [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, null zip_code}",
+        "art_vieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, atrib}",
+        "art_nlieta [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, atrib}",
+        "art_dziv [statuss = 'EKS' & tips_cd in ?] {kods, tips_cd, vkur_cd, nosaukums, atrib}",
       )
 
       val addressObjs: Map[Int, AddrObj] =
@@ -95,10 +97,14 @@ trait AddressLoader { this: AddressFinder =>
               val kods = row.long("kods").intValue()
               val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
               val name = row.string("nosaukums")
-              val obj = AddrObj(kods, row.long("tips_cd").intValue, name,
-                row.long("vkur_cd").intValue, row.string("zip_code"),
-                normalize(name).toVector, koordX, koordY
-              )
+              val tips = row.long("tips_cd").intValue
+              val attr = row.string("atrib")
+              def normalizeAttrib(types: Int*) = if (types.toSet(tips)) attr else null
+              val zipCode = normalizeAttrib(Constants.NLT)
+              val atvk = normalizeAttrib(Constants.PAG, Constants.PIL, Constants.NOV)
+              val obj = AddrObj(kods, tips, name,
+                row.long("vkur_cd").intValue, zipCode,
+                normalize(name).toVector, koordX, koordY, atvk)
               kods -> obj
             }
           }

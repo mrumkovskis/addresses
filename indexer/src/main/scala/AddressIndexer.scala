@@ -51,7 +51,8 @@ trait AddressIndexer { this: AddressFinder =>
   import lv.addresses.index.Index._
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
-      words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null) {
+      words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null,
+      atvk: String = null) {
     def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
       addressMap.get(superCode).map(ao => ao.foldLeft(o(z, this))(o)).getOrElse(o(z, this))
     def foldRight[A](z: A)(o: (A, AddrObj) => A): A =

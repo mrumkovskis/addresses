@@ -31,7 +31,8 @@ trait AddressIndexLoader { this: AddressFinder =>
         w.println(s"$code;$typ;$name;$superCode;${
           Option(zipCode).getOrElse("")};${
           Option(coordX).getOrElse("")};${
-          Option(coordY).getOrElse("")}")
+          Option(coordY).getOrElse("")};${
+          Option(atvk).getOrElse("")}")
       })
     }
 
@@ -84,12 +85,13 @@ trait AddressIndexLoader { this: AddressFinder =>
         _.getLines()
           .foreach { l =>
             ac += 1
-            val a = l.split(";").padTo(7, null)
+            val a = l.split(";").padTo(8, null)
             val o =
               try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
                 normalize(a(2)).toVector,
                 Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-                Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull)
+                Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull,
+                Option(a(7)).filter(_.length > 0).orNull)
               catch {
                 case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
               }

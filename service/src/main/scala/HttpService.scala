@@ -23,24 +23,17 @@ import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.util.Try
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val f22 = jsonFormat22(AddressFull)
-  implicit val f02 = jsonFormat2(ResolvedAddressFull)
-  implicit val f14 = jsonFormat14(lv.addresses.indexer.AddressStruct)
+  implicit val addressFormat = jsonFormat9(lv.addresses.indexer.Address)
+  implicit val addressStructFormat = jsonFormat14(lv.addresses.indexer.AddressStruct)
+  implicit val resolvedAddressFormat = jsonFormat2(ResolvedAddressFull)
+  implicit def toCombinedJson[A:JsonFormat, B:JsonFormat](a: A, b: B): JsValue =
+    (a.toJson, b.toJson) match {
+      case (a: JsObject, b: JsObject) => JsObject(a.fields ++ b.fields)
+      case x => sys.error(s"Combined json can be made only from to JsObjects, instead got '$x'")
+    }
 }
 
-case class AddressFull(
-                        code: Int, address: String, zipCode: Option[String], typ: Int,
-                        lksCoordX: Option[BigDecimal], lksCoordY: Option[BigDecimal], history: List[String],
-                        pilCode: Option[Int] = None, pilName: Option[String] = None,
-                        novCode: Option[Int] = None, novName: Option[String] = None,
-                        pagCode: Option[Int] = None, pagName: Option[String] = None,
-                        cieCode: Option[Int] = None, cieName: Option[String] = None,
-                        ielCode: Option[Int] = None, ielName: Option[String] = None,
-                        nltCode: Option[Int] = None, nltName: Option[String] = None,
-                        dzvCode: Option[Int] = None, dzvName: Option[String] = None,
-                        editDistance: Option[Int])
-
- case class ResolvedAddressFull(address: String, resolvedAddress: Option[AddressFull])
+case class ResolvedAddressFull(address: String, resolvedAddress: Option[JsValue])
 
 import MyJsonProtocol._
 import AddressService._
@@ -102,7 +95,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
               case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types)
               case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit)
             }) map { a =>
-              addrFull(a, finder.addressStruct(a.code), ", ").toJson
+              addrFull(a, finder.addressStruct(a.code), ", ")
             }
           }
         }
@@ -113,9 +106,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
             ResolvedAddressFull(
               ra.address,
               ra.resolvedAddress.map(rao => addrFull(rao, finder.addressStruct(rao.code), "\n"))
-            ).toJson
-        }
-        }
+            )
+        }}
       } ~ (path("address-structure" / IntNumber) & get) { code =>
         respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
           response(_.addressStruct(code).toJson)
@@ -160,18 +152,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       a: lv.addresses.indexer.Address,
       struct: lv.addresses.indexer.AddressStruct,
       separator: String
-    ) = {
-      import struct._
-      AddressFull(a.code, a.address.replace("\n", separator), Option(a.zipCode), a.typ,
-        Option(a.lksCoordX), Option(a.lksCoordY), a.history,
-        pilCode, pilName,
-        novCode, novName,
-        pagCode, pagName,
-        cieCode, cieName,
-        ielCode, ielName,
-        nltCode, nltName,
-        dzvCode, dzvName,
-        a.editDistance)
+    ): JsValue = {
+      toCombinedJson(a.copy(address = a.address.replace("\n", separator)), struct)
     }
 
     //beautification method
