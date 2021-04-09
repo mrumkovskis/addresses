@@ -2,7 +2,6 @@ package lv.addresses.service
 
 import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
-
 import akka.actor.ActorSystem
 
 import scala.language.postfixOps
@@ -17,9 +16,11 @@ import akka.http.scaladsl.common.EntityStreamingSupport
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
+import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
-import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 
+import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Try
 
 object MyJsonProtocol extends DefaultJsonProtocol {
@@ -42,6 +43,11 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
   akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport {
 
   val conf = com.typesafe.config.ConfigFactory.load
+
+  val authKeys: Set[String] =
+    if(conf.hasPath("auth.keys"))
+      conf.getList("auth.keys").unwrapped.asScala.map(String.valueOf).toSet
+    else Set()
 
   val CODE_PATTERN = "(\\d{9,})"r
 
@@ -74,8 +80,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         `Access-Control-Allow-Methods`(HttpMethods.GET)) {
           complete(HttpEntity.Empty)
         }
-    } ~ handleWebSocketMessages(wsVersionNofifications) ~ path("") {
-      redirect("/index.html", SeeOther)
+    } ~ handleWebSocketMessages(wsVersionNofifications) ~ pathEndOrSingleSlash {
+      redirect("index.html", SeeOther)
     } ~ path("index.html") {
       getFromResource("index.html")
     } ~ authenticate {
@@ -139,7 +145,18 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       path(Remaining) { resource => getFromResource(resource) }
     }
 
-    private def response(resp: AddressFinder => ToResponseMarshallable) = complete {
+  val service =
+    if (authKeys.isEmpty) route
+    else {
+      pathPrefix(Segment)
+        .filter(authKeys.contains)
+        .recover(_ => complete(NotFound, "404 Not Found"): Directive1[String])
+        .apply { key => //somehow apply call needed?
+          pathEnd { redirect(s"$key/", SeeOther) } ~ route
+        }
+    }
+
+  private def response(resp: AddressFinder => ToResponseMarshallable) = complete {
       finder.map(
         _.map(resp).getOrElse(
           ToResponseMarshallable(HttpResponse(ServiceUnavailable,
@@ -208,13 +225,13 @@ object Boot extends scala.App with AddressHttpService {
       Http()
         .newServerAt("0.0.0.0", Try(sslConf.getInt("port")).toOption.getOrElse(443))
         .enableHttps(https)
-        .bind(route)
+        .bind(service)
     } else {
       Http()
         .newServerAt("0.0.0.0",
           Try(conf.getInt("address-service-port"))
             .toOption
             .getOrElse(80))
-        .bind(route)
+        .bind(service)
     }
 }
