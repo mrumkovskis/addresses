@@ -13,20 +13,31 @@ import java.util.Properties
 import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.util.Using
 
-case class Address(code: Int, address: String, zipCode: Option[String], typ: Int,
-                   lksCoordX: Option[BigDecimal], lksCoordY: Option[BigDecimal],
-                   atvk: Option[String],
-                   history: List[String],
-                   editDistance: Option[Int])
-case class AddressStruct(
-                          pilCode: Option[Int] = None, pilName: Option[String] = None,
-                          novCode: Option[Int] = None, novName: Option[String] = None,
-                          pagCode: Option[Int] = None, pagName: Option[String] = None,
-                          cieCode: Option[Int] = None, cieName: Option[String] = None,
-                          ielCode: Option[Int] = None, ielName: Option[String] = None,
-                          nltCode: Option[Int] = None, nltName: Option[String] = None,
-                          dzvCode: Option[Int] = None, dzvName: Option[String] = None)
-case class ResolvedAddress(address: String, resolvedAddress: Option[Address])
+class MutableAddress(var code: Int, var typ: Int, var address: String = null,
+                     var zipCode: String = null,
+                     var lksCoordX: BigDecimal = null, var lksCoordY: BigDecimal = null,
+                     var history: List[String] = null,
+                     var editDistance: Option[Int] = None,
+                     var pilCode: Option[Int] = None, var pilName: Option[String] = None,
+                     var novCode: Option[Int] = None, var novName: Option[String] = None,
+                     var pagCode: Option[Int] = None, var pagName: Option[String] = None,
+                     var cieCode: Option[Int] = None, var cieName: Option[String] = None,
+                     var ielCode: Option[Int] = None, var ielName: Option[String] = None,
+                     var nltCode: Option[Int] = None, var nltName: Option[String] = None,
+                     var dzvCode: Option[Int] = None, var dzvName: Option[String] = None,
+                     var pilAtvk: Option[String] = None,
+                     var novAtvk: Option[String] = None,
+                     var pagAtvk: Option[String] = None
+                    )
+
+case class ResolvedAddress(address: String, resolvedAddress: Option[MutableAddress])
+
+object AddressFields {
+  val StructData = "struct"
+  val LksKoordData = "lks_koord"
+  val HistoryData = "history"
+  val AtvkData = "atvk"
+}
 
 trait AddressFinder
   extends AddressIndexer
@@ -37,6 +48,7 @@ trait AddressFinder
     with SpatialIndexer {
 
   import Constants._
+  import AddressFields._
 
   protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
 
@@ -96,7 +108,11 @@ trait AddressFinder
            VZD.{driver, user, password} and db properties are set.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
 
-  def searchIndex(str: String, limit: Int, types: Set[Int], idx: Index): Array[Address] = {
+  def searchIndex(str: String,
+                  limit: Int,
+                  types: Set[Int],
+                  fields: Set[String],
+                  idx: Index): Array[MutableAddress] = {
     import lv.addresses.index.Index._
     checkIndex
     val words = normalize(str)
@@ -121,12 +137,12 @@ trait AddressFinder
       res
         .map(_ & 0x00000000FFFFFFFFL)
         .map(_.toInt)
-        .map(address(_, editDistance))
+        .map(mutableAddress(_, fields, editDistance))
     }
     val resultCodes = searchCodes(words, idx.index, maxEditDistance)(1024,
       Option(types).map(t => (i: Int) => t(addressMap(idx.idxCode(i)).typ)).orNull)
     val length = resultCodes.length
-    val addresses = new AB[Address]()
+    val addresses = new AB[MutableAddress]()
     var i = 0
     val existingCodes = MS[Int]()
     while (i < length && addresses.length < limit) {
@@ -135,7 +151,7 @@ trait AddressFinder
       i += 1
     }
     val size = Math.min(limit, addresses.length)
-    val result = new Array[Address](size)
+    val result = new Array[MutableAddress](size)
     i = 0
     while (i < size) {
       result(i) = addresses(i)
@@ -144,72 +160,117 @@ trait AddressFinder
     result
   }
 
-  def search(str: String)(limit: Int = 20, types: Set[Int] = null): Array[Address] = {
+  def search(str: String)(limit: Int = 20,
+                          types: Set[Int] = null,
+                          fields: Set[String] =
+                            Set(StructData, LksKoordData, HistoryData)): Array[MutableAddress] = {
     if (str == null || str.trim.isEmpty) {
       Array()
     } else {
-      searchIndex(str, limit, types, if (types == null || types.isEmpty) index else bigObjIndex)
+      searchIndex(str, limit, types, fields, if (types == null || types.isEmpty) index else bigObjIndex)
     }
   }
 
-  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1) =
+  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1,
+                                                            fields: Set[String] =
+                                                              Set(StructData,
+                                                                LksKoordData,
+                                                                HistoryData)): Array[MutableAddress] =
     new Search(Math.min(limit, 20))
       .searchNearest(coordX, coordY)
-      .map(result => addressFromObj(result._1))
+      .map(result => mutableAddressFromObj(result._1, fields))
       .toArray
 
-  def addressStruct(code: Int) = {
-    def s(st: AddressStruct, typ: Int, code: Int, name: String) = typ match {
-      case PIL => st.copy(pilCode = Option(code), pilName = Option(name))
-      case NOV => st.copy(novCode = Option(code), novName = Option(name))
-      case PAG => st.copy(pagCode = Option(code), pagName = Option(name))
-      case CIE => st.copy(cieCode = Option(code), cieName = Option(name))
-      case IEL => st.copy(ielCode = Option(code), ielName = Option(name))
-      case NLT => st.copy(nltCode = Option(code), nltName = Option(name))
-      case DZI => st.copy(dzvCode = Option(code), dzvName = Option(name))
-      case _ => st
-    }
-    addressMap
-      .get(code)
-      .map(_.foldLeft(AddressStruct())((st, o) => s(st, o.typ, o.code, o.name)))
-      .getOrElse(AddressStruct())
-  }
-
-  def getAddressSource(types: Option[Set[Int]]) : Source[Address, NotUsed] = {
+  def getAddressSource(types: Option[Set[Int]]) : Source[MutableAddress, NotUsed] = {
     Source(addressMap)
       .map(_._2)
       .filter(a => types.isEmpty || types.get.contains(a.typ))
-      .map(addressFromObj(_))
+      .map(mutableAddressFromObj(_, Set(LksKoordData)))
   }
 
-  def addressOption(code: Int, editDistance: Int = 0) =
-    addressMap.get(code).map(addressFromObj(_, editDistance))
-  private def addressFromObj(addrObj: AddrObj, editDistance: Int = 0): Address = addrObj.foldLeft((
-    Map[Int, AddrObj](),
-    null: String, //zip code
-    0, //address object type
-    null: BigDecimal, //coordX
-    null: BigDecimal //coordY
-  )) { (m, a) =>
-    (m._1 + (a.typ -> a),
-      if (m._2 == null) a.zipCode else m._2,
-      if (m._3 == 0) a.typ else m._3,
-      if (m._4 == null) a.coordX else m._4,
-      if (m._5 == null) a.coordY else m._5)
-  } match { case (ac, zip, typ, coordX, coordY) =>
-    val as = new scala.collection.mutable.StringBuilder()
-    ac.get(IEL).foreach(iela => as ++= iela.name)
-    ac.get(NLT).foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja.name))
-    ac.get(DZI).foreach(dzivoklis => as ++= (" - " + dzivoklis.name))
-    ac.get(CIE).foreach(ciems => as ++= ((if (as.isEmpty) "" else "\n") + ciems.name))
-    ac.get(PIL).foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta.name))
-    ac.get(PAG).foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts.name))
-    ac.get(NOV).foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads.name))
-    Address(addrObj.code, as.toString, Option(zip), typ,
-      Option(coordX), Option(coordY), Option(addrObj.atvk),
-      addressHistory.getOrElse(addrObj.code, Nil), Option(editDistance).filter(_ > 0))
+  def mutableAddressOption(code: Int, fields: Set[String] = Set(StructData, LksKoordData, HistoryData),
+                           editDistance: Int = 0): Option[MutableAddress] = {
+    addressMap.get(code).map(mutableAddressFromObj(_, fields, editDistance))
   }
-  def address(code: Int, editDistance: Int = 0): Address = addressOption(code, editDistance).get
+
+  def mutableAddress(code: Int, fields: Set[String], editDistance: Int = 0): MutableAddress = {
+    mutableAddressFromObj(addressMap(code), fields, editDistance)
+  }
+
+  private def mutableAddressFromObj(addrObj: AddrObj, fields: Set[String], editDistance: Int = 0): MutableAddress = {
+    addrObj.foldLeft(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>
+      if (ma.zipCode == null) ma.zipCode = ao.zipCode
+      if (ma.lksCoordX == null) ma.lksCoordX = ao.coordX
+      if (ma.lksCoordY == null) ma.lksCoordY = ao.coordY
+      ao.typ match {
+        case PIL =>
+          ma.pilCode = Option(ao.code)
+          ma.pilName = Option(ao.name)
+          ma.pilAtvk = Option(ao.atvk)
+        case NOV =>
+          ma.novCode = Option(ao.code)
+          ma.novName = Option(ao.name)
+          ma.novAtvk = Option(ao.atvk)
+        case PAG =>
+          ma.pagCode = Option(ao.code)
+          ma.pagName = Option(ao.name)
+          ma.pagAtvk = Option(ao.atvk)
+        case CIE =>
+          ma.cieCode = Option(ao.code)
+          ma.cieName = Option(ao.name)
+        case IEL =>
+          ma.ielCode = Option(ao.code)
+          ma.ielName = Option(ao.name)
+        case NLT =>
+          ma.nltCode = Option(ao.code)
+          ma.nltName = Option(ao.name)
+        case DZI =>
+          ma.dzvCode = Option(ao.code)
+          ma.dzvName = Option(ao.name)
+        case _ =>
+      }
+      ma
+    } match { case ma =>
+      val as = new scala.collection.mutable.StringBuilder()
+      ma.ielName.foreach(iela => as ++= iela)
+      ma.nltName.foreach(maja => as ++= ((if (as.isEmpty) "" else " ") + maja))
+      ma.dzvName.foreach(dzivoklis => as ++= (" - " + dzivoklis))
+      ma.cieName.foreach(ciems => as ++= ((if (as.isEmpty) "" else "\n") + ciems))
+      ma.pilName.foreach(pilseta => as ++= ((if (as.isEmpty) "" else "\n") + pilseta))
+      ma.pagName.foreach(pagasts => as ++= ((if (as.isEmpty) "" else "\n") + pagasts))
+      ma.novName.foreach(novads => as ++= ((if (as.isEmpty) "" else "\n") + novads))
+      ma.address = as.toString
+      if (fields(HistoryData)) ma.history = addressHistory.getOrElse(ma.code, Nil)
+      if (!fields(LksKoordData)) {
+        ma.lksCoordX = null
+        ma.lksCoordY = null
+      }
+      //clear unnecessary fields
+      if (!fields(StructData)) {
+        ma.pilCode = None
+        ma.pilName = None
+        ma.novCode = None
+        ma.novName = None
+        ma.pagCode = None
+        ma.pagName = None
+        ma.cieCode = None
+        ma.cieName = None
+        ma.ielCode = None
+        ma.ielName = None
+        ma.nltCode = None
+        ma.nltName = None
+        ma.dzvCode = None
+        ma.dzvName = None
+      }
+      if (!fields(AtvkData)) {
+        ma.pilAtvk = None
+        ma.novAtvk = None
+        ma.pagAtvk = None
+      }
+      ma.editDistance = Option(editDistance).filter(_ > 0)
+      ma
+    }
+  }
 
   /**Integer of which last 10 bits are significant.
    * Of them 5 high order bits denote sequential word match count, 5 low bits denote exact word match count.

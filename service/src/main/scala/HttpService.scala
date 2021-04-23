@@ -18,23 +18,52 @@ import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
 import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
+import lv.addresses.indexer.{MutableAddress, ResolvedAddress}
 
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
+import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Try
 
 object MyJsonProtocol extends DefaultJsonProtocol {
-  implicit val addressFormat = jsonFormat9(lv.addresses.indexer.Address)
-  implicit val addressStructFormat = jsonFormat14(lv.addresses.indexer.AddressStruct)
-  implicit val resolvedAddressFormat = jsonFormat2(ResolvedAddressFull)
-  implicit def toCombinedJson[A:JsonFormat, B:JsonFormat](a: A, b: B): JsValue =
-    (a.toJson, b.toJson) match {
-      case (a: JsObject, b: JsObject) => JsObject(a.fields ++ b.fields)
-      case x => sys.error(s"Combined json can be made only from to JsObjects, instead got '$x'")
-    }
-}
+  def mutableAddressJsonizer(obj: MutableAddress): JsValue = {
+    val res = new AB[(String, JsValue)](16)
+    res += ("code" -> JsNumber(obj.code))
+    res += ("typ" -> JsNumber(obj.typ))
+    res += ("address" -> JsString(obj.address))
+    if (obj.zipCode != null) res += ("zipCode" -> JsString(obj.zipCode))
+    if (obj.lksCoordX != null) res += ("lksCoordX" -> JsNumber(obj.lksCoordX))
+    if (obj.lksCoordY != null) res += ("lksCoordY" -> JsNumber(obj.lksCoordY))
+    if (obj.history != null && obj.history.nonEmpty)
+      res += ("history" -> JsArray(obj.history.map(JsString(_)).toVector))
+    obj.pilCode.foreach(v => res += ("pilCode" -> JsNumber(v)))
+    obj.pilName.foreach(v => res += ("pilName" -> JsString(v)))
+    obj.novCode.foreach(v => res += ("novCode" -> JsNumber(v)))
+    obj.novName.foreach(v => res += ("novName" -> JsString(v)))
+    obj.pagCode.foreach(v => res += ("pagCode" -> JsNumber(v)))
+    obj.pagName.foreach(v => res += ("pagName" -> JsString(v)))
+    obj.cieCode.foreach(v => res += ("cieCode" -> JsNumber(v)))
+    obj.cieName.foreach(v => res += ("cieName" -> JsString(v)))
+    obj.ielCode.foreach(v => res += ("ielCode" -> JsNumber(v)))
+    obj.ielName.foreach(v => res += ("ielName" -> JsString(v)))
+    obj.nltCode.foreach(v => res += ("nltCode" -> JsNumber(v)))
+    obj.nltName.foreach(v => res += ("nltName" -> JsString(v)))
+    obj.dzvCode.foreach(v => res += ("dzvCode" -> JsNumber(v)))
+    obj.dzvName.foreach(v => res += ("dzvName" -> JsString(v)))
+    obj.pilAtvk.foreach(v => res += ("pilAtvk" -> JsString(v)))
+    obj.novAtvk.foreach(v => res += ("novAtvk" -> JsString(v)))
+    obj.pagAtvk.foreach(v => res += ("pagAtvk" -> JsString(v)))
+    obj.editDistance.foreach(ed => res += ("editDistance" -> JsNumber(ed)))
+    JsObject(res.toMap)
+  }
 
-case class ResolvedAddressFull(address: String, resolvedAddress: Option[JsValue])
+  def resolvedAddressJsonizer(obj: ResolvedAddress): JsObject = {
+    val res = new AB[(String, JsValue)](2)
+    res += ("address" -> JsString(obj.address))
+    obj.resolvedAddress.foreach(ra => res += ("resolvedAddress" -> mutableAddressJsonizer(ra)))
+    JsObject(res.toMap)
+  }
+}
 
 import MyJsonProtocol._
 import AddressService._
@@ -64,7 +93,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
     }).mapMaterializedValue (actor => subscribe(actor, "version"))
 
   // Address to CSV marshaller
-  implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.Address, ByteString] { a =>
+  implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.MutableAddress, ByteString] { a =>
     Marshalling.WithFixedContentType(ContentTypes.`text/csv(UTF-8)`, () => {
       ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.lksCoordX, a.lksCoordY).mkString(";"))
     })
@@ -74,7 +103,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 
   val route =
     (options & headerValueByType(Origin) &
-      (path("address") | path("resolve") | path("address-structure"))) { origin =>
+      (path("address") | path("resolve"))) { origin =>
       respondWithHeaders(origin.origins.headOption.map { origin =>
         `Access-Control-Allow-Origin`(origin) } getOrElse (`Access-Control-Allow-Origin`.`*`),
         `Access-Control-Allow-Methods`(HttpMethods.GET)) {
@@ -86,6 +115,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       getFromResource("index.html")
     } ~ authenticate {
       (path("address") & get & parameterMultiMap) { params =>
+        import lv.addresses.indexer.AddressFields._
         val pattern = params.get("search")
           .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
           .getOrElse("")
@@ -94,29 +124,30 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
         val coordX: BigDecimal = params.get("lks_x") map(x => BigDecimal(x.head)) getOrElse -1
         val coordY: BigDecimal = params.get("lks_y") map(y => BigDecimal(y.head)) getOrElse -1
+        val fields = {
+          val ms = scala.collection.mutable.Set(StructData, LksKoordData)
+          params.get(AtvkData).foreach(_ => ms += AtvkData)
+          params.get(HistoryData).foreach(_ => ms += HistoryData)
+          ms.toSet
+        }
+
         respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
           response {
             finder => (pattern match {
-              case CODE_PATTERN(code) => finder.addressOption(code.toInt).toArray
-              case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types)
-              case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit)
+              case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, fields).toArray
+              case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types, fields)
+              case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit, fields)
             }) map { a =>
-              addrFull(a, finder.addressStruct(a.code), ", ")
+              a.address = a.address.replace("\n", ", ")
+              mutableAddressJsonizer(a)
             }
           }
         }
       } ~ (path("resolve") & get & parameter("address")) { address =>
-        respondWithHeader(`Access-Control-Allow-Origin`.`*`) { response {
-          finder =>
-            val ra = finder.resolve(address)
-            ResolvedAddressFull(
-              ra.address,
-              ra.resolvedAddress.map(rao => addrFull(rao, finder.addressStruct(rao.code), "\n"))
-            )
-        }}
-      } ~ (path("address-structure" / IntNumber) & get) { code =>
         respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-          response(_.addressStruct(code).toJson)
+          response { finder =>
+            resolvedAddressJsonizer(finder.resolve(address))
+          }
         }
       } ~ path("version") {
         complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
@@ -165,17 +196,9 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         )
     }
 
-    private def addrFull(
-      a: lv.addresses.indexer.Address,
-      struct: lv.addresses.indexer.AddressStruct,
-      separator: String
-    ): JsValue = {
-      toCombinedJson(a.copy(address = a.address.replace("\n", separator)), struct)
-    }
-
-    //beautification method
-    private def normalizeVersion(version: String) =
-      Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")
+  //beautification method
+  private def normalizeVersion(version: String) =
+    Option(version).map(_.split("""[/\\]""").last).getOrElse("<Not initialized>")
 }
 
 object Boot extends scala.App with AddressHttpService {
