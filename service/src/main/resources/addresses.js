@@ -26,7 +26,9 @@ addresses.controller('AddressesCtrl',
     }, types);
     var limit = [];
     if ($scope.limit.selected) { limit.push($scope.limit.value); };
-    return {search: $scope.search, type: types, limit: limit};
+    return { struct: "", lks_koord: "", history: "", atvk: "",
+             search: $scope.search, type: types, limit: limit
+           };
   };
 
   $scope.updateAddress = function () {

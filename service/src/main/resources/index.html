@@ -74,18 +74,22 @@
             <td>&nbsp;</td>
             <td class="details">
               <table class="table table-condensed">
-                <tr><td class="col-sm-2">Kods</td><td colspan="2">{{ address.code }}</td></tr>
-                <tr><td>Adrese</td><td colspan="2">{{ address.address }}</td></tr>
-                <tr><td>Indekss</td><td colspan="2">{{ address.zipCode }}</td></tr>
-                <tr><td>Tips</td><td colspan="2">{{ address.typ }}</td></tr>
-                <tr><td colspan="3"><strong>Struktūra</strong></td></tr>
-                <tr><td>Pilsēta </td><td>{{ address.pilCode }}</td><td>{{ address.pilName }}</td></tr>
-                <tr><td>Novads</td><td>{{ address.novCode }}</td><td>{{ address.novName }}</td></tr>
-                <tr><td>Pagasts</td><td>{{ address.pagCode }}</td><td>{{ address.pagName }}</td></tr>
+                <tr><td class="col-sm-2">Kods</td><td colspan="3">{{ address.code }}</td></tr>
+                <tr><td>Adrese</td><td colspan="3">{{ address.address }}</td></tr>
+                <tr><td>Indekss</td><td colspan="3">{{ address.zipCode }}</td></tr>
+                <tr><td>Tips</td><td colspan="3">{{ address.typ }}</td></tr>
+                <tr><td colspan="4"><strong>Struktūra</strong></td></tr>
+                <tr><td>Pilsēta </td><td>{{ address.pilCode }}</td><td>{{ address.pilName }}</td><td>Atvk: {{ address.pilAtvk }}</td></tr>
+                <tr><td>Novads</td><td>{{ address.novCode }}</td><td>{{ address.novName }}</td><td>Atvk: {{ address.novAtvk }}</td></tr>
+                <tr><td>Pagasts</td><td>{{ address.pagCode }}</td><td>{{ address.pagName }}</td><td>Atvk: {{ address.pagAtvk }}</td></tr>
                 <tr><td>Ciems</td><td>{{ address.cieCode }}</td><td>{{ address.cieName }}</td></tr>
                 <tr><td>Iela</td><td>{{ address.ielCode }}</td><td>{{ address.ielName }}</td></tr>
                 <tr><td>Māja</td><td>{{ address.nltCode }}</td><td>{{ address.nltName }}</td></tr>
                 <tr><td>Dzīvoklis</td><td>{{ address.dzvCode }}</td><td>{{ address.dzvName }}</td></tr>
+                <tr><td colspan="3">Lks koord x</td><td>{{ address.lksCoordX }}</td></tr>
+                <tr><td colspan="3">Lks koord y</td><td>{{ address.lksCoordY }}</td></tr>
+                <tr ng-if="address.history.length > 0"><td colspan="3"><strong>Vēsturiskie nosaukumi</strong></td></tr>
+                <tr ng-repeat="history in address.history"><td colspan="3">{{history}}</td></tr>
               </table>
             </td>
             <td>&nbsp;</td>
