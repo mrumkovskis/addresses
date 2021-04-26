@@ -18,6 +18,7 @@ import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
 import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
+import lv.addresses.indexer.AddressFields._
 import lv.addresses.indexer.{MutableAddress, ResolvedAddress}
 
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
@@ -114,34 +115,9 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       getFromResource("index.html")
     } ~ authenticate {
       (path("address") & get & parameterMultiMap) { params =>
-        import lv.addresses.indexer.AddressFields._
-        val pattern = params.get("search")
-          .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
-          .getOrElse("")
-        val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
-        val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
-        val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
-        val coordX: BigDecimal = params.get("lks_x") map(x => BigDecimal(x.head)) getOrElse -1
-        val coordY: BigDecimal = params.get("lks_y") map(y => BigDecimal(y.head)) getOrElse -1
-        val fields = {
-          val ms = scala.collection.mutable.Set(StructData, LksKoordData)
-          params.get(AtvkData).foreach(_ => ms += AtvkData)
-          params.get(HistoryData).foreach(_ => ms += HistoryData)
-          ms.toSet
-        }
-
-        respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
-          response {
-            finder => (pattern match {
-              case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, fields).toArray
-              case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types, fields)
-              case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit, fields)
-            }) map { a =>
-              a.address = a.address.replace("\n", ", ")
-              mutableAddressJsonizer(a)
-            }
-          }
-        }
+        addressRoute(Set(), params)
+      } ~ (path("address-struct") & get & parameterMultiMap) { params =>
+        addressRoute(Set(StructData, LksKoordData, HistoryData, AtvkData), params)
       } ~ (path("resolve") & get & parameter("address")) { address =>
         respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
           response { finder =>
@@ -185,6 +161,38 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
           pathEnd { redirect(s"$key/", SeeOther) } ~ route
         }
     }
+
+  private def addressRoute(fields: Set[String], params: Map[String, List[String]]) = {
+    val pattern = params.get("search")
+      .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
+      .getOrElse("")
+    val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
+    val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
+    val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
+    val coordX: BigDecimal = params.get("lks_x") map(x => BigDecimal(x.head)) getOrElse -1
+    val coordY: BigDecimal = params.get("lks_y") map(y => BigDecimal(y.head)) getOrElse -1
+    val aFields = {
+      val ms = scala.collection.mutable.Set[String]()
+      params.get(StructData).foreach(_ => ms += StructData)
+      params.get(LksKoordData).foreach(_ => ms += LksKoordData)
+      params.get(AtvkData).foreach(_ => ms += AtvkData)
+      params.get(HistoryData).foreach(_ => ms += HistoryData)
+      fields ++ ms
+    }
+
+    respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
+      response {
+        finder => (pattern match {
+          case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
+          case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types, aFields)
+          case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit, aFields)
+        }) map { a =>
+          a.address = a.address.replace("\n", ", ")
+          mutableAddressJsonizer(a)
+        }
+      }
+    }
+  }
 
   private def response(resp: AddressFinder => ToResponseMarshallable) = complete {
       finder.map(
