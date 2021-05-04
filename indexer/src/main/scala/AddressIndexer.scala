@@ -108,12 +108,23 @@ trait AddressIndexer { this: AddressFinder =>
         case (code, _, name) =>
           val wordsLists = extractWords(name) ::
             history.getOrElse(code, Nil).map(extractWords)
+          val normalizedWords = normalize(name)
           wordsLists foreach(_ foreach { w =>
-            val exactStr = if (w.contains("*")) w.substring(w.indexOf('*') + 1) else w
-            index.updateChildren(w, idx, normalize(name).contains(exactStr))
+            val (wcPrefix, exactStr) =
+              if (w.contains("*")) {
+                val i = w.indexOf('*') + 1
+                (w.substring(0, i), w.substring(i))
+              } else ("", w)
+            index.updateChildren(w, idx, normalizedWords.contains(exactStr))
             //update synonyms
-            Option(synonyms.getProperty(w))
-              .foreach(extractWords(_).foreach(index.updateChildren(_, idx, true)))
+            Option(synonyms.getProperty(exactStr))
+              .foreach(normalize(_)
+                .foreach(extractWords(_)
+                  .foreach { syn =>
+                    index.updateChildren(wcPrefix + syn, idx, true)
+                  }
+                )
+              )
           })
           idx_code += (idx -> code)
           idx += 1
