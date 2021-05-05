@@ -1,6 +1,6 @@
 package lv.addresses.indexer
 
-import java.io.File
+import java.io.{File, InputStreamReader}
 import java.sql.DriverManager
 import java.time.LocalDateTime
 import akka.NotUsed
@@ -11,6 +11,7 @@ import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
 import java.util.Properties
 import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.Using
 
 class MutableAddress(var code: Int, var typ: Int, var address: String = null,
@@ -75,9 +76,19 @@ trait AddressFinder
       val synonyms: Properties = {
         val props = new Properties()
         val in = getClass.getResourceAsStream("/synonyms.properties")
-        if (in != null) props.load(in)
+        if (in != null) props.load(new InputStreamReader(in, "UTF-8"))
+        //remove diacritics from keys
+        props.stringPropertyNames.asScala.foreach { key =>
+          val nk = lv.addresses.index.Index.normalize(key).mkString("")
+          if (nk != key) {
+            val v = props.getProperty(key)
+            props.remove(key)
+            props.setProperty(nk, v)
+          }
+        }
         props
       }
+      logger.debug(s"Synonyms: $synonyms")
       logger.info(s"${synonyms.size} address synonym(s) loaded")
       if (indexFiles.isDefined) {
         val cachedIndex = load()
