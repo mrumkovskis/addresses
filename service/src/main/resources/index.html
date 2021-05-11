@@ -36,7 +36,7 @@
   <body ng-controller="AddressesCtrl">
     <div class="col-sm-offset-1 col-sm-10">
       <h1>Adrešu serviss</h1>
-      <p>Versija: <code>{{version}}</code></p>
+      <p>Versija:<a href="openapi.yaml" target="_blank">[API]</a><code>{{version}}</code></p>
       <p>
         <p class="checkbox form-inline">
           <label class="address-types" ng-repeat="type in types">
@@ -53,8 +53,11 @@
                  ng-change="updateAddress()" class="form-control input-sm">
         </p>
       </p>
-      <p>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
-        ng-if="search.length > 0">address?{{urlParams}}</a></p>
+      <p>
+        <span>Pieprasījums: <a href="address?{{urlParams}}" target="_blank"
+                               ng-if="search.length > 0">address?{{urlParams}}</a>
+        </span>
+      </p>
       <input type="text" class="form-control" ng-model="search" ng-change="updateAddress()" ng-model-options="{debounce:300}" placeholder="Meklējamā adrese">
       <table class="table table-striped">
         <thead>

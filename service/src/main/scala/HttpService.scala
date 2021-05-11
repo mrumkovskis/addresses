@@ -124,6 +124,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
             resolvedAddressJsonizer(finder.resolve(address))
           }
         }
+      } ~ path("openapi.yaml") {
+        getFromResource("openapi.yaml", ContentTypes.`text/plain(UTF-8)`)
       } ~ path("version") {
         complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
       } ~ (path("dump.csv") & get & parameterMultiMap) {

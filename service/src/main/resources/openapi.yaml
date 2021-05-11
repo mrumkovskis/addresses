@@ -1,0 +1,200 @@
+openapi: 3.0.0
+info:
+  title: "AMK"
+  description: "Adrešu meklēšanas komponente"
+  version: "1.0"
+paths:
+  /address:
+    get:
+      summary: Adreses meklēšana
+      description: Pēc teksta atgriež atbilstošās, pēc koordinātām atgriež tuvākās adreses
+      parameters:
+      - name: search
+        in: query
+        description: meklējamais teksts vai adreses kods
+        schema:
+          type: string
+      - name: lks_x
+        in: query
+        description: LKS koordinātu sistēmas x ass koordināta
+        schema:
+          type: number
+      - name: lks_y
+        in: query
+        description: LKS koordinātu sistēmas y ass koordināta
+        schema:
+          type: number
+      - name: struct
+        in: query
+        allowEmptyValue: true
+        schema:
+          type: boolean
+          enum :
+            - true
+        description: norāda vai atbildē iekļaut atšifrētu adreses struktūru
+      - name: lks_koord
+        in: query
+        allowEmptyValue: true
+        schema:
+          type: boolean
+          enum :
+            - true
+        description: norāda vai atbildē iekļaut adreses koordinātas LKS formātā
+      - name: history
+        in: query
+        allowEmptyValue: true
+        schema:
+          type: boolean
+          enum :
+            - true
+        description: norāda vai atbildē iekļaut adreses vēsturskos nosaukumus
+      - name: atvk
+        in: query
+        allowEmptyValue: true
+        schema:
+          type: boolean
+          enum :
+            - true
+        description: norāda vai atbildē iekļaut adreses struktūras administratīvi teritoriālo vienību kodus
+      responses:
+        "200":
+          description: Atbilstošās adreses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/address'
+        "500":
+          description: Internal server error
+  /address-struct:
+    get:
+      summary: Adreses meklēšana
+      description: Pēc teksta atgriež atbilstošās adreses. Pēc koordinātām atgriež tuvākās adreses
+      parameters:
+      - name: search
+        in: query
+        description: meklējamais teksts vai adreses kods
+        schema:
+          type: string
+      - name: lks_x
+        in: query
+        description: LKS koordinātu sistēmas x ass koordināta
+        schema:
+          type: number
+      - name: lks_y
+        in: query
+        description: LKS koordinātu sistēmas y ass koordināta
+        schema:
+          type: number
+      responses:
+        "200":
+          description: Atbilstošās adreses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/address'
+        "500":
+          description: Internal server error
+  /resolve:
+    get:
+      summary: Adreses atkodēšana
+      description: Pēc teksta atgriež atkodētu adresi (struktūra, koordinātas utt.)
+      parameters:
+      - name: address
+        in: query
+        required: true
+        description: atkodējamā adrese
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Atbilstošās adreses
+          content:
+            application/json:
+              schema:
+                type: object
+                items:
+                  $ref: '#/components/schemas/resolved-address'
+        "500":
+          description: Internal server error
+components:
+  schemas:
+    address:
+      type: object
+      required:
+      - code
+      - typ
+      - address
+      properties:
+        code:
+          type: integer
+          format: int64
+        typ:
+          type: integer
+          format: int32
+        address:
+          type: string
+        zipCode:
+          type: string
+        lksCoordX:
+          type: number
+        lksCoordY:
+          type: number
+        history:
+          type: array
+          items:
+            type: string
+        pilCode:
+          type: integer
+          format: int64
+        pilName:
+          type: string
+        novCode:
+          type: integer
+          format: int64
+        novName:
+          type: string
+        pagCode:
+          type: integer
+          format: int64
+        pagName:
+          type: string
+        cieCode:
+          type: integer
+          format: int64
+        cieName:
+          type: string
+        ielCode:
+          type: integer
+          format: int64
+        ielName:
+          type: string
+        nltCode:
+          type: integer
+          format: int64
+        nltName:
+          type: string
+        dzvCode:
+          type: integer
+          format: int64
+        dzvName:
+          type: string
+        pilAtvk:
+          type: string
+        novAtvk:
+          type: string
+        pagAtvk:
+          type: string
+        editDistance:
+          type: integer
+          format: int32
+    resolved-address:
+      type: object
+      properties:
+        address:
+          type: string
+        resolvedAddress:
+          $ref: '#/components/schemas/address'
