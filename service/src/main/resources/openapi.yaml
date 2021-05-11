@@ -104,6 +104,23 @@ paths:
         description: LKS koordinātu sistēmas y ass koordināta
         schema:
           type: number
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+        description: norāda maksimāli atgriežamo adrešu skaitu
+      - name: type
+        in: query
+        style: form
+        explode: true
+        schema:
+          enum:
+          - 104
+          - 105
+          - 106
+          - 113
+        description: Filtrs pēc viena vai vairākiem adresācijas objekta tipiem. 104 - pilsēta, 113 - novads, 105 - pagasts, 106 - ciems
       responses:
         "200":
           description: Atbilstošās adreses
