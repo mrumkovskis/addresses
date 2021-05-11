@@ -7,7 +7,7 @@ paths:
   /address:
     get:
       summary: Adreses meklēšana
-      description: Pēc teksta atgriež atbilstošās, pēc koordinātām atgriež tuvākās adreses
+      description: Pēc teksta atgriež atbilstošās adreses, pēc koordinātām atgriež tuvākās adreses
       parameters:
       - name: search
         in: query
@@ -56,6 +56,23 @@ paths:
           enum :
             - true
         description: norāda vai atbildē iekļaut adreses struktūras administratīvi teritoriālo vienību kodus
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+        description: norāda maksimāli atgriežamo adrešu skaitu
+      - name: type
+        in: query
+        style: form
+        explode: true
+        schema:
+          enum:
+          - 104
+          - 105
+          - 106
+          - 113
+        description: Filtrs pēc viena vai vairākiem adresācijas objekta tipiem. 104 - pilsēta, 113 - novads, 105 - pagasts, 106 - ciems
       responses:
         "200":
           description: Atbilstošās adreses
@@ -115,9 +132,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                items:
-                  $ref: '#/components/schemas/resolved-address'
+                $ref: '#/components/schemas/resolved-address'
         "500":
           description: Internal server error
 components:
