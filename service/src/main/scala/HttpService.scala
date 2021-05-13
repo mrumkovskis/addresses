@@ -108,7 +108,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 
   val route =
     (options & headerValueByType(Origin) &
-      (path("address") | path("resolve"))) { origin =>
+      (path("address") | path("resolve") | path("address-struct"))) { origin =>
       respondWithHeaders(origin.origins.headOption.map { origin =>
         `Access-Control-Allow-Origin`(origin) } getOrElse (`Access-Control-Allow-Origin`.`*`),
         `Access-Control-Allow-Methods`(HttpMethods.GET)) {
