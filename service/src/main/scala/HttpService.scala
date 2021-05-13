@@ -80,6 +80,11 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 
   val CODE_PATTERN = "(\\d{9,})"r
 
+  val Min_LKS_X = 300000
+  val Max_LKS_X = 770000
+  val Min_LKS_Y = 160000
+  val Max_LKS_Y = 450000
+
   val wsVersionNofifications =
     Flow.fromGraph(
       GraphDSL.create(
@@ -187,7 +192,9 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         finder => (pattern match {
           case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
           case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types, aFields)
-          case _ => finder.searchNearest(coordX, coordY)(searchNearestLimit, aFields)
+          case _ if coordX >= Min_LKS_X && coordX <= Max_LKS_X && coordY >= Min_LKS_Y && coordY <= Max_LKS_Y =>
+            finder.searchNearest(coordX, coordY)(searchNearestLimit, aFields)
+          case _ => Array[MutableAddress]() // return empty array coords are out of box
         }) map { a =>
           a.address = a.address.replace("\n", ", ")
           mutableAddressJsonizer(a)
