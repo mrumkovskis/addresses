@@ -173,11 +173,40 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
     val pattern = params.get("search")
       .map(_.head match { case s if s.length > 256 => s take 256 case s => s })
       .getOrElse("")
-    val limit = Math.min(params.get("limit") map (_.head.toInt) getOrElse 20, 100)
-    val searchNearestLimit = params.get("limit") map (_.head.toInt) getOrElse 1
-    val types = params.get("type") map(_.toSet.map((t: String) => t.toInt)) orNull
-    val coordX: BigDecimal = params.get("lks_x") map(x => BigDecimal(x.head)) getOrElse -1
-    val coordY: BigDecimal = params.get("lks_y") map(y => BigDecimal(y.head)) getOrElse -1
+    val limit = Try {
+      params.get("limit")
+        .flatMap (_.headOption)
+        .filter(_.nonEmpty)
+        .map(_.toInt)
+        .map(Math.min(_, 100))
+        .getOrElse(20)
+    }
+    val searchNearestLimit = Try {
+      params.get("limit")
+        .flatMap (_.headOption)
+        .filter(_.nonEmpty)
+        .map(_.toInt)
+        .map(Math.min(_, 100))
+        .getOrElse(1)
+    }
+    val types = Try {
+      params.get("type")
+        .filter(_.nonEmpty)
+        .filter(_.forall(_.nonEmpty))
+        .map(_.map(_.toInt).toSet)
+    }
+    val coordX = Try {
+      params.get("lks_x")
+        .flatMap(_.headOption)
+        .filter(_.nonEmpty)
+        .map(BigDecimal(_))
+    }
+    val coordY = Try {
+      params.get("lks_y")
+        .flatMap(_.headOption)
+        .filter(_.nonEmpty)
+        .map(BigDecimal(_))
+    }
     val aFields = {
       val ms = scala.collection.mutable.Set[String]()
       params.get(StructData).foreach(_ => ms += StructData)
@@ -189,16 +218,30 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 
     respondWithHeader(`Access-Control-Allow-Origin`.`*`) {
       response {
-        finder => (pattern match {
-          case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
-          case p if coordX == -1 || coordY == -1 => finder.search(p)(limit, types, aFields)
-          case _ if coordX >= Min_LKS_X && coordX <= Max_LKS_X && coordY >= Min_LKS_Y && coordY <= Max_LKS_Y =>
-            finder.searchNearest(coordX, coordY)(searchNearestLimit, aFields)
-          case _ => Array[MutableAddress]() // return empty array coords are out of box
-        }) map { a =>
-          a.address = a.address.replace("\n", ", ")
-          mutableAddressJsonizer(a)
-        }
+        finder =>
+          val err = new StringBuilder
+          def regErr(x: Try[_], msg: String) = if (x.isFailure) err.append(msg)
+          regErr(limit, "'limit' parameter must be number\n")
+          regErr(types, "'type' parameter(s) must be number(s)\n")
+          regErr(coordX, "'lks_x' parameter must be decimal number\n")
+          regErr(coordY, "'lks_y' parameter must be decimal number\n")
+          if (err.nonEmpty) {
+            ToResponseMarshallable(HttpResponse(BadRequest, entity = err.toString))
+          } else {
+            def validateCoorBox = coordX.get zip coordY.get exists {
+              case (x, y) => x >= Min_LKS_X && x <= Max_LKS_X && y >= Min_LKS_Y && y <= Max_LKS_Y
+            }
+            (pattern match {
+              case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
+              case p if coordX.get.isEmpty || coordY.get.isEmpty => finder.search(p)(limit.get, types.get.orNull, aFields)
+              case _ if validateCoorBox =>
+                finder.searchNearest(coordX.get.get, coordY.get.get)(searchNearestLimit.get, aFields)
+              case _ => Array[MutableAddress]() // return empty array coords are out of box
+            }) map { a =>
+              a.address = a.address.replace("\n", ", ")
+              mutableAddressJsonizer(a)
+            }
+          }
       }
     }
   }
