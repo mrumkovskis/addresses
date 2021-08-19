@@ -28,7 +28,8 @@ class MutableAddress(var code: Int, var typ: Int, var address: String = null,
                      var dzvCode: Option[Int] = None, var dzvName: Option[String] = None,
                      var pilAtvk: Option[String] = None,
                      var novAtvk: Option[String] = None,
-                     var pagAtvk: Option[String] = None
+                     var pagAtvk: Option[String] = None,
+                     var irAdrese: Boolean = true
                     )
 
 case class ResolvedAddress(address: String, resolvedAddress: Option[MutableAddress])
@@ -209,7 +210,7 @@ trait AddressFinder
   }
 
   private def mutableAddressFromObj(addrObj: AddrObj, fields: Set[String], editDistance: Int = 0): MutableAddress = {
-    addrObj.foldLeft(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>
+    addrObj.foldLeft(addressMap)(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>
       if (ma.zipCode == null) ma.zipCode = ao.zipCode
       if (ma.lksCoordX == null) ma.lksCoordX = ao.coordX
       if (ma.lksCoordY == null) ma.lksCoordY = ao.coordY
@@ -278,6 +279,7 @@ trait AddressFinder
         ma.novAtvk = None
         ma.pagAtvk = None
       }
+      ma.irAdrese = addrObj.isLeaf
       ma.editDistance = Option(editDistance).filter(_ > 0)
       ma
     }
@@ -316,7 +318,7 @@ trait AddressFinder
     a << 5 | b
   }
 
-  def objsInWrittenOrder(addrObj: AddrObj) = addrObj.foldLeft(new Array[AddrObj](7)) { (a, o) =>
+  def objsInWrittenOrder(addrObj: AddrObj) = addrObj.foldLeft(addressMap)(new Array[AddrObj](7)) { (a, o) =>
     a(writtenOrder(o.typ)) = o
     a
   }.filter(_ != null)

@@ -32,6 +32,7 @@ object MyJsonProtocol extends DefaultJsonProtocol {
     res += ("code" -> JsNumber(obj.code))
     res += ("typ" -> JsNumber(obj.typ))
     res += ("address" -> JsString(obj.address))
+    res += ("irAdrese" -> JsBoolean(obj.irAdrese))
     if (obj.zipCode != null) res += ("zipCode" -> JsString(obj.zipCode))
     if (obj.lksCoordX != null) res += ("lksCoordX" -> JsNumber(obj.lksCoordX))
     if (obj.lksCoordY != null) res += ("lksCoordY" -> JsNumber(obj.lksCoordY))

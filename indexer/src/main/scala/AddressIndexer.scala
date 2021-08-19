@@ -52,12 +52,14 @@ trait AddressIndexer { this: AddressFinder =>
   import Constants._
   case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
       words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null,
-      atvk: String = null) {
-    def foldLeft[A](z: A)(o: (A, AddrObj) => A): A =
-      addressMap.get(superCode).map(ao => ao.foldLeft(o(z, this))(o)).getOrElse(o(z, this))
-    def foldRight[A](z: A)(o: (A, AddrObj) => A): A =
-      addressMap.get(superCode).map(ao => ao.foldRight(z)(o)).map(o(_, this)).getOrElse(o(z, this))
-    def depth = foldLeft(0)((d, _) => d + 1)
+      atvk: String = null, isLeaf: Boolean = true) {
+    def foldLeft[A](addressMap: Map[Int, AddrObj])(z: A)(o: (A, AddrObj) => A): A =
+      addressMap.get(superCode).map(ao =>
+        ao.foldLeft(addressMap)(o(z, this))(o)).getOrElse(o(z, this))
+    def foldRight[A](addressMap: Map[Int, AddrObj])(z: A)(o: (A, AddrObj) => A): A =
+      addressMap.get(superCode).map(ao =>
+        ao.foldRight(addressMap)(z)(o)).map(o(_, this)).getOrElse(o(z, this))
+    def depth(addressMap: Map[Int, AddrObj]) = foldLeft(addressMap)(0)((d, _) => d + 1)
   }
 
   def maxEditDistance(word: String): Int = {
@@ -90,8 +92,8 @@ trait AddressIndexer { this: AddressFinder =>
       val addresses = AB[(Int, Int, String)]()
       addressMap.foreach { case (code, addr) =>
         if (filter == null || filter(addr)) {
-          addresses.append((code, typeOrder(code, addr.typ) * 100 + addr.depth,
-            addr.foldRight(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" ")))
+          addresses.append((code, typeOrder(code, addr.typ) * 100 + addr.depth(addressMap),
+            addr.foldRight(addressMap)(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" ")))
           idx += 1
         }
       }

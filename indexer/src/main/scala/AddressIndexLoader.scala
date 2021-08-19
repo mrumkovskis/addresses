@@ -28,7 +28,7 @@ trait AddressIndexLoader { this: AddressFinder =>
       new FileOutputStream(addrFile), "UTF-8")))) { w =>
       addressMap.foreach(a => {
         import a._2._
-        w.println(s"$code;$typ;$name;$superCode;${
+        w.println(s"$code;$typ;$name;$superCode;$isLeaf;${
           Option(zipCode).getOrElse("")};${
           Option(coordX).getOrElse("")};${
           Option(coordY).getOrElse("")};${
@@ -85,13 +85,13 @@ trait AddressIndexLoader { this: AddressFinder =>
         _.getLines()
           .foreach { l =>
             ac += 1
-            val a = l.split(";").padTo(8, null)
+            val a = l.split(";").padTo(9, null)
             val o =
-              try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(4),
+              try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(5),
                 normalize(a(2)).toVector,
-                Option(a(5)).filter(_.length > 0).map(BigDecimal(_)).orNull,
                 Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-                Option(a(7)).filter(_.length > 0).orNull)
+                Option(a(7)).filter(_.length > 0).map(BigDecimal(_)).orNull,
+                Option(a(8)).filter(_.length > 0).orNull, a(4).toBoolean)
               catch {
                 case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
               }
