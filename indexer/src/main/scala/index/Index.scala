@@ -457,9 +457,12 @@ object Index {
       index(word, calcMaxEditDist(word), calcMaxEditDist)
     }
 
-    def exactSearch(p: AB[String], editDistance: Int, exactMatch: Boolean): AB[Result] = {
-      val result = (p map search_idx)
-        .map(r => if (exactMatch) AB(r.exact) else AB(r.exact, r.approx).filter(_.nonEmpty))
+    def exactSearch(p: AB[String], editDistance: Int, exactMatchWords: Set[String]): AB[Result] = {
+      val result = p.map(w => search_idx(w) -> exactMatchWords(w))
+        .map {
+          case (r, true) => AB(r.exact)
+          case (r, false) => AB(r.exact, r.approx).filter(_.nonEmpty)
+        }
       var refCount = 0
       val intersection = AB[Int]()
       val combInit = (AB.fill[AB[Int]](result.size)(null), 0) //(refs, idx)
@@ -503,7 +506,7 @@ object Index {
             }
             i += 1
           }
-          result = exactSearch(searchParams(ab), editDistance, false)
+          result = exactSearch(searchParams(ab), editDistance, Set())
           count += 1
           result.isEmpty && count < 32
         })
@@ -520,32 +523,25 @@ object Index {
         val fuzzyRes = params map search_idx_fuzzy
         var productiveIntersectionCount = 0
         var intersectionCount = 0
-        class MutableFuzzyComb(var word: String, var refs: AB[AB[Int]], var editDistance: Int, var splitDepth: Int)
-        def fuzzyCombInit = new MutableFuzzyComb("", AB(), 0, 0)
 
         val MaxProductiveIntersectionCount = 32
         val MaxIntersectionCount = 1024
-        foldCombinations[FuzzyResult, MutableFuzzyComb, AB[Result]](
+        foldCombinations[FuzzyResult, AB[FuzzyResult], AB[Result]](
           fuzzyRes,
-          fuzzyCombInit,
-          (mfc, fr) => {
-            mfc.word += fr.word + " "
-            mfc.refs += fr.refs
-            mfc.editDistance += fr.editDistance
-            mfc.splitDepth += fr.splitDepth
-            mfc
-          },
+          AB(),
+          (frs, fr) => frs += fr,
           AB[Result](),
-          (r, mfc) => {
-            val searchString = mfc.word.trim
-            if (searchString.nonEmpty) {
-              val res = exactSearch(searchParams(AB.from(searchString.split(' '))),
-                mfc.editDistance, true)
-              if (res.nonEmpty) {
-                r ++= res
-                refCount += res.foldLeft(0)(_ + _.refs.length)
-                productiveIntersectionCount += 1
-              }
+          (r, frs) => {
+            val res = exactSearch(
+              searchParams(frs
+                .flatMap(fr => if (fr.splitDepth == 0) AB(fr.word) else AB.from(fr.word.split(' ')))),
+              frs.foldLeft(0)((ed, fr) => ed + fr.editDistance),
+              frs.collect { case fr if fr.editDistance > 0 => fr.word }.toSet
+            )
+            if (res.nonEmpty) {
+              r ++= res
+              refCount += res.foldLeft(0)(_ + _.refs.length)
+              productiveIntersectionCount += 1
             }
             intersectionCount += 1
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
@@ -889,7 +885,7 @@ object Index {
         i += 1
       }
     } while (neq)
-    init
+    res
   }
 
   def binCombinations(n: Int, f: Array[Int] => Boolean): Unit = {

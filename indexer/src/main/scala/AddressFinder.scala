@@ -153,6 +153,7 @@ trait AddressFinder
     }
     val resultCodes = searchCodes(words, idx.index, maxEditDistance)(1024,
       Option(types).map(t => (i: Int) => t(addressMap(idx.idxCode(i)).typ)).orNull)
+      .sortBy(_.editDistance)
     val length = resultCodes.length
     val addresses = new AB[MutableAddress]()
     var i = 0
