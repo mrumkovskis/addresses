@@ -2,6 +2,9 @@ package lv.addresses.index
 
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
+
+import java.util
+import scala.collection.AbstractIterator
 import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.collection.mutable.{Map => MM}
 import scala.language.postfixOps
@@ -886,6 +889,108 @@ object Index {
       }
     } while (neq)
     res
+  }
+
+  class PermutationItrOverSumEls(el_count: Int, sum: Int) extends AbstractIterator[Array[Int]] {
+    private val idxs = Array.fill(el_count)(0)
+    private val result = Array.fill(el_count)(0)
+    private val ei = el_count - 1
+    private var b = 0
+    private var _hasNext = el_count > 0
+    private val permutator = new PermutationsItr(el_count)
+
+    def hasNext = _hasNext || permutator.hasNext
+    @throws[NoSuchElementException]
+    def next(): Array[Int] = {
+      if (!hasNext)
+        Iterator.empty.next()
+
+      if (permutator.hasNext) permutator.next()
+      else {
+        _hasNext = false
+        val d = sum - b
+        idxs(ei) = d
+        System.arraycopy(idxs, 0, result, 0, el_count)
+        permutator.init(result)
+        permutator.next()
+
+        val bli = ei - 1
+        var i = bli
+        while (i >= 0) {
+          val p = idxs(i)
+          _hasNext = p <= d - 2
+          if (_hasNext) {
+            val x = p + 1
+            while (i < ei) {
+              idxs(i) = x
+              i += 1
+            }
+            b = 0
+            i = bli
+            while (i >= 0) {
+              b += idxs(i)
+              i -= 1
+            }
+          } else {
+            i -= 1
+          }
+        }
+        result
+      }
+    }
+
+    //copied from scala standard library
+    class PermutationsItr(size: Int) extends AbstractIterator[Array[Int]] {
+      private[this] var result: Array[Int] = _
+      private[this] val elms: Array[Int] = new Array[Int](size)
+      private[this] var idxs: Array[Int] = _
+      private[this] var _hasNext = false
+
+      def hasNext = _hasNext
+      @throws[NoSuchElementException]
+      def next(): Array[Int] = {
+        if (!hasNext)
+          Iterator.empty.next()
+
+        System.arraycopy(elms, 0, result, 0, size)
+        var i = idxs.length - 2
+        while(i >= 0 && idxs(i) >= idxs(i+1))
+          i -= 1
+
+        if (i < 0)
+          _hasNext = false
+        else {
+          var j = idxs.length - 1
+          while(idxs(j) <= idxs(i)) j -= 1
+          swap(i,j)
+
+          val len = (idxs.length - i) / 2
+          var k = 1
+          while (k <= len) {
+            swap(i+k, idxs.length - k)
+            k += 1
+          }
+        }
+        result
+      }
+      private def swap(i: Int, j: Int): Unit = {
+        val tmpI = idxs(i)
+        idxs(i) = idxs(j)
+        idxs(j) = tmpI
+        val tmpE = elms(i)
+        elms(i) = elms(j)
+        elms(j) = tmpE
+      }
+
+      def init(res: Array[Int]) = {
+        result = res
+        _hasNext = true
+        val m = scala.collection.mutable.HashMap[Int, Int]()
+        System.arraycopy(res, 0, elms, 0, size)
+        idxs = result map (m.getOrElseUpdate(_, m.size))
+        util.Arrays.sort(idxs)
+      }
+    }
   }
 
   def binCombinations(n: Int, f: Array[Int] => Boolean): Unit = {
