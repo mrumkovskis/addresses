@@ -854,50 +854,80 @@ object Index {
                                 init: C,
                                 folder: (C, B) => (C, Boolean)): C = {
     if (data.exists(_.isEmpty)) return init
-    val count = data.length
-    val ls = data.map(_.length - 1)
-    val pos = Array.fill(count)(0)
+    data.sortInPlaceBy(_.size)
+    val count = data.size
     var res = init
+    val limits = Array.tabulate(count)(data(_).size - 1)
+    val max_sum = limits.sum
+    var s = 0
     var continue = true
-
-    def neq = {
-      var i = 0
-      while (i < count && pos(i) == 0) i += 1
-      i != count && continue
-    }
-
-    do {
-      var combRes = combInit
-      var i = 0
-      while (i < count) {
-        combRes = combFun(combRes, data(i)(pos(i)))
-        i += 1
-      }
-      val (fr, cont) = folder(res, combRes)
-      res = fr
-      continue = cont
-      i = 0
-      var shift = true
-      while (i < count && shift) {
-        if (pos(i) == ls(i)) {
-          pos(i) = 0
-        } else {
-          pos(i) += 1
-          shift = false
+    while(s <= max_sum && continue) {
+      val it = new PermutationsItrOverSumEls(count, s, limits)
+      while (continue && it.hasNext) {
+        val idxs = it.next()
+        var combRes = combInit
+        var i = 0
+        while (i < count) {
+          combRes = combFun(combRes, data(i)(idxs(i)))
+          i += 1
         }
-        i += 1
+        val (fr, cont) = folder(res, combRes)
+        res = fr
+        continue = cont
       }
-    } while (neq)
+      s += 1
+    }
     res
   }
 
-  class PermutationItrOverSumEls(el_count: Int, sum: Int) extends AbstractIterator[Array[Int]] {
-    private val idxs = Array.fill(el_count)(0)
-    private val result = Array.fill(el_count)(0)
-    private val ei = el_count - 1
-    private var b = 0
-    private var _hasNext = el_count > 0
-    private val permutator = new PermutationsItr(el_count)
+  class PermutationsItrOverSumEls(el_count: Int, sum: Int,
+                                 limits: Array[Int] /** NOTE: limits must be sorted! */)
+      extends AbstractIterator[Array[Int]] {
+
+    private val elms = new Array[Int](el_count) //y
+    private val cur_l = new Array[Int](el_count) //l
+    private val cur_s = new Array[Int](el_count) //s
+    private val result = new Array[Int](el_count) //res
+    private val permutator = new PermutationsItr(el_count, limits)
+    private var _hasNext = el_count > 0 && init
+
+    private def init: Boolean = {
+      var i = el_count - 1
+      var s = sum
+      cur_l(i) = Math.min(limits(i), s)
+      while (i >= 0) {
+        cur_s(i) = s
+        if (i == 0) {
+          elms(0) = s
+          cur_l(0) = limits(0)
+        } else {
+          elms(i) = Math.min(s, cur_l(i))
+          val in = i - 1
+          s = s - elms(i)
+          cur_l(in) = Math.min(limits(in), elms(i))
+        }
+        i -= 1
+      }
+      s <= cur_l(0)
+    }
+    private def cont_adjust(idx: Int): Boolean = {
+      var i = idx
+      elms(i) -= 1
+      i -= 1
+      while (i >= 0) {
+        val ip = i + 1
+        cur_s(i) = cur_s(ip) - elms(ip)
+        cur_l(i) = Math.min(limits(i), elms(ip))
+        elms(i) = Math.min(cur_s(i), cur_l(i))
+        i -= 1
+      }
+      cur_s(0) > cur_l(0)
+    }
+    private def calc_next: Boolean = {
+      var i = 1
+      while (i < el_count && cont_adjust(i)) i += 1
+      i < el_count
+    }
 
     def hasNext = _hasNext || permutator.hasNext
     @throws[NoSuchElementException]
@@ -907,43 +937,35 @@ object Index {
 
       if (permutator.hasNext) permutator.next()
       else {
-        _hasNext = false
-        val d = sum - b
-        idxs(ei) = d
-        System.arraycopy(idxs, 0, result, 0, el_count)
+        System.arraycopy(elms, 0, result, 0, el_count)
         permutator.init(result)
         permutator.next()
-
-        val bli = ei - 1
-        var i = bli
-        while (i >= 0) {
-          val p = idxs(i)
-          _hasNext = p <= d - 2
-          if (_hasNext) {
-            val x = p + 1
-            while (i < ei) {
-              idxs(i) = x
-              i += 1
-            }
-            b = 0
-            i = bli
-            while (i >= 0) {
-              b += idxs(i)
-              i -= 1
-            }
-          } else {
-            i -= 1
-          }
-        }
+        _hasNext = calc_next
         result
       }
     }
 
-    //copied from scala standard library
-    class PermutationsItr(size: Int) extends AbstractIterator[Array[Int]] {
+    //recursive implementation of element combinations generation for sum
+//    private def se(c: Int, s: Int, l: List[Int]): (List[List[Int]], Int) = {
+//      if (c == 0) (Nil, 0)
+//      else if (c == 1) {
+//        if (s <= l.head) (List(List(s)), s)
+//        else (Nil, 0)
+//      } else {
+//        def r(y: Int, res: List[List[Int]]): (List[List[Int]], Int) = {
+//          se(c - 1, s - y, Math.min(l.tail.head, y) :: l.tail.tail) match {
+//            case (x, z) if x.nonEmpty && y >= z => r(y - 1, res ::: x.map(y :: _))
+//            case _ => (res, y)
+//          }
+//        }
+//        r(Math.min(s, l.head), Nil)
+//      }
+//    }
+
+    //ported from scala standard library
+    class PermutationsItr(size: Int, limits: Array[Int]) extends AbstractIterator[Array[Int]] {
       private[this] var result: Array[Int] = _
       private[this] val elms: Array[Int] = new Array[Int](size)
-      private[this] var idxs: Array[Int] = _
       private[this] var _hasNext = false
 
       def hasNext = _hasNext
@@ -953,42 +975,44 @@ object Index {
           Iterator.empty.next()
 
         System.arraycopy(elms, 0, result, 0, size)
-        var i = idxs.length - 2
-        while(i >= 0 && idxs(i) >= idxs(i+1))
-          i -= 1
+        var i = elms.length - 2
+        while(i >= 0 && elms(i) >= elms(i + 1)) i -= 1
 
         if (i < 0)
           _hasNext = false
         else {
-          var j = idxs.length - 1
-          while(idxs(j) <= idxs(i)) j -= 1
-          swap(i,j)
+          var j = elms.length - 1
+          while(elms(j) <= elms(i)) j -= 1
+          if (elms(j) > limits(i)) { // check limit
+            j = i - 1
+            while (j >= 0 && (elms(j + 1) > limits(j) || elms(j + 1) <= elms(j))) j -= 1
+            if (j < 0) _hasNext = false
+            else swap(j, j + 1)
+          } else swap(i, j) // limit ok
 
-          val len = (idxs.length - i) / 2
+          val len = (elms.length - i) / 2
           var k = 1
           while (k <= len) {
-            swap(i+k, idxs.length - k)
+            swap(i + k, elms.length - k)
             k += 1
           }
         }
         result
       }
       private def swap(i: Int, j: Int): Unit = {
-        val tmpI = idxs(i)
-        idxs(i) = idxs(j)
-        idxs(j) = tmpI
         val tmpE = elms(i)
         elms(i) = elms(j)
         elms(j) = tmpE
       }
 
       def init(res: Array[Int]) = {
+        // NOTE: res must be sorted!
         result = res
         _hasNext = true
-        val m = scala.collection.mutable.HashMap[Int, Int]()
+        //val m = scala.collection.mutable.HashMap[Int, Int]()
+        //idxs = result map (m.getOrElseUpdate(_, m.size))
+        //util.Arrays.sort(idxs)
         System.arraycopy(res, 0, elms, 0, size)
-        idxs = result map (m.getOrElseUpdate(_, m.size))
-        util.Arrays.sort(idxs)
       }
     }
   }
