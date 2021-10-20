@@ -79,7 +79,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       conf.getList("auth.keys").unwrapped.asScala.map(String.valueOf).toSet
     else Set()
 
-  val CODE_PATTERN = "(\\d{9,})"r
+  val CODE_PATTERN = "(\\d{9})"r
 
   val Min_LKS_X = 300000
   val Max_LKS_X = 770000
