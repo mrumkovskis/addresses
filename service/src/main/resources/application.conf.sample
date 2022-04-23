@@ -28,6 +28,12 @@ VZD {
   # url =  jdbc:oracle:thin:...
   user = vraa_amk_izstr
   password = "***"
+
+  open-data {
+    url           = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/1d3cbdf2-ee7d-4743-90c7-97d38824d0bf/download/aw_csv.zip"
+    history-url   = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/c3d36546-f92c-4822-a0c4-ee7f1b7760a4/download/aw_his_csv.zip"
+    save-to-dir   = "tmp"
+  }
 }
 
 db {

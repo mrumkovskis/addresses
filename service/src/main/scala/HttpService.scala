@@ -269,6 +269,7 @@ object Boot extends scala.App with AddressHttpService {
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
   FTPDownload.initialize
   DbSync.initialize
+  OpenDataDownload.initialize
 
   val bindingFuture =
     if (conf.hasPath("ssl")) {
