@@ -41,6 +41,62 @@ object AddressFields {
   val AtvkData = "atvk"
 }
 
+case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
+                   words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null,
+                   atvk: String = null, isLeaf: Boolean = true) {
+  def foldLeft[A](addressMap: Map[Int, AddrObj])(z: A)(o: (A, AddrObj) => A): A =
+    addressMap.get(superCode).map(ao =>
+      ao.foldLeft(addressMap)(o(z, this))(o)).getOrElse(o(z, this))
+  def foldRight[A](addressMap: Map[Int, AddrObj])(z: A)(o: (A, AddrObj) => A): A =
+    addressMap.get(superCode).map(ao =>
+      ao.foldRight(addressMap)(z)(o)).map(o(_, this)).getOrElse(o(z, this))
+  def depth(addressMap: Map[Int, AddrObj]) = foldLeft(addressMap)(0)((d, _) => d + 1)
+}
+
+case class Addresses(addresses: Map[Int, AddrObj], history: Map[Int, List[String]])
+
+private object Constants {
+  val PIL = 104
+  val NOV = 113
+  val PAG = 105
+  val CIE = 106
+  val IEL = 107
+  val NLT = 108
+  val DZI = 109
+
+  val writtenOrder = Map (
+    IEL -> 0,
+    NLT -> 1,
+    DZI -> 2,
+    CIE -> 3,
+    PIL -> 4,
+    PAG -> 5,
+    NOV -> 6
+  )
+  val typeOrderMap = Map[Int, Int](
+    NOV -> 1, //novads
+    PIL -> 2, //pilsēta
+    PAG -> 3, //pagasts
+    CIE -> 4, //ciems
+    IEL -> 5, //iela
+    NLT -> 6, //nekustama lieta (māja)
+    DZI -> 7 //dzivoklis
+  )
+  val big_unit_types = Set(PIL, NOV, PAG, CIE)
+
+  val SEPARATOR_REGEXP = """[\s-,/\."'\n]"""
+
+  val WordLengthEditDistances = Map[Int, Int](
+    0 -> 0,
+    1 -> 0,
+    2 -> 0,
+    3 -> 1,
+    4 -> 1,
+    5 -> 1
+  )
+  val DefaultEditDistance = 2
+}
+
 trait AddressFinder
   extends AddressIndexer
     with AddressResolver
