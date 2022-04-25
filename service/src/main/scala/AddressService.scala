@@ -115,7 +115,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     .mergeMat(
       Source.actorRef(PartialFunction.empty, PartialFunction.empty,2, OverflowStrategy.dropHead))(
       (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
-    ).fold(null: String) { (currentVersion, _) =>
+    ).runFold(null: String) { (currentVersion, _) =>
       as.log.debug(s"Checking for address data new version, current version $currentVersion")
       val newVersion = dbConfig.flatMap(_ => Some(dbDataVersion)).getOrElse(addressFileName)
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
@@ -128,7 +128,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         as.log.debug("No new address data found")
         currentVersion
       }
-    }.runWith(Sink.ignore).onComplete {
+    }.onComplete {
       case Success(_) => as.log.info("Address updater job finished.")
       case Failure(err) => as.log.error(err, "Address updater terminated with failure.")
     }
