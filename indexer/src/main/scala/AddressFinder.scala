@@ -2,7 +2,7 @@ package lv.addresses.indexer
 
 import java.io.{File, InputStreamReader}
 import java.sql.DriverManager
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime}
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.Logger
@@ -55,7 +55,7 @@ case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: S
 
 case class Addresses(addresses: Map[Int, AddrObj], history: Map[Int, List[String]])
 
-private object Constants {
+object Constants {
   val PIL = 104
   val NOV = 113
   val PAG = 105
@@ -149,8 +149,8 @@ trait AddressFinder
       logger.info(s"${synonyms.size} address synonym(s) loaded")
       if (indexFiles.isDefined) {
         val cachedIndex = load()
-        _addressMap = cachedIndex.addresses
-        _addressHistory = cachedIndex.history
+        _addressMap = cachedIndex.addresses.addresses
+        _addressHistory = cachedIndex.addresses.history
         _index = Index(cachedIndex.idxCode, cachedIndex.index)
       } else {
         val (am, ah) = dbConfig
@@ -382,7 +382,7 @@ trait AddressFinder
 
   def saveIndex = {
     checkIndex
-    save(addressMap, index.idxCode, index.index)
+    save(Addresses(addressMap, addressHistory), index.idxCode, index.index)
   }
 
   def insertIntoHeap(h: AB[Long], el: Long) = {
@@ -505,18 +505,20 @@ case class DbConfig(driver: String, url: String, user: String, password: String,
   }
 }
 
-case class IndexFiles(addresses: File, index: File)
+case class IndexFiles(addresses: File, index: File) {
+  def exists: Boolean = addresses.exists() && index.exists()
+}
 
 trait AddressIndexerConfig {
   protected val DbDataFilePrefix = "VZD_AR_"
   protected val AddressesPostfix = "addresses"
   protected val IndexPostfix = "index"
+
   def addressFileName: String
-  def blackList: Set[String]
+  def excludeList: Set[String]
   def houseCoordFile: String
 
   def dbConfig: Option[DbConfig]
-
   def dbDataVersion: String =
     dbConfig
       .map(_.lastSyncTime)

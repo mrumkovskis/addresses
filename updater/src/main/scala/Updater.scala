@@ -142,10 +142,10 @@ object Updater {
   def c(key: String, default: String): String = scala.util.Try(conf.getString(key)).toOption.getOrElse(default)
 
   val default_opts = Map(
-    "local.driver"     -> c("db.driver",   "org.h2.Driver"),
-    "local.connection" -> c("db.url",      "jdbc:h2:./addresses.h2"),
-    "local.username" ->   c("db.user",     ""),
-    "local.password" ->   c("db.password", ""),
+    "local.driver"     -> c("VZD.db.driver",   "org.h2.Driver"),
+    "local.connection" -> c("VZD.db.url",      "jdbc:h2:./addresses.h2"),
+    "local.username" ->   c("VZD.db.user",     ""),
+    "local.password" ->   c("VZD.db.password", ""),
 
     "vzd.driver"     -> c("VZD.driver", "oracle.jdbc.OracleDriver"),
     "vzd.connection" -> c("VZD.url",    """jdbc:oracle:thin:@(

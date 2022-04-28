@@ -28,22 +28,22 @@ VZD {
   user = vraa_amk_izstr
   password = "***"
 
+  db {
+    driver = org.h2.Driver
+    url = "jdbc:h2:./cache/adrh2"
+    user = ""
+    password = ""
+
+    # directory where to store address index
+    index-dir = "./cache"
+  }
+
   open-data {
     url           = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/1d3cbdf2-ee7d-4743-90c7-97d38824d0bf/download/aw_csv.zip"
     history-url   = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/c3d36546-f92c-4822-a0c4-ee7f1b7760a4/download/aw_his_csv.zip"
     save-to-dir   = "tmp"
     history-since = "2010-12-31"
   }
-}
-
-db {
-  driver = org.h2.Driver
-  url = "jdbc:h2:./cache/adrh2"
-  user = ""
-  password = ""
-
-  # directory where to store address index
-  index-dir = "./cache"
 }
 
 #mandatory setting if ssl.client-auth=true

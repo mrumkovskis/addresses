@@ -10,31 +10,35 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
-import java.sql.DriverManager
 
 import scala.util.Using
 import scala.collection.mutable.{ArrayBuffer => AB}
 import lv.addresses.index.Index._
 
 trait AddressIndexLoader { this: AddressFinder =>
-  def save(addressMap: Map[Int, AddrObj],
+  def save(addresses: Addresses,
            idxCode: scala.collection.mutable.HashMap[Int, Int],
            index: MutableIndex) = {
 
     val IndexFiles(addrFile, idxFile) = newIndexFiles
+    val Addresses(addressMap, history) = addresses
 
     logger.info(s"Saving addresses $addrFile...")
     Using(new PrintWriter(new BufferedWriter(new OutputStreamWriter(
       new FileOutputStream(addrFile), "UTF-8")))) { w =>
-      addressMap.foreach(a => {
-        import a._2._
+      addressMap.foreach { case (_, a) =>
+        import a._
         w.println(s"$code;$typ;$name;$superCode;$isLeaf;${
           Option(zipCode).getOrElse("")};${
           Option(coordX).getOrElse("")};${
           Option(coordY).getOrElse("")};${
           Option(atvk).getOrElse("")}")
-      })
-    }
+      }
+      w.println()
+      history.foreach { case (c, h) =>
+        w.println(h.mkString(c.toString + ";", ";", ""))
+      }
+    }.failed.foreach(throw _)
 
     logger.info(s"Saving address index in $idxFile...")
     Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
@@ -65,14 +69,13 @@ trait AddressIndexLoader { this: AddressFinder =>
         }
       }
       logger.info(s"Max. reference array length for the word '$maxRefArrayWord': $maxRefArrayLength")
-    }
+    }.failed.foreach(throw _)
     logger.info(s"Address index saved.")
   }
 
-  case class CachedIndex(addresses: Map[Int, AddrObj],
+  case class CachedIndex(addresses: Addresses,
                          idxCode: scala.collection.mutable.HashMap[Int, Int],
-                         index: MutableIndex,
-                         history: Map[Int, List[String]])
+                         index: MutableIndex)
 
   def load(): CachedIndex = {
     val IndexFiles(addrFile, idxFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
@@ -80,31 +83,40 @@ trait AddressIndexLoader { this: AddressFinder =>
     Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
       logger.info(s"Loading address data from $addrFile...")
       var addressMap = Map[Int, AddrObj]()
-      var ac = 0
+      var history = Map[Int, List[String]]()
+      var lnr = 0
+      var hc = 0
       Using(scala.io.Source.fromInputStream(new BufferedInputStream(new FileInputStream(addrFile)), "UTF-8")) {
         _.getLines()
-          .foreach { l =>
-            ac += 1
-            val a = l.split(";").padTo(9, null)
-            val o =
-              try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(5),
-                normalize(a(2)).toVector,
-                Option(a(6)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-                Option(a(7)).filter(_.length > 0).map(BigDecimal(_)).orNull,
-                Option(a(8)).filter(_.length > 0).orNull, a(4).toBoolean)
-              catch {
-                case e: Exception => throw new RuntimeException(s"Error at line $ac: $l", e)
+          .foldLeft(false) { (isHistory, l) =>
+            if (l.isEmpty) true
+            else if (isHistory) {
+              lnr += 1
+              val a = l.split(";")
+              try {
+                history += (a.head.toInt -> a.tail.toList)
+              } catch {
+                case e: Exception => throw new RuntimeException(s"Error at line $lnr: $l", e)
               }
-            addressMap += (o.code -> o)
+              hc += a.length - 1
+              true
+            } else {
+              lnr += 1
+              val a = l.split(";").padTo(9, null)
+              val o =
+                try AddrObj(a(0).toInt, a(1).toInt, a(2), a(3).toInt, a(5),
+                  normalize(a(2)).toVector,
+                  Option(a(6)).filter(_.nonEmpty).map(BigDecimal(_)).orNull,
+                  Option(a(7)).filter(_.nonEmpty).map(BigDecimal(_)).orNull,
+                  Option(a(8)).filter(_.nonEmpty).orNull, a(4).toBoolean)
+                catch {
+                  case e: Exception => throw new RuntimeException(s"Error at line $lnr: $l", e)
+                }
+              addressMap += (o.code -> o)
+              false
+            }
           }
-      }
-
-      val history = dbConfig.map { case conf @ DbConfig(driver, url, user, pwd, _) =>
-        Class.forName(driver)
-        Using(DriverManager.getConnection(url, user, pwd)) { conn =>
-          loadAddressHistoryFromDb(conn)(conf.tresqlResources)
-        }.get
-      }.getOrElse(Map())
+      }.failed.foreach(throw _)
 
       val idx_code = scala.collection.mutable.HashMap[Int, Int]()
       val index = new MutableIndex(null, null)
@@ -130,9 +142,9 @@ trait AddressIndexLoader { this: AddressFinder =>
         index.load(path.toVector, word, Refs(exact = readRefs, approx = readRefs))
       }
 
-      logger.info(s"Address index loaded (addresses - $ac, historical addresses - ${history.size}), " +
+      logger.info(s"Address index loaded (addresses - ${addressMap.size}, historical addresses - $hc), " +
         s"index stats - ${index.statistics.render}.")
-      CachedIndex(addressMap, idx_code, index, history)
+      CachedIndex(Addresses(addressMap, history), idx_code, index)
     }.get
   }
 
@@ -158,7 +170,7 @@ trait AddressIndexLoader { this: AddressFinder =>
   def indexFiles: Option[IndexFiles] =
     indexFilesInternal.filter(i => i.addresses.exists() && i.index.exists())
 
-  def newIndexFiles: IndexFiles = {
+  private def newIndexFiles: IndexFiles = {
     indexFilesInternal.map { case i @ IndexFiles(addresses, index) =>
       if (addresses.exists()) sys.error(s"Cannot save address file. File $addresses already exists")
       if (index.exists()) sys.error(s"Cannot save address index file. File $index already exists")

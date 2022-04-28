@@ -28,7 +28,7 @@ trait AddressLoader { this: AddressFinder =>
         "AW_NOVADS.CSV" -> conv_pil_pag_nov _,
         "AW_PAGASTS.CSV" -> conv_pil_pag_nov _,
         "AW_PILSETA.CSV" -> conv_pil_pag_nov _,
-        "AW_RAJONS.CSV" -> conv_cie_iel_raj _).filter(t => !(blackList contains t._1))
+        "AW_RAJONS.CSV" -> conv_cie_iel_raj _).filter(t => !(excludeList contains t._1))
 
     logger.info(s"Loading addreses from file $addressZipFile, house coordinates from file $houseCoordFile...")
     var currentFile: String = null

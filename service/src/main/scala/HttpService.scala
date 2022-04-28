@@ -18,9 +18,12 @@ import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
 import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
+import download.{DbSync, FTPDownload, OpenDataDownload}
 import lv.addresses.indexer.AddressFields._
 import lv.addresses.indexer.{MutableAddress, ResolvedAddress}
+import lv.addresses.service.config.Configs
 
+import java.time.LocalDate
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
@@ -267,9 +270,15 @@ object Boot extends scala.App with AddressHttpService {
   implicit val system = ActorSystem("address-service")
 
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
-  FTPDownload.initialize
-  DbSync.initialize
-  OpenDataDownload.initialize
+
+  system.log.info(s"Configuration: ${AddressConfig.addressConfig}")
+
+  // start sync process
+  AddressConfig.addressConfig match {
+    case _: Configs.Db        => DbSync.initialize
+    case c: Configs.OpenData  => OpenDataDownload.initialize(c)
+    case c: Configs.AK        => FTPDownload.initialize(c.directory, c.akFileNamePattern)
+  }
 
   val bindingFuture =
     if (conf.hasPath("ssl")) {

@@ -1,14 +1,16 @@
-package lv.addresses.service
+package lv.addresses.service.download
 
-import scala.util.Success
 import akka.stream.IOResult
-import akka.stream.scaladsl.{FileIO, Source}
 import akka.stream.alpakka.ftp.scaladsl.Ftp
 import akka.stream.alpakka.ftp.{FtpCredentials, FtpSettings}
+import akka.stream.scaladsl.{FileIO, Source}
+import lv.addresses.service.AddressService.{CheckNewVersion, MsgEnvelope, addressFileName, akFileNamePattern, runInterval, publish}
+import lv.addresses.service.AddressService._
+import lv.addresses.service.Boot._
+
 import java.io.File
 import java.net.InetAddress
-
-import AddressService._
+import scala.util.Success
 
 object FTPDownload {
 
@@ -24,19 +26,15 @@ object FTPDownload {
     config.getString("VZD.ftp.password") else null
   val ftpDir: String = if (config.hasPath("VZD.ftp.dir"))
     config.getString("VZD.ftp.dir") else null
-  val addressFileDir: String = scala.util.Try(config.getString("VZD.ak-file"))
-    .toOption
-    .map(s => s.substring(0, Math.max(s.lastIndexOf('/'), 0)))
-    .orNull
 
-  def isFTPConfigured = !(Set(host, username, password, ftpDir, addressFileDir) contains null)
-  def initialize = if (isFTPConfigured) {
+  def isFTPConfigured = !(Set(host, username, password, ftpDir) contains null)
+  def initialize(addressFileDir: String, fileNamePattern: String) = if (isFTPConfigured) {
     val FILE_PATTERN = new scala.util.matching.Regex(akFileNamePattern)
     val ftpSettings = FtpSettings(InetAddress.getByName(host))
       .withCredentials(FtpCredentials.create(username, password))
       .withBinary(true)
       .withPassiveMode(true)
-    import Boot._ //make available actor system
+
     import scala.concurrent.duration._
     val initialDelay = 1.minute
     Source.tick(initialDelay, runInterval, Download).runForeach { _ =>
@@ -60,11 +58,9 @@ object FTPDownload {
               case Success(IOResult(count, Success(_))) =>
                 new File(tmp).renameTo(new File(addressFileDir + "/", fName))
                 as.log.info(s"Download finished, $count bytes processed!")
-                if (current != "") {
-                  as.log.info(s"Deleting old VZD address file: $current")
-                  new File(addressFileDir + "/" + current).delete()
-                }
-                AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
+                as.log.info(s"Deleting old VZD address files...")
+                deleteOldFiles(addressFileDir, fileNamePattern)
+                publish(MsgEnvelope("check-new-version", CheckNewVersion))
               case err =>
                 as.log.error(s"Error downloading file $remoteFile from ftp server to $tmp - $err")
             }

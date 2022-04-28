@@ -17,8 +17,13 @@ import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.Logger
 import com.typesafe.config.Config
-import lv.addresses.indexer.DbConfig
+import lv.addresses.indexer.{Addresses, DbConfig}
+import lv.addresses.loader.{AKLoader, DbLoader, OpenDataLoader}
+import lv.addresses.service.config.Configs
 import org.slf4j.LoggerFactory
+
+import java.nio.file.{Files, Path}
+import scala.util.matching.Regex
 
 object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
 
@@ -87,28 +92,37 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
         as.log.info(s"$subscriber unsubscribed from version update.")
     }
     private def deleteOldIndexes = {
+      as.log.info("Deleting old index files...")
       dbConfig
         .map(c => new File(c.indexDir))
         .orElse(Option(addressFileName).flatMap(f => Option(new File(f).getParentFile)))
         .foreach { dir =>
-          def delIdx(postfix: String) =
-            dir.listFiles(new FileFilter {
-              def accept(f: File) = f.getName.endsWith(postfix)
-            }).sortBy(_.getName)
-              .dropRight(1) // keep newest index file
-              .foreach { f =>
-                if (f.delete()) as.log.info(s"Deleted address cache file: $f")
-                else as.log.warning(s"Unable to delete address cache file: $f")
-              }
-          delIdx(AddressesPostfix)
-          delIdx(IndexPostfix)
+          deleteOldFiles(dir.getPath, s".*\\.$AddressesPostfix", s".*\\.$IndexPostfix")
         }
     }
 
     override def postStop() = af = null
   }
 
+  /** File age is determined by sorting file names. */
+  def deleteOldFiles(dir: String, patterns: String*) = {
+    patterns.map(new Regex(_)).foreach { regex =>
+      Files
+        .list(Path.of(dir))
+        .filter(p => regex.matches(p.getFileName.toString))
+        .toArray
+        .map(_.asInstanceOf[Path])
+        .sortBy(_.getFileName)
+        .dropRight(1) // keep newest file
+        .foreach { p =>
+          if (p.toFile.delete()) as.log.debug(s"Deleted file: $p")
+          else as.log.warning(s"Unable to delete file: $p")
+        }
+    }
+  }
+
   import Boot._
+
   //address updater job as stream
   Source
     .tick(runInterval, runInterval, CheckNewVersion) //periodical check
@@ -120,7 +134,7 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
       val newVersion = dbConfig.flatMap(_ => Some(dbDataVersion)).getOrElse(addressFileName)
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
         as.log.info(s"New address data found. Initializing address finder $newVersion")
-        val af = new AddressFinder(newVersion, blackList, houseCoordFile, dbConfig)
+        val af = new AddressFinder(newVersion, excludeList, houseCoordFile, dbConfig)
         af.init
         addressFinderActor ! Finder(af)
         newVersion
@@ -142,15 +156,16 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
     configLogger.error("address file setting 'VZD.ak-file' not found")
     null
   }
-  private def akDirName = {
+
+  def akDirName = {
     val idx = akFileName.lastIndexOf('/')
     if (idx != -1) akFileName.substring(0, idx) else "."
   }
 
   def akFileNamePattern = akFileName.substring(akFileName.lastIndexOf('/') + 1)
 
-  override def blackList: Set[String] = if (conf.hasPath("VZD.blacklist"))
-    conf.getString("VZD.blacklist").split(",\\s+").toSet else Set()
+  override def excludeList: Set[String] = if (conf.hasPath("VZD.exclude-list"))
+    conf.getString("VZD.exclude-list").split(",\\s+").toSet else Set()
 
   val runInterval: FiniteDuration = {
     val dur: Duration =
@@ -175,7 +190,7 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
   override def dbConfig: Option[DbConfig] = {
     def c(config: Config, key: String, default: String): String =
       scala.util.Try(config.getString(key)).toOption.getOrElse(default)
-    Try(conf.getConfig("db"))
+    Try(conf.getConfig("VZD.db"))
       .map { dbConf =>
         val dc = c(dbConf, _, _)
         DbConfig(
@@ -189,8 +204,8 @@ trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
   }
 }
 
-class AddressFinder(val addressFileName: String, val blackList: Set[String],
-  val houseCoordFile: String, val dbConfig: Option[DbConfig])
+class AddressFinder(val addressFileName: String, val excludeList: Set[String],
+                    val houseCoordFile: String, val dbConfig: Option[DbConfig])
 extends lv.addresses.indexer.AddressFinder
 //for debugging purposes
 object AddressFinder extends lv.addresses.indexer.AddressFinder with AddressServiceConfig

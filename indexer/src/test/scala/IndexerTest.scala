@@ -10,7 +10,7 @@ import scala.io.Source
 import lv.addresses.index.Index._
 
 object IndexerTest {
-  class TestAddressFinder(val addressFileName: String, val blackList: Set[String],
+  class TestAddressFinder(val addressFileName: String, val excludeList: Set[String],
                           val houseCoordFile: String, val dbConfig: Option[DbConfig]) extends AddressFinder
 
   val finder = new TestAddressFinder(null, Set.empty, null, None)
