@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.headers.`Last-Modified`
 import akka.stream.IOResult
 import akka.stream.scaladsl.{FileIO, Source}
 import lv.addresses.service.config.Configs
-import lv.addresses.service.{AddressService, Boot}
+import lv.addresses.service.{AddressConfig, AddressService, Boot}
 
 import java.nio.file.Path
 import scala.concurrent.Future
@@ -29,13 +29,13 @@ object OpenDataDownload {
     val initialDelay = 1.minute
 
     as.log.info(s"Open data address synchronization job will start in $initialDelay and will run " +
-      s"every $runInterval")
+      s"every ${AddressConfig.updateRunInterval}")
 
-    Source.tick(initialDelay, runInterval, Synchronize).runForeach { _ =>
+    Source.tick(initialDelay, AddressConfig.updateRunInterval, Synchronize).runForeach { _ =>
       as.log.info("Starting address open data synchronization job.")
       Future.sequence(List(
         downloader.download(url, directory, AddressFilePrefix, ".zip"),
-        downloader.download(historyUrl, directory, AddressFilePrefix, ".zip"),
+        downloader.download(historyUrl, directory, AddressHistoryFilePrefix, ".zip"),
       )).map {
         case List(IOResult(ac, Success(_)), IOResult(hc, Success(_))) =>
           system.log.debug(s"Successfuly downloaded $ac bytes from $url")

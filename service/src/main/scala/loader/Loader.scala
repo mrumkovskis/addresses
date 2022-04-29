@@ -1,4 +1,4 @@
-package lv.addresses.loader
+package lv.addresses.service.loader
 
 import com.typesafe.scalalogging.Logger
 import lv.addresses.index.Index.binarySearch

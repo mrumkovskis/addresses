@@ -1,8 +1,8 @@
-package lv.addresses.loader
+package lv.addresses.service.loader
 
 import lv.addresses.index.Index.normalize
 import lv.addresses.indexer.{AddrObj, Addresses}
-import lv.addresses.loader.Loader.updateIsLeafFlag
+import Loader.updateIsLeafFlag
 import Loader._
 
 import scala.jdk.CollectionConverters.EnumerationHasAsScala

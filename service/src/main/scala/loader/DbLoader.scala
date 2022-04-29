@@ -1,7 +1,7 @@
-package lv.addresses.loader
+package lv.addresses.service.loader
 
 import lv.addresses.index.Index.normalize
-import lv.addresses.indexer.{AddrObj, Addresses, Constants, DbConfig}
+import lv.addresses.indexer.{AddrObj, Addresses, Constants}
 import org.tresql.{Query, Resources}
 
 import java.sql.DriverManager

@@ -1,6 +1,5 @@
 package lv.addresses.service
 
-import java.io.{File, FileFilter}
 import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
@@ -10,26 +9,23 @@ import akka.pattern.ask
 import akka.event.EventBus
 import akka.event.LookupClassification
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Sink, Source}
-import com.typesafe.scalalogging.Logger
-import com.typesafe.config.Config
-import lv.addresses.indexer.{Addresses, DbConfig}
-import lv.addresses.loader.{AKLoader, DbLoader, OpenDataLoader}
-import lv.addresses.service.config.Configs
-import org.slf4j.LoggerFactory
+import akka.stream.scaladsl.Source
+import lv.addresses.indexer.{Addresses, IndexFiles}
 
 import java.nio.file.{Files, Path}
 import scala.util.matching.Regex
 
-object AddressService extends AddressServiceConfig with EventBus with LookupClassification {
+object AddressService extends EventBus with LookupClassification {
 
-  private[service] trait Msg
+  sealed private[service] trait Msg
   private case object Finder extends Msg
   private case class Finder(af: AddressFinder) extends Msg
+  private case class NewFinder(af: AddressFinder, version: String) extends Msg
+  case object Version extends Msg
   case class Version(version: String) extends Msg
   private case class WatchVersionSubscriber(subscriber: Subscriber) extends Msg
   private[service] case object CheckNewVersion extends Msg
@@ -42,6 +38,8 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   implicit val execCtx = as.dispatcher
 
   def finder = addressFinderActor.ask(Finder)(1.second).mapTo[Finder].map(f => Option(f.af))
+  def version = addressFinderActor.ask(Version)(1.second).mapTo[Version].map(v => Option(v.version))
+
 
   //bus implementation
   type Event = MsgEnvelope
@@ -78,27 +76,27 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
 
   class AddressFinderActor extends Actor {
     private var af: AddressFinder = null
+    private var version: String = null
     override def receive = {
       case Finder => sender() ! Finder(af)
-      case Finder(af) =>
-        deleteOldIndexes
+      case Version => Version(version)
+      case NewFinder(af, version) =>
+        deleteOldIndexes(version)
         this.af = af
-        publish(MsgEnvelope("version", Version(af.addressFileName)))
+        this.version = version
+        publish(MsgEnvelope("version", Version(version)))
       case WatchVersionSubscriber(subscriber) =>
         context.watch(subscriber)
-        publish(MsgEnvelope("version", Version(Option(af).map(_.addressFileName).orNull)))
+        publish(MsgEnvelope("version", Version(version)))
       case Terminated(subscriber) =>
         unsubscribe(subscriber)
         as.log.info(s"$subscriber unsubscribed from version update.")
     }
-    private def deleteOldIndexes = {
+    private def deleteOldIndexes(version: String) = {
       as.log.info("Deleting old index files...")
-      dbConfig
-        .map(c => new File(c.indexDir))
-        .orElse(Option(addressFileName).flatMap(f => Option(new File(f).getParentFile)))
-        .foreach { dir =>
-          deleteOldFiles(dir.getPath, s".*\\.$AddressesPostfix", s".*\\.$IndexPostfix")
-        }
+      import AddressConfig._
+      val (ap, ip) = (addressConfig.AddressesPostfix, addressConfig.IndexPostfix)
+      deleteOldFiles(addressConfig.directory, s"$version\\.$ap", s"$version\\.$ip")
     }
 
     override def postStop() = af = null
@@ -122,21 +120,21 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
   }
 
   import Boot._
-
+  import AddressConfig._
   //address updater job as stream
   Source
-    .tick(runInterval, runInterval, CheckNewVersion) //periodical check
+    .tick(updateRunInterval, updateRunInterval, CheckNewVersion) //periodical check
     .mergeMat(
       Source.actorRef(PartialFunction.empty, PartialFunction.empty,2, OverflowStrategy.dropHead))(
       (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
     ).runFold(null: String) { (currentVersion, _) =>
       as.log.debug(s"Checking for address data new version, current version $currentVersion")
-      val newVersion = dbConfig.flatMap(_ => Some(dbDataVersion)).getOrElse(addressFileName)
+      val newVersion = addressConfig.version
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
         as.log.info(s"New address data found. Initializing address finder $newVersion")
-        val af = new AddressFinder(newVersion, excludeList, houseCoordFile, dbConfig)
+        val af = new AddressFinder(addressLoader, indexFiles)
         af.init
-        addressFinderActor ! Finder(af)
+        addressFinderActor ! NewFinder(af, newVersion)
         newVersion
       } else {
         as.log.debug("No new address data found")
@@ -148,64 +146,10 @@ object AddressService extends AddressServiceConfig with EventBus with LookupClas
     }
 }
 
-trait AddressServiceConfig extends lv.addresses.indexer.AddressIndexerConfig {
-  //conflicting variable name with logger from AddressFinder
-  protected val configLogger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
-  private def conf = com.typesafe.config.ConfigFactory.load
-  private def akFileName = if (conf.hasPath("VZD.ak-file")) conf.getString("VZD.ak-file") else {
-    configLogger.error("address file setting 'VZD.ak-file' not found")
-    null
-  }
-
-  def akDirName = {
-    val idx = akFileName.lastIndexOf('/')
-    if (idx != -1) akFileName.substring(0, idx) else "."
-  }
-
-  def akFileNamePattern = akFileName.substring(akFileName.lastIndexOf('/') + 1)
-
-  override def excludeList: Set[String] = if (conf.hasPath("VZD.exclude-list"))
-    conf.getString("VZD.exclude-list").split(",\\s+").toSet else Set()
-
-  val runInterval: FiniteDuration = {
-    val dur: Duration =
-      if (conf.hasPath("VZD.update-run-interval"))
-        Duration(conf.getString("VZD.update-run-interval"))
-      else 1.hour
-    FiniteDuration(dur.length, dur.unit)
-  }
-
-  /** Return alphabetically last address file. */
-  override def addressFileName: String =
-    new File(akDirName)
-      .listFiles(new FileFilter {
-        def accept(f: File) = java.util.regex.Pattern.matches(akFileNamePattern, f.getName)
-      })
-      .sortBy(_.getName)
-      .lastOption.map(_.getPath)
-      .orNull
-
-  override def houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
-
-  override def dbConfig: Option[DbConfig] = {
-    def c(config: Config, key: String, default: String): String =
-      scala.util.Try(config.getString(key)).toOption.getOrElse(default)
-    Try(conf.getConfig("VZD.db"))
-      .map { dbConf =>
-        val dc = c(dbConf, _, _)
-        DbConfig(
-          dc("driver", "org.h2.Driver"),
-          dc("url", "jdbc:h2:./addresses.h2"),
-          dc("user", ""),
-          dc("password", ""),
-          dc("index-dir", "."))
-      }
-      .toOption
-  }
-}
-
-class AddressFinder(val addressFileName: String, val excludeList: Set[String],
-                    val houseCoordFile: String, val dbConfig: Option[DbConfig])
+class AddressFinder(val addressLoaderFun: () => Addresses, val indexFiles: IndexFiles)
 extends lv.addresses.indexer.AddressFinder
 //for debugging purposes
-object AddressFinder extends lv.addresses.indexer.AddressFinder with AddressServiceConfig
+object AddressFinder extends lv.addresses.indexer.AddressFinder {
+  def addressLoaderFun: () => Addresses = AddressConfig.addressLoader
+  def indexFiles: IndexFiles = AddressConfig.indexFiles
+}

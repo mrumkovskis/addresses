@@ -1,14 +1,23 @@
 package lv.addresses.service
 
+import loader.{AKLoader, DbLoader, OpenDataLoader}
 import lv.addresses.indexer.{Addresses, IndexFiles}
-import lv.addresses.loader.{AKLoader, DbLoader, OpenDataLoader}
 import lv.addresses.service.config.Configs
 
 import java.io.File
 import java.time.LocalDate
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.Try
 
 object AddressConfig {
+  val updateRunInterval: FiniteDuration = {
+    val conf = com.typesafe.config.ConfigFactory.load
+    val dur: Duration =
+      if (conf.hasPath("VZD.update-run-interval"))
+        Duration(conf.getString("VZD.update-run-interval"))
+      else 1.hour
+      FiniteDuration(dur.length, dur.unit)
+  }
   val addressConfig: Configs.VARConfig = {
     val conf = com.typesafe.config.ConfigFactory.load
     if (conf.hasPath("VZD.db")) {

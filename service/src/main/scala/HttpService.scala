@@ -23,7 +23,6 @@ import lv.addresses.indexer.AddressFields._
 import lv.addresses.indexer.{MutableAddress, ResolvedAddress}
 import lv.addresses.service.config.Configs
 
-import java.time.LocalDate
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
@@ -136,7 +135,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
       } ~ path("openapi.yaml") {
         getFromResource("openapi.yaml", ContentTypes.`text/plain(UTF-8)`)
       } ~ path("version") {
-        complete(finder.map(f => normalizeVersion(f.map(_.addressFileName).getOrElse(null))))
+        complete(version.map(_.map(normalizeVersion).getOrElse(null)))
       } ~ (path("dump.csv") & get & parameterMultiMap) {
         params => {
           val types = params.get("type") map(_.toSet.map((t: String) => t.toInt))
@@ -277,7 +276,7 @@ object Boot extends scala.App with AddressHttpService {
   AddressConfig.addressConfig match {
     case _: Configs.Db        => DbSync.initialize
     case c: Configs.OpenData  => OpenDataDownload.initialize(c)
-    case c: Configs.AK        => FTPDownload.initialize(c.directory, c.akFileNamePattern)
+    case c: Configs.AK        => FTPDownload.initialize(c.directory, c.akFileNamePattern, c.addressFile)
   }
 
   val bindingFuture =

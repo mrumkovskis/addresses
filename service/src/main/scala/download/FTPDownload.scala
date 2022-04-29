@@ -4,7 +4,7 @@ import akka.stream.IOResult
 import akka.stream.alpakka.ftp.scaladsl.Ftp
 import akka.stream.alpakka.ftp.{FtpCredentials, FtpSettings}
 import akka.stream.scaladsl.{FileIO, Source}
-import lv.addresses.service.AddressService.{CheckNewVersion, MsgEnvelope, addressFileName, akFileNamePattern, runInterval, publish}
+import lv.addresses.service.AddressService.{CheckNewVersion, MsgEnvelope, publish}
 import lv.addresses.service.AddressService._
 import lv.addresses.service.Boot._
 
@@ -28,8 +28,9 @@ object FTPDownload {
     config.getString("VZD.ftp.dir") else null
 
   def isFTPConfigured = !(Set(host, username, password, ftpDir) contains null)
-  def initialize(addressFileDir: String, fileNamePattern: String) = if (isFTPConfigured) {
-    val FILE_PATTERN = new scala.util.matching.Regex(akFileNamePattern)
+  def initialize(addressFileDir: String, fileNamePattern: String, currentFile: String) = if (isFTPConfigured) {
+    import lv.addresses.service.AddressConfig.updateRunInterval
+    val FILE_PATTERN = new scala.util.matching.Regex(fileNamePattern)
     val ftpSettings = FtpSettings(InetAddress.getByName(host))
       .withCredentials(FtpCredentials.create(username, password))
       .withBinary(true)
@@ -37,8 +38,8 @@ object FTPDownload {
 
     import scala.concurrent.duration._
     val initialDelay = 1.minute
-    Source.tick(initialDelay, runInterval, Download).runForeach { _ =>
-      val current = Option(addressFileName)
+    Source.tick(initialDelay, updateRunInterval, Download).runForeach { _ =>
+      val current = Option(currentFile)
         .map(fn => fn.substring(fn.lastIndexOf('/') + 1))
         .getOrElse("")
       as.log.info(s"Checking for new address file on ftp server. Current address file: $current")
@@ -69,6 +70,6 @@ object FTPDownload {
             s"Unable to list remote ftp files: ftp://$username@$host/$ftpDir")
         }
     }
-    as.log.info(s"FTP downloader will start after $initialDelay and will run at $runInterval intervals")
+    as.log.info(s"FTP downloader will start after $initialDelay and will run at $updateRunInterval intervals")
   } else as.log.info("FTP downloader not started due to missing configuration.")
 }

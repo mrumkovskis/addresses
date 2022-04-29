@@ -1,4 +1,4 @@
-package lv.addresses.loader
+package lv.addresses.service.loader
 
 import lv.addresses.indexer.{AddrObj, Addresses}
 

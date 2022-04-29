@@ -1,26 +1,29 @@
 package lv.addresses.indexer
 
+import com.typesafe.scalalogging.Logger
+
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.BufferedWriter
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
-
 import scala.util.Using
 import scala.collection.mutable.{ArrayBuffer => AB}
 import lv.addresses.index.Index._
+import org.slf4j.LoggerFactory
 
-trait AddressIndexLoader { this: AddressFinder =>
+class AddressIndexLoader(indexFiles: IndexFiles) {
+  private val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
+
   def save(addresses: Addresses,
            idxCode: scala.collection.mutable.HashMap[Int, Int],
            index: MutableIndex) = {
 
-    val IndexFiles(addrFile, idxFile) = newIndexFiles
+    val IndexFiles(addrFile, idxFile) = indexFiles
     val Addresses(addressMap, history) = addresses
 
     logger.info(s"Saving addresses $addrFile...")
@@ -78,7 +81,7 @@ trait AddressIndexLoader { this: AddressFinder =>
                          index: MutableIndex)
 
   def load(): CachedIndex = {
-    val IndexFiles(addrFile, idxFile) = indexFiles.getOrElse(sys.error(s"Index files not found"))
+    val IndexFiles(addrFile, idxFile) = indexFiles
     logger.info(s"Loading address index from $idxFile...")
     Using(new DataInputStream(new BufferedInputStream(new FileInputStream(idxFile)))) { in =>
       logger.info(s"Loading address data from $addrFile...")
@@ -146,35 +149,5 @@ trait AddressIndexLoader { this: AddressFinder =>
         s"index stats - ${index.statistics.render}.")
       CachedIndex(Addresses(addressMap, history), idx_code, index)
     }.get
-  }
-
-  private def indexFilesInternal: Option[IndexFiles] =
-    Option(dbDataVersion)
-      .flatMap(v => dbConfig.map(v -> _.indexDir))
-      .map { case (ver, indexDir) =>
-        val dir = new File(indexDir)
-        if (!dir.isDirectory) sys.error(s"$dir not a directory, cannot store index file." +
-          s"Please check that setting 'db.index-dir' points to existing directory")
-        IndexFiles(addresses = new File(dir, s"$DbDataFilePrefix$ver.$AddressesPostfix"),
-          index = new File(dir, s"$DbDataFilePrefix$ver.$IndexPostfix"))
-      }
-      .orElse {
-        Option(addressFileName).map { fn =>
-          val akFile = new File(fn)
-          val filePrefix = akFile.getName.substring(0, akFile.getName.lastIndexOf("."))
-          IndexFiles(addresses = new File(akFile.getParent, filePrefix + s".$AddressesPostfix"),
-            index = new File(akFile.getParent, filePrefix + s".$IndexPostfix"))
-        }
-      }
-
-  def indexFiles: Option[IndexFiles] =
-    indexFilesInternal.filter(i => i.addresses.exists() && i.index.exists())
-
-  private def newIndexFiles: IndexFiles = {
-    indexFilesInternal.map { case i @ IndexFiles(addresses, index) =>
-      if (addresses.exists()) sys.error(s"Cannot save address file. File $addresses already exists")
-      if (index.exists()) sys.error(s"Cannot save address index file. File $index already exists")
-      i
-    }.getOrElse(sys.error(s"Cannot create index files because no address data found neither in database nor file."))
   }
 }

@@ -15,10 +15,11 @@ object DbSync {
     import AddressService._
 
     import Boot._
+    import lv.addresses.service.AddressConfig._
     val initialDelay  = 1.minute
     as.log.info(s"Address databases synchronization job will start in $initialDelay and will run " +
-      s"every $runInterval")
-    Source.tick(initialDelay, runInterval, Synchronize).runForeach { _ =>
+      s"every $updateRunInterval")
+    Source.tick(initialDelay, updateRunInterval, Synchronize).runForeach { _ =>
       as.log.info("Starting address databases synchronization job.")
       Try(lv.addresses.Updater.main(Array()))
         .map(_ => publish(MsgEnvelope("check-new-version", CheckNewVersion)))

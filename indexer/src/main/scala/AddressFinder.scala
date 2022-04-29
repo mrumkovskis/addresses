@@ -1,18 +1,14 @@
 package lv.addresses.indexer
 
 import java.io.{File, InputStreamReader}
-import java.sql.DriverManager
-import java.time.{LocalDate, LocalDateTime}
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
-import org.tresql.{LogTopic, Query, Resources, SimpleCache}
 
 import java.util.Properties
 import scala.collection.mutable.{ArrayBuffer => AB, Set => MS}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
-import scala.util.Using
 
 class MutableAddress(var code: Int, var typ: Int, var address: String = null,
                      var zipCode: String = null,
@@ -54,6 +50,10 @@ case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: S
 }
 
 case class Addresses(addresses: Map[Int, AddrObj], history: Map[Int, List[String]])
+
+case class IndexFiles(addresses: File, index: File) {
+  def exists: Boolean = addresses.exists() && index.exists()
+}
 
 object Constants {
   val PIL = 104
@@ -100,16 +100,15 @@ object Constants {
 trait AddressFinder
   extends AddressIndexer
     with AddressResolver
-    with AddressIndexLoader
-    with AddressLoader
-    with AddressIndexerConfig
     with SpatialIndexer {
 
   import Constants._
   import AddressFields._
 
-  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
+  def addressLoaderFun: () => Addresses
+  def indexFiles: IndexFiles
 
+  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
 
   private[this] var _addressMap: Map[Int, AddrObj] = null
   private[this] var _addressHistory: Map[Int, List[String]] = Map()
@@ -126,7 +125,7 @@ trait AddressFinder
   def init: Unit = {
     if (ready) return
 
-    if (addressFileName == null && (dbConfig.isEmpty || dbDataVersion == null))
+    if (indexFiles == null)
       logger.error("Address file not set nor database connection parameters specified")
     else {
       logger.info("Loading address synonyms...")
@@ -147,15 +146,13 @@ trait AddressFinder
       }
       logger.debug(s"Synonyms: $synonyms")
       logger.info(s"${synonyms.size} address synonym(s) loaded")
-      if (indexFiles.isDefined) {
-        val cachedIndex = load()
+      if (indexFiles.exists) {
+        val cachedIndex = new AddressIndexLoader(indexFiles).load()
         _addressMap = cachedIndex.addresses.addresses
         _addressHistory = cachedIndex.addresses.history
         _index = Index(cachedIndex.idxCode, cachedIndex.index)
       } else {
-        val (am, ah) = dbConfig
-          .map(loadAddressesFromDb) //load from db
-          .getOrElse(loadAddresses() -> Map[Int, List[String]]()) //load from file
+        val Addresses(am, ah) = addressLoaderFun()
         _addressMap = am
         _addressHistory = ah
         _index = index(am, ah, synonyms, null)
@@ -175,6 +172,12 @@ trait AddressFinder
            Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file or
            VZD.{driver, user, password} and db properties are set.
            If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
+
+  def saveIndex = {
+    checkIndex
+    new AddressIndexLoader(indexFiles)
+      .save(Addresses(addressMap, addressHistory), index.idxCode, index.index)
+  }
 
   def searchIndex(str: String,
                   limit: Int,
@@ -380,11 +383,6 @@ trait AddressFinder
     a
   }.filter(_ != null)
 
-  def saveIndex = {
-    checkIndex
-    save(Addresses(addressMap, addressHistory), index.idxCode, index.index)
-  }
-
   def insertIntoHeap(h: AB[Long], el: Long) = {
     var i = h.size
     var j = 0
@@ -459,70 +457,4 @@ trait AddressFinder
     //get x smallest elements
     heap_topx(a, x)
   }
-}
-
-case class DbConfig(driver: String, url: String, user: String, password: String, indexDir: String) {
-  lazy val tresqlResources = new Resources {
-    val infoLogger = Logger(LoggerFactory.getLogger("org.tresql"))
-    val tresqlLogger = Logger(LoggerFactory.getLogger("org.tresql.tresql"))
-    val sqlLogger = Logger(LoggerFactory.getLogger("org.tresql.db.sql"))
-    val varsLogger = Logger(LoggerFactory.getLogger("org.tresql.db.vars"))
-    val sqlWithParamsLogger = Logger(LoggerFactory.getLogger("org.tresql.sql_with_params"))
-
-    override val logger = (m, params, topic) => topic match {
-      case LogTopic.sql => sqlLogger.debug(m)
-      case LogTopic.tresql => tresqlLogger.debug(m)
-      case LogTopic.params => varsLogger.debug(m)
-      case LogTopic.sql_with_params => sqlWithParamsLogger.debug(sqlWithParams(m, params))
-      case LogTopic.info => infoLogger.debug(m)
-      case _ => infoLogger.debug(m)
-    }
-
-    override val cache = new SimpleCache(4096)
-
-    def sqlWithParams(sql: String, params: Map[String, Any]) = params.foldLeft(sql) {
-      case (sql, (name, value)) => sql.replace(s"?/*$name*/", value match {
-        case _: Int | _: Long | _: Double | _: BigDecimal | _: BigInt | _: Boolean => value.toString
-        case _: String | _: java.sql.Date | _: java.sql.Timestamp => s"'$value'"
-        case null => "null"
-        case _ => value.toString
-      })
-    }
-  }
-
-  def lastSyncTime: LocalDateTime = {
-    Class.forName(driver)
-    Using(DriverManager.getConnection(url, user, password)) { conn =>
-      implicit val res = tresqlResources withConn conn
-      Query("(art_vieta { max (sync_synced) d } +" +
-        "art_nlieta { max (sync_synced) d } +" +
-        "art_dziv { max (sync_synced) d }) { max(d) }").unique[LocalDateTime]
-    }.recover {
-      case e: Exception =>
-        Logger(LoggerFactory.getLogger("org.tresql")).error("Error getting last sync time", e)
-        null
-    }.get
-  }
-}
-
-case class IndexFiles(addresses: File, index: File) {
-  def exists: Boolean = addresses.exists() && index.exists()
-}
-
-trait AddressIndexerConfig {
-  protected val DbDataFilePrefix = "VZD_AR_"
-  protected val AddressesPostfix = "addresses"
-  protected val IndexPostfix = "index"
-
-  def addressFileName: String
-  def excludeList: Set[String]
-  def houseCoordFile: String
-
-  def dbConfig: Option[DbConfig]
-  def dbDataVersion: String =
-    dbConfig
-      .map(_.lastSyncTime)
-      .flatMap(Option(_))
-      .map(DbDataFilePrefix + _.toString.replace(':', '_').replace('.', '_'))
-      .orNull
 }
