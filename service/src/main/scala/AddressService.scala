@@ -79,7 +79,7 @@ object AddressService extends EventBus with LookupClassification {
     private var version: String = null
     override def receive = {
       case Finder => sender() ! Finder(af)
-      case Version => Version(version)
+      case Version => sender() ! Version(version)
       case NewFinder(af, version) =>
         deleteOldIndexes(version)
         this.af = af
