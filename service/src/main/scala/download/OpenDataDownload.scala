@@ -10,7 +10,7 @@ import akka.stream.scaladsl.{FileIO, Source}
 import lv.addresses.service.config.Configs
 import lv.addresses.service.{AddressConfig, AddressService, Boot}
 
-import java.nio.file.Path
+import java.io.File
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
@@ -63,7 +63,11 @@ object OpenDataDownload {
           .map(prefix + _ + suffix)
           .getOrElse(sys.error(s"Last-Modified header was not found in response for '$url'." +
             s" Cannot set address data file name."))
-        resp.entity.dataBytes.runWith(FileIO.toPath(Path.of(destDir, fileName)))
+        //store data first into temp file, so that loading process does not pick up partial file
+        val tmpFile = File.createTempFile(prefix, suffix, new File(destDir))
+        resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath)).andThen {
+          case Success(IOResult(_, Success(_))) => tmpFile.renameTo(new File(destDir, fileName))
+        }
       }
     }
   }
