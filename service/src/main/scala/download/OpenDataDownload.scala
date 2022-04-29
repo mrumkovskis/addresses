@@ -64,7 +64,7 @@ object OpenDataDownload {
           .getOrElse(sys.error(s"Last-Modified header was not found in response for '$url'." +
             s" Cannot set address data file name."))
         //store data first into temp file, so that loading process does not pick up partial file
-        val tmpFile = File.createTempFile(prefix, suffix, new File(destDir))
+        val tmpFile = File.createTempFile(prefix, ".tmp", new File(destDir))
         resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath)).andThen {
           case Success(IOResult(_, Success(_))) => tmpFile.renameTo(new File(destDir, fileName))
         }
