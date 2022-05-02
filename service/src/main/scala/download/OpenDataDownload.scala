@@ -42,9 +42,11 @@ object OpenDataDownload {
             system.log.info(s"Successfuly downloaded $ac bytes from $url")
           if (hc >= 0)
             system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
-          system.log.info(s"Deleting old address files...")
-          deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
-          publish(MsgEnvelope("check-new-version", CheckNewVersion))
+          if (ac > 0 || hc > 0) {
+            system.log.info(s"Deleting old address files...")
+            deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
+            publish(MsgEnvelope("check-new-version", CheckNewVersion))
+          }
         case err => sys.error(s"Unexpected download result: $err")
       }.failed.foreach {
         as.log.error(_, s"Error occured while downloading address from open data portal.")
