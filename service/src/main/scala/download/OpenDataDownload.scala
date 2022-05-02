@@ -37,15 +37,15 @@ object OpenDataDownload {
         downloader.download(url, directory, AddressFilePrefix, ".zip"),
         downloader.download(historyUrl, directory, AddressHistoryFilePrefix, ".zip"),
       )).map {
-        case List(IOResult(ac, Success(_)), IOResult(hc, Success(_))) =>
-          system.log.info(s"Successfuly downloaded $ac bytes from $url")
-          system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
+        case List(IOResult(ac, _), IOResult(hc, _)) =>
+          if (ac >= 0)
+            system.log.info(s"Successfuly downloaded $ac bytes from $url")
+          if (hc >= 0)
+            system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
           system.log.info(s"Deleting old address files...")
           deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
           publish(MsgEnvelope("check-new-version", CheckNewVersion))
-        case err => err
-          .collectFirst { case IOResult(_, Failure(e)) => Future.failed(e) }
-          .getOrElse(Future.successful(Done))
+        case err => sys.error(s"Unexpected download result: $err")
       }.failed.foreach {
         as.log.error(_, s"Error occured while downloading address from open data portal.")
       }
@@ -67,7 +67,7 @@ object OpenDataDownload {
         if (destFile.exists()) {
           system.log.info(s"Address file already exists: $destFile")
           resp.discardEntityBytes()
-          Future.successful(IOResult(0, Success(Done)))
+          Future.successful(IOResult(-1))
         } else {
           system.log.info(s"Downloading file: $destFile")
           //store data first into temp file, so that loading process does not pick up partial file
