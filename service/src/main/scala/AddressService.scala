@@ -81,7 +81,7 @@ object AddressService extends EventBus with LookupClassification {
       case Finder => sender() ! Finder(af)
       case Version => sender() ! Version(version)
       case NewFinder(af, version) =>
-        deleteOldIndexes(version)
+        deleteOldIndexes(this.version)
         this.af = af
         this.version = version
         publish(MsgEnvelope("version", Version(version)))

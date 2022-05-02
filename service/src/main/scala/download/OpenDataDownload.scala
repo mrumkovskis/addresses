@@ -38,8 +38,8 @@ object OpenDataDownload {
         downloader.download(historyUrl, directory, AddressHistoryFilePrefix, ".zip"),
       )).map {
         case List(IOResult(ac, Success(_)), IOResult(hc, Success(_))) =>
-          system.log.debug(s"Successfuly downloaded $ac bytes from $url")
-          system.log.debug(s"Successfuly downloaded $hc bytes from $historyUrl")
+          system.log.info(s"Successfuly downloaded $ac bytes from $url")
+          system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
           system.log.info(s"Deleting old address files...")
           deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
           publish(MsgEnvelope("check-new-version", CheckNewVersion))
@@ -63,10 +63,18 @@ object OpenDataDownload {
           .map(prefix + _ + suffix)
           .getOrElse(sys.error(s"Last-Modified header was not found in response for '$url'." +
             s" Cannot set address data file name."))
-        //store data first into temp file, so that loading process does not pick up partial file
-        val tmpFile = File.createTempFile(prefix, ".tmp", new File(destDir))
-        resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath)).andThen {
-          case Success(IOResult(_, Success(_))) => tmpFile.renameTo(new File(destDir, fileName))
+        val destFile = new File(destDir, fileName)
+        if (destFile.exists()) {
+          system.log.info(s"Address file already exists: $destFile")
+          resp.discardEntityBytes()
+          Future.successful(IOResult(0, Success(Done)))
+        } else {
+          system.log.info(s"Downloading file: $destFile")
+          //store data first into temp file, so that loading process does not pick up partial file
+          val tmpFile = File.createTempFile(prefix, ".tmp", new File(destDir))
+          resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath)).andThen {
+            case Success(IOResult(_, Success(_))) => tmpFile.renameTo(destFile)
+          }
         }
       }
     }
