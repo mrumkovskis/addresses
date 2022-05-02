@@ -12,7 +12,7 @@ import lv.addresses.service.{AddressConfig, AddressService, Boot}
 import java.io.File
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 object OpenDataDownload {
 
