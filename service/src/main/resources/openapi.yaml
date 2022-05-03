@@ -14,14 +14,14 @@ paths:
         description: meklējamais teksts vai adreses kods
         schema:
           type: string
-      - name: lks_x
+      - name: lks_lat
         in: query
-        description: LKS koordinātu sistēmas x ass koordināta
+        description: LKS koordinātu sistēmas platuma koordināta
         schema:
           type: number
-      - name: lks_y
+      - name: lks_long
         in: query
-        description: LKS koordinātu sistēmas y ass koordināta
+        description: LKS koordinātu sistēmas garuma koordināta
         schema:
           type: number
       - name: struct
@@ -94,14 +94,14 @@ paths:
         description: meklējamais teksts vai adreses kods
         schema:
           type: string
-      - name: lks_x
+      - name: lks_lat
         in: query
-        description: LKS koordinātu sistēmas x ass koordināta
+        description: LKS koordinātu sistēmas platuma koordināta
         schema:
           type: number
-      - name: lks_y
+      - name: lks_long
         in: query
-        description: LKS koordinātu sistēmas y ass koordināta
+        description: LKS koordinātu sistēmas garuma koordināta
         schema:
           type: number
       - name: limit
@@ -173,9 +173,9 @@ components:
           type: string
         irAdrese:
           type: boolean
-        lksCoordX:
+        lksLat:
           type: number
-        lksCoordY:
+        lksLong:
           type: number
         history:
           type: array

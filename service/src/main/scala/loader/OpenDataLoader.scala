@@ -57,8 +57,8 @@ object OpenDataLoader {
         "name" -> 7,
         "super_code" -> 5,
         "zip_code" -> 9,
-        "koord_x" -> 17,
-        "koord_y" -> 18,
+        "koord_lat" -> 17,
+        "koord_long" -> 18,
         "exists" -> 2,
       ),
       "AW_DZIV.CSV" -> Map(
@@ -122,8 +122,8 @@ object OpenDataLoader {
           superCode = line(struct("super_code")).toInt,
           zipCode   = struct.get("zip_code").map(line).orNull,
           words     = normalize(line(struct("name"))).toVector,
-          coordX    = struct.get("koord_x").map(line).filter(_.nonEmpty).flatMap(bd).orNull,
-          coordY    = struct.get("koord_y").map(line).filter(_.nonEmpty).flatMap(bd).orNull,
+          coordLat  = struct.get("koord_lat").map(line).filter(_.nonEmpty).flatMap(bd).orNull,
+          coordLong = struct.get("koord_long").map(line).filter(_.nonEmpty).flatMap(bd).orNull,
           atvk      = struct.get("atvk").map(line).orNull,
         )
       else null

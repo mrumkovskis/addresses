@@ -33,8 +33,8 @@ class AddressIndexLoader(indexFiles: IndexFiles) {
         import a._
         w.println(s"$code;$typ;$name;$superCode;$isLeaf;${
           Option(zipCode).getOrElse("")};${
-          Option(coordX).getOrElse("")};${
-          Option(coordY).getOrElse("")};${
+          Option(coordLat).getOrElse("")};${
+          Option(coordLong).getOrElse("")};${
           Option(atvk).getOrElse("")}")
       }
       w.println()

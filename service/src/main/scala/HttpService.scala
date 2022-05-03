@@ -36,8 +36,8 @@ object MyJsonProtocol extends DefaultJsonProtocol {
     res += ("address" -> JsString(obj.address))
     res += ("irAdrese" -> JsBoolean(obj.irAdrese))
     if (obj.zipCode != null) res += ("zipCode" -> JsString(obj.zipCode))
-    if (obj.lksCoordX != null) res += ("lksCoordX" -> JsNumber(obj.lksCoordX))
-    if (obj.lksCoordY != null) res += ("lksCoordY" -> JsNumber(obj.lksCoordY))
+    if (obj.lksCoordLat != null) res += ("lksLat" -> JsNumber(obj.lksCoordLat))
+    if (obj.lksCoordLong != null) res += ("lksLong" -> JsNumber(obj.lksCoordLong))
     if (obj.history != null) res += ("history" -> JsArray(obj.history.map(JsString(_)).toVector))
     obj.pilCode.foreach(v => res += ("pilCode" -> JsNumber(v)))
     obj.pilName.foreach(v => res += ("pilName" -> JsString(v)))
@@ -83,10 +83,10 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 
   val CODE_PATTERN = "(\\d{9})"r
 
-  val Min_LKS_X = 300000
-  val Max_LKS_X = 770000
-  val Min_LKS_Y = 160000
-  val Max_LKS_Y = 450000
+  val Min_LKS_LAT   = 160000
+  val Max_LKS_LAT   = 450000
+  val Min_LKS_LONG  = 300000
+  val Max_LKS_LONG  = 770000
 
   val wsVersionNofifications =
     Flow.fromGraph(
@@ -103,7 +103,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
   // Address to CSV marshaller
   implicit val addrAsCsv = Marshaller.strict[lv.addresses.indexer.MutableAddress, ByteString] { a =>
     Marshalling.WithFixedContentType(ContentTypes.`text/csv(UTF-8)`, () => {
-      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.lksCoordX, a.lksCoordY).mkString(";"))
+      ByteString(List(a.code, a.address.replaceAll("[\n|;]",", "), a.typ, a.zipCode, a.lksCoordLat, a.lksCoordLong).mkString(";"))
     })
   }
   // enable csv streaming:
@@ -198,14 +198,14 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         .filter(_.forall(_.nonEmpty))
         .map(_.map(_.toInt).toSet)
     }
-    val coordX = Try {
-      params.get("lks_x")
+    val coordLat = Try {
+      params.get("lks_lat")
         .flatMap(_.headOption)
         .filter(_.nonEmpty)
         .map(BigDecimal(_))
     }
-    val coordY = Try {
-      params.get("lks_y")
+    val coordLong = Try {
+      params.get("lks_long")
         .flatMap(_.headOption)
         .filter(_.nonEmpty)
         .map(BigDecimal(_))
@@ -226,19 +226,20 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
           def regErr(x: Try[_], msg: String) = if (x.isFailure) err.append(msg)
           regErr(limit, "'limit' parameter must be number\n")
           regErr(types, "'type' parameter(s) must be number(s)\n")
-          regErr(coordX, "'lks_x' parameter must be decimal number\n")
-          regErr(coordY, "'lks_y' parameter must be decimal number\n")
+          regErr(coordLat, "'lks_lat' parameter must be decimal number\n")
+          regErr(coordLong, "'lks_long' parameter must be decimal number\n")
           if (err.nonEmpty) {
             ToResponseMarshallable(HttpResponse(BadRequest, entity = err.toString))
           } else {
-            def validateCoorBox = coordX.get zip coordY.get exists {
-              case (x, y) => x >= Min_LKS_X && x <= Max_LKS_X && y >= Min_LKS_Y && y <= Max_LKS_Y
+            def validateCoorBox = coordLat.get zip coordLong.get exists {
+              case (lat, long) =>
+                lat >= Min_LKS_LAT && lat <= Max_LKS_LAT && long >= Min_LKS_LONG && long <= Max_LKS_LONG
             }
             (pattern match {
               case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
-              case p if coordX.get.isEmpty || coordY.get.isEmpty => finder.search(p)(limit.get, types.get.orNull, aFields)
+              case p if coordLat.get.isEmpty || coordLong.get.isEmpty => finder.search(p)(limit.get, types.get.orNull, aFields)
               case _ if validateCoorBox =>
-                finder.searchNearest(coordX.get.get, coordY.get.get)(searchNearestLimit.get, aFields)
+                finder.searchNearest(coordLat.get.get, coordLong.get.get)(searchNearestLimit.get, aFields)
               case _ => Array[MutableAddress]() // return empty array coords are out of box
             }) map { a =>
               a.address = a.address.replace("\n", ", ")

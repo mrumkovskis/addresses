@@ -18,11 +18,14 @@ object DbLoader {
       implicit val res = tresqlResources withConn conn
 
       logger.info(s"Loading house coordinates")
-      val houseCoords =
+      val houseCoords = {
+        // koord_y - latitude
+        // koord_x - longitude
         Query("art_eka_geo {vieta_cd, koord_x, koord_y}")
           .map(row => row.int("vieta_cd") ->
-            (row.bigdecimal("koord_x") -> row.bigdecimal("koord_y")))
+            (row.bigdecimal("koord_y") -> row.bigdecimal("koord_x")))
           .toMap
+      }
       logger.info(s"House coordinates loaded: ${houseCoords.size} objects")
 
       logger.info("Loading address objects")
@@ -38,7 +41,7 @@ object DbLoader {
           .map {
             _.map { row =>
               val kods = row.long("kods").intValue()
-              val (koordX, koordY) = houseCoords.getOrElse(kods, (null, null))
+              val (koordLat, koordLong) = houseCoords.getOrElse(kods, (null, null))
               val name = row.string("nosaukums")
               val tips = row.long("tips_cd").intValue
               val attr = row.string("atrib")
@@ -47,7 +50,7 @@ object DbLoader {
               val atvk = normalizeAttrib(Constants.PAG, Constants.PIL, Constants.NOV)
               val obj = AddrObj(kods, tips, name,
                 row.long("vkur_cd").intValue, zipCode,
-                normalize(name).toVector, koordX, koordY, atvk)
+                normalize(name).toVector, koordLat, koordLong, atvk)
               kods -> obj
             }
           }

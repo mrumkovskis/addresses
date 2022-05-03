@@ -12,7 +12,7 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 class MutableAddress(var code: Int, var typ: Int, var address: String = null,
                      var zipCode: String = null,
-                     var lksCoordX: BigDecimal = null, var lksCoordY: BigDecimal = null,
+                     var lksCoordLat: BigDecimal = null, var lksCoordLong: BigDecimal = null,
                      var history: List[String] = null,
                      var editDistance: Option[Int] = None,
                      var pilCode: Option[Int] = None, var pilName: Option[String] = None,
@@ -38,7 +38,7 @@ object AddressFields {
 }
 
 case class AddrObj(code: Int, typ: Int, name: String, superCode: Int, zipCode: String,
-                   words: Vector[String], coordX: BigDecimal = null, coordY: BigDecimal = null,
+                   words: Vector[String], coordLat: BigDecimal = null, coordLong: BigDecimal = null,
                    atvk: String = null, isLeaf: Boolean = true) {
   def foldLeft[A](addressMap: Map[Int, AddrObj])(z: A)(o: (A, AddrObj) => A): A =
     addressMap.get(superCode).map(ao =>
@@ -243,13 +243,15 @@ trait AddressFinder
     }
   }
 
-  def searchNearest(coordX: BigDecimal, coordY: BigDecimal)(limit: Int = 1,
-                                                            fields: Set[String] =
-                                                              Set(StructData,
-                                                                LksKoordData,
-                                                                HistoryData)): Array[MutableAddress] =
+  def searchNearest(coordLat: BigDecimal, coordLong: BigDecimal)(limit: Int = 1,
+                                                                 fields: Set[String] =
+                                                                   Set(
+                                                                     StructData,
+                                                                     LksKoordData,
+                                                                     HistoryData
+                                                                   )): Array[MutableAddress] =
     new Search(Math.min(limit, 20))
-      .searchNearest(coordX, coordY)
+      .searchNearest(coordLat, coordLong)
       .map(result => mutableAddressFromObj(result._1, fields))
       .toArray
 
@@ -272,8 +274,8 @@ trait AddressFinder
   private def mutableAddressFromObj(addrObj: AddrObj, fields: Set[String], editDistance: Int = 0): MutableAddress = {
     addrObj.foldLeft(addressMap)(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>
       if (ma.zipCode == null) ma.zipCode = ao.zipCode
-      if (ma.lksCoordX == null) ma.lksCoordX = ao.coordX
-      if (ma.lksCoordY == null) ma.lksCoordY = ao.coordY
+      if (ma.lksCoordLat == null) ma.lksCoordLat = ao.coordLat
+      if (ma.lksCoordLong == null) ma.lksCoordLong = ao.coordLong
       ao.typ match {
         case PIL =>
           ma.pilCode = Option(ao.code)
@@ -314,8 +316,8 @@ trait AddressFinder
       ma.address = as.toString
       if (fields(HistoryData)) ma.history = addressHistory.getOrElse(ma.code, Nil)
       if (!fields(LksKoordData)) {
-        ma.lksCoordX = null
-        ma.lksCoordY = null
+        ma.lksCoordLat = null
+        ma.lksCoordLong = null
       }
       //clear unnecessary fields
       if (!fields(StructData)) {

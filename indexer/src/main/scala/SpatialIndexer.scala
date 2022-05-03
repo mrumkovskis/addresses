@@ -16,7 +16,7 @@ trait SpatialIndexer { this: AddressFinder =>
     private def dist(px: BigDecimal, py: BigDecimal, ax: BigDecimal, ay: BigDecimal) =
       (px - ax).pow(2) + (py - ay).pow(2)
 
-    def searchNearest(coordX: BigDecimal, coordY: BigDecimal) = {
+    def searchNearest(coordLat: BigDecimal, coordLong: BigDecimal) = {
       val found = scala.collection.mutable.Set[AddrObj]()
       def search(node: Node, depth: Int = 0): AddrObj = if (node == null) null else {
         import node._
@@ -24,13 +24,13 @@ trait SpatialIndexer { this: AddressFinder =>
         def closest(addr: AddrObj, new_addr: AddrObj) =
           if (new_addr == null || found(new_addr)) if (found(addr)) null else addr
           else if (addr == null || found(addr)) new_addr
-          else if (dist(coordX, coordY, addr.coordX, addr.coordY) <
-              dist(coordX, coordY, new_addr.coordX, new_addr.coordY)) addr
+          else if (dist(coordLat, coordLong, addr.coordLat, addr.coordLong) <
+              dist(coordLat, coordLong, new_addr.coordLat, new_addr.coordLong)) addr
           else new_addr
         def check_x_splitting_pane(addr: AddrObj) = addr == null ||
-          dist(coordX, coordY, addr.coordX, addr.coordY) >= dist(coordX, 0, curr_addr.coordX, 0)
+          dist(coordLat, coordLong, addr.coordLat, addr.coordLong) >= dist(coordLat, 0, curr_addr.coordLat, 0)
         def check_y_splitting_pane(addr: AddrObj) = addr == null ||
-          dist(coordX, coordY, addr.coordX, addr.coordY) >= dist(0, coordY, 0, curr_addr.coordY)
+          dist(coordLat, coordLong, addr.coordLat, addr.coordLong) >= dist(0, coordLong, 0, curr_addr.coordLong)
         def traverse(left: Node, right: Node, check_splitting_pane_cross: AddrObj => Boolean,
             start_with_left: Boolean) = {
           val (first, second) = if (start_with_left) (left, right) else (right, left)
@@ -38,23 +38,23 @@ trait SpatialIndexer { this: AddressFinder =>
           if (check_splitting_pane_cross(curr_best_addr)) closest(curr_best_addr, search(second, depth + 1))
           else curr_best_addr
         }
-        if (depth % 2 == 0) traverse(left, right, check_x_splitting_pane, coordX <= curr_addr.coordX) //x axis
-        else traverse(left, right, check_y_splitting_pane, coordY <= curr_addr.coordY) //y axis
+        if (depth % 2 == 0) traverse(left, right, check_x_splitting_pane, coordLat <= curr_addr.coordLat) //x axis
+        else traverse(left, right, check_y_splitting_pane, coordLong <= curr_addr.coordLong) //y axis
       }
       nearest.clear()
       1 to limit map { _ =>
         val nearest_addr = search(_spatialIndex)
         found += nearest_addr
         nearest_addr
-      } foreach (a => nearest += (a -> dist(coordX, coordY, a.coordX, a.coordY)))
+      } foreach (a => nearest += (a -> dist(coordLat, coordLong, a.coordLat, a.coordLong)))
       nearest.toList
     }
 
-    def searchNearestFullScan(coordX: BigDecimal, coordY: BigDecimal) = {
+    def searchNearestFullScan(coordLat: BigDecimal, coordLong: BigDecimal) = {
       nearest.clear()
       addressMap.foreach { case (c, o) =>
-        if (o.coordX != null && o.coordY != null) {
-          nearest += (o -> dist(coordX, coordY, o.coordX, o.coordY))
+        if (o.coordLat != null && o.coordLong != null) {
+          nearest += (o -> dist(coordLat, coordLong, o.coordLat, o.coordLong))
           if (nearest.size > limit) nearest.lastOption.foreach(nearest -= _)
         }
       }
@@ -73,7 +73,7 @@ trait SpatialIndexer { this: AddressFinder =>
         val axis = depth % 2
         val sorted = addresses.sortBy { c =>
           val a = addressMap(c)
-          if (axis == 0) a.coordX else a.coordY
+          if (axis == 0) a.coordLat else a.coordLong
         }
         val median = sorted.size / 2
         nodeCount += 1
@@ -89,7 +89,7 @@ trait SpatialIndexer { this: AddressFinder =>
       .keysIterator
       .filter(c => addressMap
         .get(c)
-        .exists { a => a.coordX != null && a.coordY != null })
+        .exists { a => a.coordLat != null && a.coordLong != null })
       .toIndexedSeq)
     logger.info(s"Spatial index created ($nodeCount addresses indexed).")
   }

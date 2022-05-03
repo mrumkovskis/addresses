@@ -40,7 +40,6 @@ object AddressService extends EventBus with LookupClassification {
   def finder = addressFinderActor.ask(Finder)(1.second).mapTo[Finder].map(f => Option(f.af))
   def version = addressFinderActor.ask(Version)(1.second).mapTo[Version].map(v => Option(v.version))
 
-
   //bus implementation
   type Event = MsgEnvelope
   type Classifier = String

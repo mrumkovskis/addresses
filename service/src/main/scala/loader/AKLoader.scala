@@ -57,7 +57,7 @@ object AKLoader {
         .map(r => converter(r.split(";").map(_.drop(1).dropRight(1))))
         .map(o => o.code -> houseCoords
           .get(o.code)
-          .map(coords => o.copy(coordX = coords._1).copy(coordY = coords._2))
+          .map(coords => o.copy(coordLat = coords._2).copy(coordLong = coords._1))
           .getOrElse(o))
         .toMap
       logger.info(s"${addressMap.size} addresses loaded.")
