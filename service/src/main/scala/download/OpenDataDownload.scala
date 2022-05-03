@@ -40,7 +40,7 @@ object OpenDataDownload {
           if (ac >= 0) system.log.info(s"Successfuly downloaded $ac bytes from $url")
           else system.log.info(s"No bytes downloaded from $url")
           if (hc >= 0) system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
-          else system.log.info(s"No bytes downloaded from $url")
+          else system.log.info(s"No bytes downloaded from $historyUrl")
           if (ac > 0 || hc > 0) {
             system.log.info(s"Deleting old address files...")
             val oldFiles =
