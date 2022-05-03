@@ -60,7 +60,10 @@ object FTPDownload {
                 new File(tmp).renameTo(new File(addressFileDir + "/", fName))
                 as.log.info(s"Download finished, $count bytes processed!")
                 as.log.info(s"Deleting old VZD address files...")
-                deleteOldFiles(addressFileDir, fileNamePattern)
+                val oldFiles =
+                  deleteOldFiles(addressFileDir, fileNamePattern)
+                if (oldFiles.isEmpty) as.log.info(s"No VZD address files deleted.")
+                else as.log.info(s"Deleted VZD address files - (${oldFiles.mkString(", ")})")
                 publish(MsgEnvelope("check-new-version", CheckNewVersion))
               case err =>
                 as.log.error(s"Error downloading file $remoteFile from ftp server to $tmp - $err")

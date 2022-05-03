@@ -37,13 +37,16 @@ object OpenDataDownload {
         downloader.download(historyUrl, directory, AddressHistoryFilePrefix, ".zip"),
       )).map {
         case List(IOResult(ac, _), IOResult(hc, _)) =>
-          if (ac >= 0)
-            system.log.info(s"Successfuly downloaded $ac bytes from $url")
-          if (hc >= 0)
-            system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
+          if (ac >= 0) system.log.info(s"Successfuly downloaded $ac bytes from $url")
+          else system.log.info(s"No bytes downloaded from $url")
+          if (hc >= 0) system.log.info(s"Successfuly downloaded $hc bytes from $historyUrl")
+          else system.log.info(s"No bytes downloaded from $url")
           if (ac > 0 || hc > 0) {
             system.log.info(s"Deleting old address files...")
-            deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
+            val oldFiles =
+              deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
+            if (oldFiles.isEmpty) as.log.info(s"No address files deleted.")
+            else as.log.info(s"Deleted address files - (${oldFiles.mkString(", ")})")
             publish(MsgEnvelope("check-new-version", CheckNewVersion))
           }
         case err => sys.error(s"Unexpected download result: $err")

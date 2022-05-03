@@ -81,7 +81,7 @@ object AddressService extends EventBus with LookupClassification {
       case Finder => sender() ! Finder(af)
       case Version => sender() ! Version(version)
       case NewFinder(af, version) =>
-        deleteOldIndexes(this.version)
+        deleteOldIndexes()
         this.af = af
         this.version = version
         publish(MsgEnvelope("version", Version(version)))
@@ -92,11 +92,14 @@ object AddressService extends EventBus with LookupClassification {
         unsubscribe(subscriber)
         as.log.info(s"$subscriber unsubscribed from version update.")
     }
-    private def deleteOldIndexes(version: String) = {
-      as.log.info("Deleting old index files...")
+    private def deleteOldIndexes() = {
+      as.log.info(s"Deleting old index files...")
       import AddressConfig._
       val (ap, ip) = (addressConfig.AddressesPostfix, addressConfig.IndexPostfix)
-      deleteOldFiles(addressConfig.directory, s"$version\\.$ap", s"$version\\.$ip")
+      val oldFiles =
+        deleteOldFiles(addressConfig.directory, s".+\\.$ap", s".+\\.$ip")
+      if (oldFiles.isEmpty) as.log.info(s"No index files deleted.")
+      else as.log.info(s"Deleted index files - (${oldFiles.mkString(", ")})")
     }
 
     override def postStop() = af = null
@@ -104,7 +107,7 @@ object AddressService extends EventBus with LookupClassification {
 
   /** File age is determined by sorting file names. */
   def deleteOldFiles(dir: String, patterns: String*) = {
-    patterns.map(new Regex(_)).foreach { regex =>
+    patterns.map(new Regex(_)).flatMap { regex =>
       Files
         .list(Path.of(dir))
         .filter(p => regex.matches(p.getFileName.toString))
@@ -112,10 +115,10 @@ object AddressService extends EventBus with LookupClassification {
         .map(_.asInstanceOf[Path])
         .sortBy(_.getFileName)
         .dropRight(1) // keep newest file
-        .foreach { p =>
-          if (p.toFile.delete()) as.log.debug(s"Deleted file: $p")
-          else as.log.warning(s"Unable to delete file: $p")
-        }
+        .map { p =>
+          if (!p.toFile.delete()) as.log.warning(s"Unable to delete file: $p")
+          p
+        }.toList
     }
   }
 
