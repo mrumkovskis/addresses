@@ -30,7 +30,6 @@ trait AddressIndexer { this: AddressFinder =>
     val index = new MutableIndex(null, null)
 
     //(addressCode, ordering weight, full space separated unnaccented address)
-    var idx = 0
     val sortedAddresses = {
       def typeOrder(code: Int, typ: Int) = typ match {
         case PIL if !addressMap.contains(addressMap(code).superCode) => 0 // top level cities
@@ -41,7 +40,6 @@ trait AddressIndexer { this: AddressFinder =>
         if (filter == null || filter(addr)) {
           addresses.append((code, typeOrder(code, addr.typ) * 100 + addr.depth(addressMap),
             addr.foldRight(addressMap)(AB[String]()){(b, o) => b += unaccent(o.name)}.mkString(" ")))
-          idx += 1
         }
       }
       addresses.sortWith { case ((_, ord1, a1), (_, ord2, a2)) =>
@@ -51,7 +49,7 @@ trait AddressIndexer { this: AddressFinder =>
 
     logger.info("Creating index...")
     val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-    idx = 0
+    var idx = 0
     sortedAddresses
       .foreach {
         case (code, _, name) =>
