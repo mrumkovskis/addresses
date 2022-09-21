@@ -108,7 +108,7 @@ trait AddressFinder
   def addressLoaderFun: () => Addresses
   def indexFiles: IndexFiles
 
-  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
+  protected val logger: Logger = Logger(LoggerFactory.getLogger("lv.addresses.indexer"))
 
   private[this] var _addressMap: Map[Int, AddrObj] = null
   private[this] var _addressHistory: Map[Int, List[String]] = Map()

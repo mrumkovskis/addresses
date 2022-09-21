@@ -4,10 +4,10 @@ import java.util.Properties
 
 import scala.language.postfixOps
 import scala.collection.mutable.{ArrayBuffer => AB}
+import lv.addresses.index.Index._
+import Constants._
 
-trait AddressIndexer { this: AddressFinder =>
-  import lv.addresses.index.Index._
-  import Constants._
+trait AddressIndexer extends Indexer { this: AddressFinder =>
 
   def maxEditDistance(word: String): Int = {
     if (word.forall(_.isDigit)) 0 //no fuzzy search for words with digits in them
@@ -16,9 +16,6 @@ trait AddressIndexer { this: AddressFinder =>
     }
   }
 
-  case class Index(idxCode: scala.collection.mutable.HashMap[Int, Int],
-                   index: MutableIndex)
-
   def index(addressMap: Map[Int, AddrObj],
             history: Map[Int, List[String]],
             synonyms: Properties,
@@ -26,8 +23,6 @@ trait AddressIndexer { this: AddressFinder =>
     logger.info("Starting address indexing...")
 
     logger.info(s"Sorting ${addressMap.size} addresses...")
-
-    val index = new MutableIndex(null, null)
 
     //(addressCode, ordering weight, full space separated unnaccented address)
     val sortedAddresses = {
@@ -47,46 +42,13 @@ trait AddressIndexer { this: AddressFinder =>
       }
     }
 
-    logger.info("Creating index...")
-    val idx_code = scala.collection.mutable.HashMap[Int, Int]()
-    var idx = 0
-    sortedAddresses
-      .foreach {
-        case (code, _, name) =>
-          val wordsLists = extractWords(name) ::
-            history.getOrElse(code, Nil).map(extractWords)
-          val normalizedWords = normalize(name)
-          wordsLists foreach(_ foreach { w =>
-            val (wcPrefix, exactStr) =
-              if (w.contains("*")) {
-                val i = w.indexOf('*') + 1
-                (w.substring(0, i), w.substring(i))
-              } else ("", w)
-            index.updateChildren(w, idx, normalizedWords.contains(exactStr))
-            //update synonyms
-            Option(synonyms.getProperty(exactStr))
-              .foreach(normalize(_)
-                .foreach(extractWords(_)
-                  .foreach { syn =>
-                    index.updateChildren(wcPrefix + syn, idx, true)
-                  }
-                )
-              )
-          })
-          idx_code += (idx -> code)
-          idx += 1
-          if (idx % 5000 == 0) logger.info(s"Addresses processed: $idx")
-      }
-
-    logger.info(s"Address objects processed: $idx; index statistics: ${index.statistics}")
-    Index(idx_code, index)
+    index(
+      sortedAddresses
+        .iterator
+        .map {
+          case (code, _, name) => (code, name :: history.getOrElse(code, Nil))
+        },
+      synonyms
+    )
   }
-
-  /** Node word must be of one character length if it does not contains multiplier '*'.
-   * Returns tuple - (path, word, first address code) */
-  def invalidWords(idx: MutableIndex): AB[(String, String, Int)] = idx.invalidWords
-
-  /** Address codes in node must be unique and in ascending order.
-   * Returns (invalid path|word, address codes) */
-  def invalidIndices(idx: MutableIndex): AB[(String, AB[Int])] = idx.invalidIndices
 }

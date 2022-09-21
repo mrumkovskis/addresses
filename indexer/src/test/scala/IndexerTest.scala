@@ -126,8 +126,8 @@ class IndexerTest extends FunSuite {
     assertResult(expectedResult)(node.toJson)
 
     assertResult(IndexStats(NodeStats(20,39),ArrayBuffer(NodeStats(5,12))))(node.statistics)
-    assertResult(ArrayBuffer())(node.invalidIndices)
-    assertResult(ArrayBuffer())(node.invalidWords)
+    assertResult(ArrayBuffer())(node.checkInvalidIndices)
+    assertResult(ArrayBuffer())(node.checkInvalidWords)
   }
 
   test("index search") {

@@ -171,11 +171,11 @@ object Index {
 
     /** Node word must be of one character length if it does not contains multiplier '*'.
      * Returns tuple - (path, word, first address code) */
-    def invalidWords: AB[(String, String, Int)] = validateNodeWord("")
+    def checkInvalidWords: AB[(String, String, Int)] = validateNodeWord("")
 
     /** Address codes in node must be unique and in ascending order.
      * Returns (invalid path|word, address codes) */
-    def invalidIndices: AB[(String, AB[Int])] = validateIndex("")
+    def checkInvalidIndices: AB[(String, AB[Int])] = validateIndex("")
   }
 
   final class MutableIndex(_children: AB[MutableIndexNode],
