@@ -2,15 +2,7 @@ package lv.addresses.indexer
 
 import com.typesafe.scalalogging.Logger
 
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.BufferedWriter
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.OutputStreamWriter
-import java.io.PrintWriter
+import java.io.{BufferedInputStream, BufferedOutputStream, BufferedWriter, DataInputStream, DataOutputStream, File, FileInputStream, FileOutputStream, OutputStreamWriter, PrintWriter}
 import scala.util.Using
 import scala.collection.mutable.{ArrayBuffer => AB}
 import lv.addresses.index.Index._
@@ -26,9 +18,12 @@ class AddressIndexLoader(indexFiles: IndexFiles) {
     val IndexFiles(addrFile, idxFile) = indexFiles
     val Addresses(addressMap, history) = addresses
 
+    def createTempFile(src: File) = File.createTempFile(src.getName, ".tmp", src.getParentFile)
+
     logger.info(s"Saving addresses $addrFile...")
+    val af = createTempFile(addrFile)
     Using(new PrintWriter(new BufferedWriter(new OutputStreamWriter(
-      new FileOutputStream(addrFile), "UTF-8")))) { w =>
+      new FileOutputStream(af), "UTF-8")))) { w =>
       addressMap.foreach { case (_, a) =>
         import a._
         w.println(s"$code;$typ;$name;$superCode;$isLeaf;${
@@ -42,9 +37,11 @@ class AddressIndexLoader(indexFiles: IndexFiles) {
         w.println(h.mkString(c.toString + ";", ";", ""))
       }
     }.failed.foreach(throw _)
+    af.renameTo(addrFile)
 
     logger.info(s"Saving address index in $idxFile...")
-    Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxFile)))) { os =>
+    val idxf = createTempFile(idxFile)
+    Using(new DataOutputStream(new BufferedOutputStream(new FileOutputStream(idxf)))) { os =>
       var maxRefArrayWord: String = null
       var maxRefArrayLength = 0
       //write address count
@@ -73,6 +70,7 @@ class AddressIndexLoader(indexFiles: IndexFiles) {
       }
       logger.info(s"Max. reference array length for the word '$maxRefArrayWord': $maxRefArrayLength")
     }.failed.foreach(throw _)
+    idxf.renameTo(idxFile)
     logger.info(s"Address index saved.")
   }
 
