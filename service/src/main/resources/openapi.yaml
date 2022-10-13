@@ -73,6 +73,14 @@ paths:
           - 106
           - 113
         description: Filtrs pēc viena vai vairākiem adresācijas objekta tipiem. 104 - pilsēta, 113 - novads, 105 - pagasts, 106 - ciems
+      - name: post_addr
+        in: query
+        allowEmptyValue: true
+        schema:
+          type: boolean
+          enum :
+            - true
+        description: norāda, ka atlasītas tiks tikai pasta adreses
       responses:
         "200":
           description: Atbilstošās adreses

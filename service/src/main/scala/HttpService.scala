@@ -210,6 +210,11 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
         .filter(_.nonEmpty)
         .map(BigDecimal(_))
     }
+    val onlyPostAddr = Try {
+      val r = params.contains("post_addr")
+      if (r && !types.isFailure && types.get.nonEmpty) sys.error("bad")
+      r
+    }
     val aFields = {
       val ms = scala.collection.mutable.Set[String]()
       params.get(StructData).foreach(_ => ms += StructData)
@@ -228,6 +233,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
           regErr(types, "'type' parameter(s) must be number(s)\n")
           regErr(coordLat, "'lks_lat' parameter must be decimal number\n")
           regErr(coordLong, "'lks_long' parameter must be decimal number\n")
+          regErr(onlyPostAddr, "'post_addr' parameter can by specified only if types paramaters are absent\n")
           if (err.nonEmpty) {
             ToResponseMarshallable(HttpResponse(BadRequest, entity = err.toString))
           } else {
@@ -235,9 +241,14 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
               case (lat, long) =>
                 lat >= Min_LKS_LAT && lat <= Max_LKS_LAT && long >= Min_LKS_LONG && long <= Max_LKS_LONG
             }
+            def filteredIndex =
+              if (types.get.nonEmpty) finder.bigObjectIndex(types.get.get)
+              else if (onlyPostAddr.get) finder.leafIndex
+              else finder.nonFilteredIndex
+
             (pattern match {
               case CODE_PATTERN(code) => finder.mutableAddressOption(code.toInt, aFields).toArray
-              case p if coordLat.get.isEmpty || coordLong.get.isEmpty => finder.search(p)(limit.get, types.get.orNull, aFields)
+              case p if coordLat.get.isEmpty || coordLong.get.isEmpty => finder.search(p)(limit.get, filteredIndex, aFields)
               case _ if validateCoorBox =>
                 finder.searchNearest(coordLat.get.get, coordLong.get.get)(searchNearestLimit.get, aFields)
               case _ => Array[MutableAddress]() // return empty array coords are out of box

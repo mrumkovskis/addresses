@@ -55,6 +55,8 @@ case class IndexFiles(addresses: File, index: File) {
   def exists: Boolean = addresses.exists() && index.exists()
 }
 
+case class FilteredIndex(idx: Index, filter: Int => Boolean)
+
 object Constants {
   val PIL = 104
   val NOV = 113
@@ -181,9 +183,8 @@ trait AddressFinder
 
   def searchIndex(str: String,
                   limit: Int,
-                  types: Set[Int],
-                  fields: Set[String],
-                  idx: Index): Array[MutableAddress] = {
+                  fi: FilteredIndex,
+                  fields: Set[String]): Array[MutableAddress] = {
     import lv.addresses.index.Index._
     checkIndex
     val words = normalize(str)
@@ -192,7 +193,7 @@ trait AddressFinder
       val size = Math.min(refs.length, limit)
       val result = new AB[Long](size)
       while (perfectRankCount < size && i < refs.length) {
-        val code = idx.idxCode(refs(i))
+        val code = fi.idx.idxCode(refs(i))
         if (!existingCodes.contains(code)) {
           val r = rank(words, code)
           if (r == 0) perfectRankCount += 1
@@ -210,8 +211,8 @@ trait AddressFinder
         .map(_.toInt)
         .map(mutableAddress(_, fields, editDistance))
     }
-    val resultCodes = searchCodes(words, idx.index, maxEditDistance)(1024,
-      Option(types).map(t => (i: Int) => t(addressMap(idx.idxCode(i)).typ)).orNull)
+
+    val resultCodes = searchCodes(words, fi.idx.index, maxEditDistance)(1024, fi.filter)
       .sortBy(_.editDistance)
     val length = resultCodes.length
     val addresses = new AB[MutableAddress]()
@@ -233,13 +234,13 @@ trait AddressFinder
   }
 
   def search(str: String)(limit: Int = 20,
-                          types: Set[Int] = null,
+                          fi: FilteredIndex,
                           fields: Set[String] =
                             Set(StructData, LksKoordData, HistoryData)): Array[MutableAddress] = {
     if (str == null || str.trim.isEmpty) {
       Array()
     } else {
-      searchIndex(str, limit, types, fields, if (types == null || types.isEmpty) index else bigObjIndex)
+      searchIndex(str, limit, fi, fields)
     }
   }
 
@@ -270,6 +271,14 @@ trait AddressFinder
   def mutableAddress(code: Int, fields: Set[String], editDistance: Int = 0): MutableAddress = {
     mutableAddressFromObj(addressMap(code), fields, editDistance)
   }
+
+  def leafIndex: FilteredIndex =
+    FilteredIndex(index, idx => addressMap(index.idxCode(idx)).isLeaf)
+
+  def nonFilteredIndex: FilteredIndex = FilteredIndex(index, null)
+
+  def bigObjectIndex(types: Set[Int]) =
+    FilteredIndex(bigObjIndex, idx => types(addressMap(index.idxCode(idx)).typ))
 
   private def mutableAddressFromObj(addrObj: AddrObj, fields: Set[String], editDistance: Int = 0): MutableAddress = {
     addrObj.foldLeft(addressMap)(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>

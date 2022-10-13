@@ -41,10 +41,13 @@
         <p class="checkbox form-inline">
           <label class="address-types" ng-repeat="type in types">
             <input type="checkbox" ng-model="type.selected"
-                   ng-change="updateAddress()">{{type.name}}
+                   ng-change="updateAddressClearPostAddr()">{{type.name}}
           </label>
-          <label>
-            &nbsp;&nbsp;&nbsp;
+          <label class="address-types">
+            <input type="checkbox" ng-model="post_addr.selected"
+                   ng-change="updateAddressClearTypes()">{{post_addr.name}}
+          </label>
+          <label>&nbsp;&nbsp;&nbsp;
             <input type="checkbox" ng-model="limit.selected"
                    ng-change="updateAddress()">
             <span ng-class="{'text-muted': !limit.selected}">&nbsp;{{limit.name}}&nbsp;</span>

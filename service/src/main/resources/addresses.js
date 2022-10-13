@@ -19,6 +19,8 @@ addresses.controller('AddressesCtrl',
 
   $scope.limit = {value: 20, selected: false, name: 'limits'};
 
+  $scope.post_addr = {value: true, selected: false, name: 'tikai adreses'};
+
   $scope.calculateUrlParams = function() {
     var types = [];
     angular.forEach($filter('filter')($scope.types, {selected: true}), function(value, key) {
@@ -26,9 +28,21 @@ addresses.controller('AddressesCtrl',
     }, types);
     var limit = [];
     if ($scope.limit.selected) { limit.push($scope.limit.value); };
+    var post_addr = [];
+    if ($scope.post_addr.selected) { post_addr.push(""); };
     return { struct: "", lks_koord: "", history: "", atvk: "",
-             search: $scope.search, type: types, limit: limit
+             search: $scope.search, type: types, limit: limit, post_addr: post_addr
            };
+  };
+
+  $scope.updateAddressClearTypes = function() {
+    $scope.types.forEach((el, idx) => { $scope.types[idx].selected = false; });
+    $scope.updateAddress();
+  };
+
+  $scope.updateAddressClearPostAddr = function() {
+    $scope.post_addr.selected = false;
+    $scope.updateAddress();
   };
 
   $scope.updateAddress = function () {

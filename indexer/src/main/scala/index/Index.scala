@@ -3,7 +3,6 @@ package lv.addresses.index
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
 
-import java.util
 import scala.collection.AbstractIterator
 import scala.collection.mutable.{ArrayBuffer => AB}
 import scala.collection.mutable.{Map => MM}

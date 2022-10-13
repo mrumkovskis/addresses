@@ -7,11 +7,11 @@ import scala.collection.mutable.{ArrayBuffer => AB}
 
 import java.util.Properties
 
+case class Index(idxCode: scala.collection.mutable.HashMap[Int, Int],
+                 index: MutableIndex)
+
 trait Indexer {
   protected val logger: Logger
-
-  case class Index(idxCode: scala.collection.mutable.HashMap[Int, Int],
-                   index: MutableIndex)
 
   def index(data: Iterator[(Int, Iterable[String])], synonyms: Properties): Index = {
     logger.info("Creating index...")
