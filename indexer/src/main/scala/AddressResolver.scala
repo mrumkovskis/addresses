@@ -23,7 +23,7 @@ trait AddressResolver { this: AddressFinder =>
         .filter(_ != "") zip addr.address.toLowerCase.split(SEPARATOR_REGEXP).filter(_ != ""))
         .forall {case (s1, s2) => s1 == s2}
     def full_resolve(addressString: String): Option[MutableAddress] =
-      search(addressString)(2, null, fields) match {
+      search(addressString)(2, nonFilteredIndex, fields) match {
         case Array(address) if all_words_match(addressString, address) =>
           Some(address) //only one match take that if all words matches
         case Array(a1, a2) if addressString == to_str(a1) ||

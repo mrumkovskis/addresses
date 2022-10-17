@@ -181,7 +181,7 @@ trait AddressFinder
       .save(Addresses(addressMap, addressHistory), index.idxCode, index.index)
   }
 
-  def searchIndex(str: String,
+  private def searchIndex(str: String,
                   limit: Int,
                   fi: FilteredIndex,
                   fields: Set[String]): Array[MutableAddress] = {
