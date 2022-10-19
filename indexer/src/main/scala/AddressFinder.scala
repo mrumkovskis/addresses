@@ -272,8 +272,14 @@ trait AddressFinder
     mutableAddressFromObj(addressMap(code), fields, editDistance)
   }
 
-  def leafIndex: FilteredIndex =
-    FilteredIndex(index, idx => addressMap(index.idxCode(idx)).isLeaf)
+  def addressIndex: FilteredIndex =
+    FilteredIndex(
+      index,
+      idx => {
+        val a = addressMap(index.idxCode(idx))
+        a.isLeaf && (a.typ == NLT || a.typ == DZI)
+      }
+    )
 
   def nonFilteredIndex: FilteredIndex = FilteredIndex(index, null)
 

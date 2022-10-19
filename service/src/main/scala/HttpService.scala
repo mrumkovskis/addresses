@@ -243,7 +243,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
             }
             def filteredIndex =
               if (types.get.nonEmpty) finder.bigObjectIndex(types.get.get)
-              else if (onlyPostAddr.get) finder.leafIndex
+              else if (onlyPostAddr.get) finder.addressIndex
               else finder.nonFilteredIndex
 
             (pattern match {
