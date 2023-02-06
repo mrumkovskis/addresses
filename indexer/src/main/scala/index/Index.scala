@@ -448,7 +448,7 @@ object Index {
       val ws =
         wordStatForSearch(words)
           .groupBy(_._1)
-          .map[(String, Int)] { case (_, s) => s.sortBy(-_._2).head }
+          .map[(String, Int)] { case (_, s) => s.minBy(-_._2) }
           .map { case (w, c) => if (c == 1) w else s"$c*$w" }
       AB.from(ws)
     }
@@ -459,32 +459,34 @@ object Index {
       index(word, calcMaxEditDist(word), calcMaxEditDist)
     }
 
-    def exactSearch(p: AB[String], editDistance: Int, exactMatchWords: Set[String]): AB[Result] = {
+    def exactSearch(p: AB[String], editDistance: Int, exactMatchWords: Set[String]): (AB[Result], Int) = {
       val result = p.map(w => search_idx(w) -> exactMatchWords(w))
         .map {
           case (r, true) => AB(r.exact)
           case (r, false) => AB(r.exact, r.approx).filter(_.nonEmpty)
         }
       var refCount = 0
-      val intersection = AB[Int]()
       val combInit = (AB.fill[AB[Int]](result.size)(null), 0) //(refs, idx)
-      foldCombinations[AB[Int], (AB[AB[Int]], Int), AB[Int]](result,
-        combInit,
-        (cr, d) => {
-          cr._1(cr._2) = d
-          (cr._1, cr._2 + 1)
-        },
-        intersection,
-        (r, cr) => {
-          val intr = intersect(cr._1, limit, filter)
-          r ++= intr
-          refCount += intr.length
-          (r, refCount < limit)
-        }
-      )
+      val intersection =
+        foldCombinations[AB[Int], (AB[AB[Int]], Int), (AB[Int], Int)](result,
+          combInit,
+          (cr, d) => {
+            cr._1(cr._2) = d
+            (cr._1, cr._2 + 1)
+          },
+          (AB[Int](), 0),
+          (r, cr) => {
+            val intr = intersect(cr._1, limit, filter)
+            r._1 ++= intr
+            refCount += intr.length
+            ((r._1, r._2 + 1), refCount < limit)
+          }
+        )
       intersection match {
-        case a if a.isEmpty => AB()
-        case a => AB(Result(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance))
+        case (a, iterc) if a.isEmpty => (AB(), iterc)
+        case (a, iterc) =>
+          (AB(Result(p.mkString(" "), if (a.size > limit) a.take(limit) else a, editDistance)),
+            iterc)
       }
     }
 
@@ -508,7 +510,7 @@ object Index {
             }
             i += 1
           }
-          result = exactSearch(searchParams(ab), editDistance, Set())
+          result = exactSearch(searchParams(ab), editDistance, Set())._1
           count += 1
           result.isEmpty && count < 32
         })
@@ -534,10 +536,10 @@ object Index {
           (frs, fr) => frs += fr,
           AB[Result](),
           (r, frs) => {
-            val res = exactSearch(
+            val (res, iterc) = exactSearch(
               searchParams(frs
                 .flatMap(fr => if (fr.splitDepth == 0) AB(fr.word) else AB.from(fr.word.split(' ')))),
-              frs.foldLeft(0)((ed, fr) => ed + fr.editDistance),
+              frs.foldLeft(0)(_ + _.editDistance),
               frs.collect { case fr if fr.editDistance > 0 => fr.word }.toSet
             )
             if (res.nonEmpty) {
@@ -545,7 +547,7 @@ object Index {
               refCount += res.foldLeft(0)(_ + _.refs.length)
               productiveIntersectionCount += 1
             }
-            intersectionCount += 1
+            intersectionCount += iterc
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
               logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
                 fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)

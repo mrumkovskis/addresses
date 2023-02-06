@@ -20,9 +20,11 @@ trait AddressIndexer extends Indexer { this: AddressFinder =>
             history: Map[Int, List[String]],
             synonyms: Properties,
             filter: AddrObj => Boolean): Index = {
-    logger.info("Starting address indexing...")
+    val historicalAddressCount = history.foldLeft(0)(_ + _._2.size)
+    logger.info(s"Starting address indexing, address count - ${addressMap.size}, historical addresses - $historicalAddressCount ...")
 
-    logger.info(s"Sorting ${addressMap.size} addresses...")
+    logger.info(s"Sorting addresses...")
+    logger.info(s"Done")
 
     //(addressCode, ordering weight, full space separated unnaccented address)
     val sortedAddresses = {
