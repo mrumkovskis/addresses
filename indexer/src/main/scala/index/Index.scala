@@ -549,7 +549,8 @@ object Index {
             }
             intersectionCount += iterc
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
-              logger.debug(s"A LOT OF FUZZY RESULTS: ${fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
+              logger.debug(s"A LOT OF FUZZY RESULTS FOR SEARCH [${words.mkString(", ")}]: ${
+                fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
                 fuzzyRes.map(_.map(fr => fr.word -> fr.editDistance)
                   .mkString("(", ",", ")")).mkString("[", ",", "]")
               }")
