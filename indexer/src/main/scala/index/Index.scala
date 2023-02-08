@@ -530,6 +530,7 @@ object Index {
 
         val MaxProductiveIntersectionCount = 32
         val MaxIntersectionCount = 1024
+
         foldCombinations[FuzzyResult, AB[FuzzyResult], AB[Result]](
           fuzzyRes,
           AB(),
@@ -547,7 +548,7 @@ object Index {
               refCount += res.foldLeft(0)(_ + _.refs.length)
               productiveIntersectionCount += 1
             }
-            intersectionCount += iterc
+            intersectionCount += Math.max(iterc, 1)
             if (intersectionCount >= MaxIntersectionCount && productiveIntersectionCount == 0)
               logger.debug(s"A LOT OF FUZZY RESULTS FOR SEARCH [${words.mkString(", ")}]: ${
                 fuzzyRes.map(_.size).mkString("(", ",", ")")}\n ${
