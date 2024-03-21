@@ -11,6 +11,7 @@ bin/
 .worksheet/
 lib/
 *.iml
+.bsp/
 
 # sbt
 target
