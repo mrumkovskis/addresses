@@ -29,6 +29,8 @@ trait Authorization {
 
   private val as = ActorSystem("user-authorization")
 
+  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
+
   private val blockedUserActor: Option[ActorRef] =
     if (clientAuth) {
         if (conf.hasPath("ssl.blocked-users")) {
@@ -40,7 +42,7 @@ trait Authorization {
             throw new Error(s"File for blocked users does not exist: $blockedUserFileName. " +
               s"Check ssl.blocked-users property value")
         } else {
-          as.log.warning("ssl.blocked-users property not specified, blocked users cannot be watched")
+          logger.warn("ssl.blocked-users property not specified, blocked users cannot be watched")
           None
         }
     } else None
@@ -60,7 +62,7 @@ trait Authorization {
 
   protected def authRejectionHandler = RejectionHandler.newBuilder().handle {
     case r: Rejection =>
-      as.log.warning(s"Unauthorized request. Details - $r")
+      logger.warn(s"Unauthorized request. Details - $r")
       complete(StatusCodes.Unauthorized)
   }.result()
 

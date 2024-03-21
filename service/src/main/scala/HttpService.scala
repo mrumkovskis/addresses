@@ -282,7 +282,7 @@ object Boot extends scala.App with AddressHttpService {
 
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
 
-  system.log.info(s"Configuration: ${AddressConfig.addressConfig}")
+  logger.info(s"Configuration: ${AddressConfig.addressConfig}")
 
   // start sync process
   AddressConfig.addressConfig match {

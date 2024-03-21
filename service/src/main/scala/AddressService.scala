@@ -14,7 +14,9 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.Source
+import com.typesafe.scalalogging.Logger
 import lv.addresses.indexer.{Addresses, IndexFiles}
+import org.slf4j.LoggerFactory
 
 import java.nio.file.{Files, Path}
 import scala.util.matching.Regex
@@ -37,6 +39,9 @@ object AddressService extends EventBus with LookupClassification {
   private[service] val addressFinderActor = as.actorOf(Props[AddressFinderActor](), "address-finder-actor")
   implicit val execCtx = as.dispatcher
 
+  protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
+
+
   def finder = addressFinderActor.ask(Finder)(1.second).mapTo[Finder].map(f => Option(f.af))
   def version = addressFinderActor.ask(Version)(1.second).mapTo[Version].map(v => Option(v.version))
 
@@ -49,7 +54,7 @@ object AddressService extends EventBus with LookupClassification {
     val res = super.subscribe(subscriber, topic)
     if (topic == "version") {
       addressFinderActor ! WatchVersionSubscriber(subscriber)
-      as.log.info(s"$subscriber subscribed to version update notifications.")
+      logger.info(s"$subscriber subscribed to version update notifications.")
     }
     res
   }
@@ -89,16 +94,16 @@ object AddressService extends EventBus with LookupClassification {
         publish(MsgEnvelope("version", Version(version)))
       case Terminated(subscriber) =>
         unsubscribe(subscriber)
-        as.log.info(s"$subscriber unsubscribed from version update.")
+        logger.info(s"$subscriber unsubscribed from version update.")
     }
     private def deleteOldIndexes() = {
-      as.log.info(s"Deleting old index files...")
+      logger.info(s"Deleting old index files...")
       import AddressConfig._
       val (ap, ip) = (addressConfig.AddressesPostfix, addressConfig.IndexPostfix)
       val oldFiles =
         deleteOldFiles(addressConfig.directory, s".+\\.$ap", s".+\\.$ip")
-      if (oldFiles.isEmpty) as.log.info(s"No index files deleted.")
-      else as.log.info(s"Deleted index files - (${oldFiles.mkString(", ")})")
+      if (oldFiles.isEmpty) logger.info(s"No index files deleted.")
+      else logger.info(s"Deleted index files - (${oldFiles.mkString(", ")})")
     }
 
     override def postStop() = af = null
@@ -115,7 +120,7 @@ object AddressService extends EventBus with LookupClassification {
         .sortBy(_.getFileName)
         .dropRight(1) // keep newest file
         .map { p =>
-          if (!p.toFile.delete()) as.log.warning(s"Unable to delete file: $p")
+          if (!p.toFile.delete()) logger.warn(s"Unable to delete file: $p")
           p
         }.toList
     }
@@ -130,21 +135,21 @@ object AddressService extends EventBus with LookupClassification {
       Source.actorRef(PartialFunction.empty, PartialFunction.empty,2, OverflowStrategy.dropHead))(
       (_, actor) => subscribe(actor, "check-new-version") //subscribe to check demand
     ).runFold(null: String) { (currentVersion, _) =>
-      as.log.debug(s"Checking for address data new version, current version $currentVersion")
+      logger.debug(s"Checking for address data new version, current version $currentVersion")
       val newVersion = addressConfig.version
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
-        as.log.info(s"New address data found. Initializing address finder $newVersion")
+        logger.info(s"New address data found. Initializing address finder $newVersion")
         val af = new AddressFinder(addressLoader, indexFiles)
         af.init
         addressFinderActor ! NewFinder(af, newVersion)
         newVersion
       } else {
-        as.log.debug("No new address data found")
+        logger.debug("No new address data found")
         currentVersion
       }
     }.onComplete {
-      case Success(_) => as.log.info("Address updater job finished.")
-      case Failure(err) => as.log.error(err, "Address updater terminated with failure.")
+      case Success(_) => logger.info("Address updater job finished.")
+      case Failure(err) => logger.error("Address updater terminated with failure.", err)
     }
 }
 
