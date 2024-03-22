@@ -590,7 +590,7 @@ object Index {
 
   def wordStatForSearch(words: AB[String]): AB[(String, Int)] = {
     val stats = AB.fill(words.size)(1)
-    0 until words.size foreach { i =>
+    words.indices foreach { i =>
       (i + 1) until words.size foreach { j =>
         if (words(j).length > words(i).length) {
           if (words(j) startsWith words(i)) stats(i) += 1

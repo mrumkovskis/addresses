@@ -367,7 +367,7 @@ trait AddressFinder
    * 0 is highest ranking meaning all words sequentially have exact match */
   def rank(words: AB[String], code: Int) = {
     val wl = Math.min(words.length, 32) //max 32 words can be processed in ranking
-    def count(s: Int, n: Vector[String]) = {
+    def count(s: Int, n: scala.collection.IndexedSeq[String]) = {
       var idx = s >> 16 //idx are 16 oldest bits
       var seqCount: Int = s >> 8 & 0x000000FF // seq match count are 8 oldest bits from 16 youngest bits
       var exactCount: Int = s & 0x000000FF // exact match count are 8 youngest bits
@@ -378,10 +378,10 @@ trait AddressFinder
           if (n(j).length == words(idx).length) exactCount += 1
           seqCount += 1
           idx += 1
-        }
+        } else seqCount -= 1
         j += 1
       }
-      (idx << 16) | (seqCount << 8) | exactCount
+      (idx << 16) | (Math.max(seqCount, 0) << 8) | exactCount
     }
     val addrObjs = objsInWrittenOrder(addressMap(code))
     val aol = addrObjs.length
@@ -389,10 +389,24 @@ trait AddressFinder
       if (idx >> 16 < wl && idxObjs < aol)
         run(count(idx, addrObjs(idxObjs).words), idxObjs + 1)
       else idx
-    val r = run(0, 0)
-    val a = wl - (r >> 8 & 0x000000FF)
-    val b = wl - (r & 0x000000FF)
-    a << 5 | b
+    def createRank(r: Int) = {
+      val a = wl - (r >> 8 & 0x000000FF)
+      val b = wl - (r & 0x000000FF)
+      a << 5 | b
+    }
+    val actualRank = createRank(run(0, 0))
+    //check ranking against address history
+    def historyRank(historicalAddr: String): Int = {
+      val hw = lv.addresses.index.Index.normalize(historicalAddr)
+      createRank(count(0, hw))
+    }
+    val historicalRank = addressHistory.get(code).map {
+      _.foldLeft(Integer.MAX_VALUE){ (r, ha) =>
+        val hr = historyRank(ha)
+        if (hr < r) hr else r
+      }
+    }.getOrElse(Integer.MAX_VALUE)
+    Math.min(actualRank, historicalRank)
   }
 
   def objsInWrittenOrder(addrObj: AddrObj) = addrObj.foldLeft(addressMap)(new Array[AddrObj](7)) { (a, o) =>
