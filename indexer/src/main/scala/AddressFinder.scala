@@ -280,11 +280,11 @@ trait AddressFinder
         a.isLeaf && (a.typ == NLT || a.typ == DZI)
       }
     )
-
   def nonFilteredIndex: FilteredIndex = FilteredIndex(index, null)
-
-  def bigObjectIndex(types: Set[Int]) =
-    FilteredIndex(bigObjIndex, idx => types(addressMap(index.idxCode(idx)).typ))
+  def bigObjectIndex(types: Set[Int]): FilteredIndex = typeFilterIndex(types, bigObjIndex)
+  def typeFilterIndex(types: Set[Int]): FilteredIndex = typeFilterIndex(types, index)
+  private def typeFilterIndex(types: Set[Int], index: Index): FilteredIndex =
+    FilteredIndex(index, idx => types(addressMap(index.idxCode(idx)).typ))
 
   private def mutableAddressFromObj(addrObj: AddrObj, fields: Set[String], editDistance: Int = 0): MutableAddress = {
     addrObj.foldLeft(addressMap)(new MutableAddress(addrObj.code, addrObj.typ)) { (ma, ao) =>

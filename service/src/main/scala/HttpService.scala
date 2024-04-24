@@ -20,7 +20,7 @@ import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
 import download.{DbSync, FTPDownload, OpenDataDownload}
 import lv.addresses.indexer.AddressFields._
-import lv.addresses.indexer.{MutableAddress, ResolvedAddress}
+import lv.addresses.indexer.{Constants, MutableAddress, ResolvedAddress}
 import lv.addresses.service.config.Configs
 
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
@@ -212,7 +212,8 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
     }
     val onlyPostAddr = Try {
       val r = params.contains("post_addr")
-      if (r && !types.isFailure && types.get.nonEmpty) sys.error("bad")
+      if (r && !types.isFailure && types.get.nonEmpty)
+        sys.error("Cannot mix post address filter with address object types filter")
       r
     }
     val aFields = {
@@ -242,7 +243,11 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
                 lat >= Min_LKS_LAT && lat <= Max_LKS_LAT && long >= Min_LKS_LONG && long <= Max_LKS_LONG
             }
             def filteredIndex =
-              if (types.get.nonEmpty) finder.bigObjectIndex(types.get.get)
+              if (types.get.nonEmpty) {
+                val t = types.get.get
+                if (t subsetOf Constants.big_unit_types)  finder.bigObjectIndex(t)
+                else                                      finder.typeFilterIndex(t)
+              }
               else if (onlyPostAddr.get) finder.addressIndex
               else finder.nonFilteredIndex
 
