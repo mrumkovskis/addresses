@@ -180,7 +180,11 @@ object OpenDataLoader {
                     lineFun(struct, l)
                   }
                   .filter(_ != null) // filter out non existing objects
-              }.getOrElse(Iterator.empty)
+              }.getOrElse {
+                logger.warn(s"Unrecognized zip entry: ${zipEntry.getName}. " +
+                  s"Known entries:[${structure.keys.mkString(",")}]")
+                Iterator.empty
+              }
             }
         resultTransformFun(it)
       }.get
