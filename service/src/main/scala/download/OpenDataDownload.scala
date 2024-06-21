@@ -13,9 +13,8 @@ import lv.addresses.service.{AddressConfig, AddressService, Boot}
 import org.slf4j.LoggerFactory
 
 import java.io.File
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.DurationInt
-import scala.util.Success
 
 object OpenDataDownload {
 
@@ -37,40 +36,36 @@ object OpenDataDownload {
 
     Source.tick(initialDelay, AddressConfig.updateRunInterval, Synchronize).runForeach { _ =>
       logger.info("Starting address open data synchronization job.")
-      Future.sequence(List(
-        downloader.download(url, directory, AddressFilePrefix, ".zip"),
-        downloader.download(historyUrl, directory, AddressHistoryFilePrefix, ".zip"),
-      )).map {
-        case List(IOResult(ac, _), IOResult(hc, _)) =>
-          if (ac >= 0) logger.info(s"Successfuly downloaded $ac bytes from $url")
-          else logger.info(s"No bytes downloaded from $url")
-          if (hc >= 0) logger.info(s"Successfuly downloaded $hc bytes from $historyUrl")
-          else logger.info(s"No bytes downloaded from $historyUrl")
-          if (ac > 0 || hc > 0) {
-            logger.info(s"Deleting old address files...")
-            val oldFiles =
-              deleteOldFiles(directory, AddressFilePattern, AddressHistoryFilePattern)
-            if (oldFiles.isEmpty) logger.info(s"No address files deleted.")
-            else logger.info(s"Deleted address files - (${oldFiles.mkString(", ")})")
-            publish(MsgEnvelope("check-new-version", CheckNewVersion))
-          }
-        case err => sys.error(s"Unexpected download result: $err")
-      }.failed.foreach {
+      Future.sequence((urls ++ historyUrls).map(url => downloader.download(url, directory, fileNameFromUrl(url))))
+        .map (_.map { case DownloadRes(url, tempFile, destFile, IOResult(count, _)) =>
+          if (count > 0 && tempFile.renameTo(destFile)) {
+            logger.info(s"Successfuly downloaded $count bytes from $url")
+            val fn = fileNameFromUrl(url)
+            logger.info(s"Deleting old address files for $fn ...")
+            val oldFiles = deleteOldFiles(directory, addressFilePattern(fn))
+            if (oldFiles.isEmpty) logger.info(s"No address files deleted for $fn.")
+            else logger.info(s"Deleted address files for $fn - (${oldFiles.mkString(", ")})")
+          } else logger.info(s"No bytes downloaded from $url")
+          count
+        }).map(counts => if (counts.exists(_ > 0)) publish(MsgEnvelope("check-new-version", CheckNewVersion)))
+        .failed.foreach {
         logger.error(s"Error occured while downloading address from open data portal.", _)
       }
     }
   }
 
-  class Downloader {
-    implicit val system = ActorSystem("open-data-ar-download")
-    implicit val ec     = system.dispatcher
+  case class DownloadRes(srcUrl: String, tmpFile: File, destFile: File, ior: IOResult)
 
-    def download(url: String, destDir: String, prefix: String, suffix: String) = {
+  class Downloader {
+    implicit val system: ActorSystem  = ActorSystem("open-data-ar-download")
+    implicit val ec: ExecutionContext = system.dispatcher
+
+    def download(url: String, destDir: String, fileNameBase: String): Future[DownloadRes] = {
 
       def deriveAddressFile(resp: HttpResponse) = {
         val fn = resp.header[`Last-Modified`]
           .map(_.date.toIsoDateTimeString().replaceAll("[-:]", "_"))
-          .map(prefix + _ + suffix)
+          .map(_ + "." + fileNameBase)
           .getOrElse(sys.error(
             s"Last-Modified header was not found in response for '$url'. Cannot derive address data file name."))
         new File(destDir, fn)
@@ -78,21 +73,20 @@ object OpenDataDownload {
 
       Http().singleRequest(Head(url)).map(deriveAddressFile).collect { case f if f.exists =>
         logger.info(s"Head request info - address file already exists: $f")
-        IOResult(-1)
+        DownloadRes(url, null, null, IOResult(-1))
       }.recoverWith { case _ =>
         Http().singleRequest(Get(url)).flatMap { resp =>
           val destFile = deriveAddressFile(resp)
           if (destFile.exists()) {
             logger.info(s"Address file already exists: $destFile")
             resp.discardEntityBytes()
-            Future.successful(IOResult(-1))
+            Future.successful(DownloadRes(url, null, null, IOResult(-1)))
           } else {
             logger.info(s"Downloading file: $destFile")
             //store data first into temp file, so that loading process does not pick up partial file
-            val tmpFile = File.createTempFile(prefix, ".tmp", new File(destDir))
-            resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath)).andThen {
-              case Success(IOResult(_, Success(_))) => tmpFile.renameTo(destFile)
-            }
+            val tmpFile = File.createTempFile(fileNameBase, ".tmp", new File(destDir))
+            resp.entity.dataBytes.runWith(FileIO.toPath(tmpFile.toPath))
+              .map(DownloadRes(url, tmpFile = tmpFile, destFile = destFile, _))
           }
         }
       }

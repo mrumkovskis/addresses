@@ -8,22 +8,9 @@ akka {
   }
 }
 
-# Configuration for address file. This is valid only if 'db' section is not present.
 VZD {
-  ak-file = "tmp/AK\\d{8}\\.zip"
-  blacklist = "AW_VIETA_GEO.CSV, AW_IELA_GEO.CSV, AW_VIETA_CENTROID_GEO.CSV, AW_EKA_GEO.CSV"
-  house-coord-file = "AW_EKA_GEO.CSV"
-  update-run-interval = 12h
-
-  ftp {
-    #host = "ftp.vzd.gov.lv"
-    #username = ""
-    #password = ""
-    #dir = "VAR_EXPORT/AREXPORT/"
-  }
-
   driver = oracle.jdbc.OracleDriver
-  # already predefined to the localhost:1630 (if tunnel is active, no need to specify)
+  # if db url not specified open-data configuration from reference.conf is used
   # url =  jdbc:oracle:thin:...
   user = vraa_amk_izstr
   password = "***"
@@ -36,13 +23,6 @@ VZD {
 
     # directory where to store address index
     index-dir = "./cache"
-  }
-
-  open-data {
-    url           = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/1d3cbdf2-ee7d-4743-90c7-97d38824d0bf/download/aw_csv.zip"
-    history-url   = "https://data.gov.lv/dati/dataset/0c5e1a3b-0097-45a9-afa9-7f7262f3f623/resource/c3d36546-f92c-4822-a0c4-ee7f1b7760a4/download/aw_his_csv.zip"
-    save-to-dir   = "tmp"
-    history-since = "2010-12-31"
   }
 }
 

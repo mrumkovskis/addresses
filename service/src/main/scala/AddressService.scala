@@ -19,6 +19,7 @@ import lv.addresses.indexer.{Addresses, IndexFiles}
 import org.slf4j.LoggerFactory
 
 import java.nio.file.{Files, Path}
+import scala.concurrent.ExecutionContext
 import scala.util.matching.Regex
 
 object AddressService extends EventBus with LookupClassification {
@@ -37,7 +38,7 @@ object AddressService extends EventBus with LookupClassification {
 
   private[service] val as = ActorSystem("uniso-address-service")
   private[service] val addressFinderActor = as.actorOf(Props[AddressFinderActor](), "address-finder-actor")
-  implicit val execCtx = as.dispatcher
+  implicit val execCtx: ExecutionContext = as.dispatcher
 
   protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
 

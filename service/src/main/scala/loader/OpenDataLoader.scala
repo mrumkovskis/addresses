@@ -6,11 +6,15 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import scala.io.Source
 import scala.jdk.CollectionConverters.EnumerationHasAsScala
-import scala.util.{Failure, Success, Try, Using}
+import scala.util.{Failure, Success, Try}
 
 object OpenDataLoader {
   import Loader._
-  def loadAddresses(addressFile: String, addressHistoryFile: String, historySince: LocalDate = null): Addresses = {
+  def loadAddresses(
+    addressFiles: List[String],
+    addressHistoryFiles: List[String],
+    historySince: LocalDate = null,
+  ): Addresses = {
     import lv.addresses.index.Index.normalize
     val structure = Map(
       "AW_PILSETA.CSV" -> Map(
@@ -160,42 +164,48 @@ object OpenDataLoader {
       im
     }
 
-    def processZipFile[T, V](file: String,
-                          lineFun: (Map[String, Int], Array[String]) => T,
-                          resultTransformFun: Iterator[T] => V) =
-      Using(new java.util.zip.ZipFile(file)) { af =>
-        val it =
-          af.entries().asScala
-            .flatMap { zipEntry =>
-              structure.get(zipEntry.getName).map { struct =>
-                logger.info(s"loading file $zipEntry")
-                Source.fromInputStream(af.getInputStream(zipEntry), "UTF-8")
-                  .getLines()
-                  .drop(1)  // drop header row with column names
-                  .map { row =>
-                    val l =
-                      row
-                        .split(";")
-                        .map(_.drop(1).dropRight(1)) // remove enclosing # from values
-                    lineFun(struct, l)
-                  }
-                  .filter(_ != null) // filter out non existing objects
-              }.getOrElse {
-                logger.warn(s"Unrecognized zip entry: ${zipEntry.getName}. " +
-                  s"Known entries:[${structure.keys.mkString(",")}]")
-                Iterator.empty
+    def processZipFile[T](file: java.util.zip.ZipFile, lineFun: (Map[String, Int], Array[String]) => T) =
+      file.entries().asScala
+        .flatMap { zipEntry =>
+          structure.get(zipEntry.getName.toUpperCase).map { struct =>
+            logger.info(s"loading file $zipEntry")
+            Source.fromInputStream(file.getInputStream(zipEntry), "UTF-8")
+              .getLines()
+              .drop(1)  // drop header row with column names
+              .map { row =>
+                val l =
+                  row
+                    .split(";")
+                    .map(_.drop(1).dropRight(1)) // remove enclosing # from values
+                lineFun(struct, l)
               }
-            }
-        resultTransformFun(it)
-      }.get
+              .filter(_ != null) // filter out non existing objects
+          }.getOrElse {
+            logger.warn(s"Unrecognized zip entry: ${zipEntry.getName}. " +
+              s"Known entries:[${structure.keys.mkString(",")}]")
+            Iterator.empty
+          }
+        }
 
-    logger.info(s"Loading addresses from file $addressFile ...")
-    val addrObjs =
-      processZipFile(addressFile, convertAddress, createAddresses)
+    def processZipFiles[A, B](
+     files: List[String],
+     lineFun: (Map[String, Int], Array[String]) => A,
+     addrCreator: Iterator[A] => B
+    ) = {
+      val zipFiles = files.map(new java.util.zip.ZipFile(_))
+      try addrCreator(zipFiles.iterator.flatMap(processZipFile(_, lineFun)))
+      finally zipFiles.foreach {
+        f => try f.close() catch { case e: Throwable => logger.error(s"Error closing address file: $f", e) }
+      }
+    }
 
-    logger.info(s"Loading addresses history from file $addressHistoryFile ...")
-    val addrHistory =
-      processZipFile(addressHistoryFile, convertHistory, createHistory)
+    logger.info("Loading addresses...")
+    val addrObjs = processZipFiles(addressFiles, convertAddress, createAddresses)
+    logger.info("Creating addresses...done")
+
+    logger.info(s"Loading addresses history...")
+    val addrHistory = processZipFiles(addressHistoryFiles, convertHistory, createHistory)
+    logger.info(s"Loading addresses history...done")
 
     Addresses(addrObjs, addrHistory)
   }

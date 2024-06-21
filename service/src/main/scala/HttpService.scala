@@ -283,7 +283,7 @@ trait AddressHttpService extends lv.addresses.service.Authorization with
 object Boot extends scala.App with AddressHttpService {
 
   // we need an ActorSystem to host our application in
-  implicit val system = ActorSystem("address-service")
+  implicit val system: ActorSystem = ActorSystem("address-service")
 
   AddressService.publish(MsgEnvelope("check-new-version", CheckNewVersion))
 
@@ -293,7 +293,6 @@ object Boot extends scala.App with AddressHttpService {
   AddressConfig.addressConfig match {
     case _: Configs.Db        => DbSync.initialize
     case c: Configs.OpenData  => OpenDataDownload.initialize(c)
-    case c: Configs.AK        => FTPDownload.initialize(c.directory, c.akFileNamePattern, c.addressFile)
   }
 
   val bindingFuture =

@@ -1,6 +1,6 @@
 package lv.addresses.service
 
-import loader.{AKLoader, DbLoader, OpenDataLoader}
+import loader.{DbLoader, OpenDataLoader}
 import lv.addresses.indexer.{Addresses, IndexFiles}
 import lv.addresses.service.config.Configs
 
@@ -31,9 +31,10 @@ object AddressConfig {
       )
     } else if (conf.hasPath("VZD.open-data")) {
       val odConf = conf.getConfig("VZD.open-data")
+      import scala.jdk.CollectionConverters._
       Configs.OpenData(
-        odConf.getString("url"),
-        odConf.getString("history-url"),
+        odConf.getStringList("urls").asScala.toList,
+        odConf.getStringList("history-urls").asScala.toList,
         odConf.getString("save-to-dir"),
         Try(odConf.getString("history-since"))
           .map(LocalDate.parse(_))
@@ -41,15 +42,7 @@ object AddressConfig {
           .orNull,
       )
     } else {
-      val akFilePathPattern =
-        if (conf.hasPath("VZD.ak-file")) conf.getString("VZD.ak-file")
-        else sys.error("address file setting 'VZD.ak-file' not found")
-      val houseCoordFile = scala.util.Try(conf.getString("VZD.house-coord-file")).toOption.orNull
-      val excludeList: Set[String] =
-        if (conf.hasPath("VZD.exclude-list"))
-          conf.getString("VZD.exclude-list").split(",\\s+").toSet
-        else Set()
-      Configs.AK(akFilePathPattern, houseCoordFile, excludeList)
+      sys.error("Neither VZD.open-data nor VZD.db configuration found")
     }
   }
 
@@ -57,12 +50,11 @@ object AddressConfig {
     case c: Configs.Db        =>
       DbLoader.loadAddresses(c.driver, c.url, c.user, c.password, c.tresqlResources)
     case c: Configs.OpenData  =>
-      val af  = new File(c.directory, c.addressFile).getPath
-      val ahf = new File(c.directory, c.addressHistoryFile).getPath
-      OpenDataLoader.loadAddresses(af, ahf, c.historySince)
-    case c: Configs.AK        =>
-      val af  = new File(c.directory, c.addressFile).getPath
-      AKLoader.loadAddresses(af, c.houseCoordFile, c.excludeList)
+      OpenDataLoader.loadAddresses(
+        c.addressFiles.map(af => new File(c.directory, af).getPath),
+        c.historyAddressFiles.map(ahf => new File(c.directory, ahf).getPath),
+        c.historySince
+      )
   }
 
   def indexFiles: IndexFiles =

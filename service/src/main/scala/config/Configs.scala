@@ -17,13 +17,24 @@ object Configs {
     def directory: String
     def version: String
   }
-  sealed trait VARFileConfig extends VARConfig {
-    def addressFile: String
+
+  case class OpenData(urls: List[String],
+                      historyUrls: List[String],
+                      directory: String,
+                      historySince: LocalDate) extends VARConfig {
+    def addressFiles: List[String] = files(urls)
+    def historyAddressFiles: List[String] = files(historyUrls)
     def version: String =
-      Option(addressFile)
-        .map(f => f.substring(0, f.lastIndexOf(".")))
+      addressFiles
+        .map(f => f.substring(0, f.indexOf(".")))
+        .sorted
+        .lastOption
         .orNull
-    protected def currentFile(pattern: String): String = {
+
+    def addressFilePattern(fileName: String): String = """\d{4}_\d{2}_\d{2}T\d{2}_\d{2}_\d{2}\.""" + fileName
+    def fileNameFromUrl(url: String) = url.substring(url.lastIndexOf("/") + 1)
+
+    private def currentFile(pattern: String): String = {
       val regex = new Regex(pattern)
       Files
         .list(Path.of(directory))
@@ -34,30 +45,9 @@ object Configs {
         .lastOption
         .orNull
     }
-  }
-
-  case class AK(akFilePathPattern: String,
-                houseCoordFile: String,
-                excludeList: Set[String]) extends VARFileConfig {
-    val akFileNamePattern = akFilePathPattern.substring(akFilePathPattern.lastIndexOf('/') + 1)
-    def directory: String = {
-      val idx = akFilePathPattern.lastIndexOf('/')
-      if (idx != -1) akFilePathPattern.substring(0, idx) else "."
+    private def files(urls: List[String]) = {
+      urls.map(fileNameFromUrl).map(addressFilePattern).map(currentFile).filter(_ != null)
     }
-    def addressFile: String =
-      currentFile(akFileNamePattern)
-  }
-
-  case class OpenData(url: String,
-                      historyUrl: String,
-                      directory: String,
-                      historySince: LocalDate) extends VARFileConfig {
-    val AddressFilePrefix = "VAR_"
-    val AddressHistoryFilePrefix = "VAR_HIS_"
-    val AddressFilePattern = s"$AddressFilePrefix\\d.*\\.zip"
-    val AddressHistoryFilePattern = s"$AddressHistoryFilePrefix\\d.*\\.zip"
-    def addressFile: String = currentFile(AddressFilePattern)
-    def addressHistoryFile: String = currentFile(AddressHistoryFilePattern)
   }
 
   case class Db(driver: String,

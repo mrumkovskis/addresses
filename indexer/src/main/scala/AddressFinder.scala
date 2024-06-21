@@ -170,10 +170,7 @@ trait AddressFinder
   def ready = _index != null && addressMap != null
 
   def checkIndex = if (_index == null || addressMap == null)
-    sys.error("""
-           Address index not found. Check whether 'VZD.ak-file' property is set and points to existing file or
-           VZD.{driver, user, password} and db properties are set.
-           If method is called from console make sure that method index(<address register zip file>) or loadIndex is called first""")
+    sys.error("""Address index not found. Check whether VZD data source configuration is property set.""")
 
   def saveIndex = {
     checkIndex
