@@ -192,7 +192,15 @@ object OpenDataLoader {
      lineFun: (Map[String, Int], Array[String]) => A,
      addrCreator: Iterator[A] => B
     ) = {
-      val zipFiles = files.map(new java.util.zip.ZipFile(_))
+      val zipFiles = {
+        val tryFiles = files.map(f => (f, Try(new java.util.zip.ZipFile(f))))
+        if (tryFiles.forall(_._2.isSuccess)) tryFiles.map(_._2.get)
+        else {
+          tryFiles.collect { case (_, Success(zf)) => zf.close() }
+          val (f, e) = tryFiles.collectFirst { case (f, Failure(e)) => (f, e) }.get
+          throw new RuntimeException(s"Unable to open address file: $f.", e)
+        }
+      }
       try addrCreator(zipFiles.iterator.flatMap(processZipFile(_, lineFun)))
       finally zipFiles.foreach {
         f => try f.close() catch { case e: Throwable => logger.error(s"Error closing address file: $f", e) }
