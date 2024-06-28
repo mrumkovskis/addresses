@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory
 
 import java.nio.file.{Files, Path}
 import scala.concurrent.ExecutionContext
+import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 object AddressService extends EventBus with LookupClassification {
@@ -139,11 +140,17 @@ object AddressService extends EventBus with LookupClassification {
       logger.debug(s"Checking for address data new version, current version $currentVersion")
       val newVersion = addressConfig.version
       if (newVersion != null && (currentVersion == null || currentVersion < newVersion)) {
-        logger.info(s"New address data found. Initializing address finder $newVersion")
-        val af = new AddressFinder(addressLoader, indexFiles)
-        af.init
-        addressFinderActor ! NewFinder(af, newVersion)
-        newVersion
+        try {
+          logger.info(s"New address data found. Initializing address finder $newVersion")
+          val af = new AddressFinder(addressLoader, indexFiles)
+          af.init
+          addressFinderActor ! NewFinder(af, newVersion)
+          newVersion
+        } catch {
+          case NonFatal(e) =>
+            logger.error("Address updater failed with error.", e)
+            currentVersion
+        }
       } else {
         logger.debug("No new address data found")
         currentVersion
