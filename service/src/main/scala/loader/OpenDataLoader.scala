@@ -189,11 +189,12 @@ object OpenDataLoader {
           .getLines()
           .drop(1)  // drop header row with column names
           .flatMap { l =>
+            val fields = parseLine(l)
             val ao =
-              if (!LineRegex.matches(l)) {
+              if (fields.length < struct.size) {
                 logger.error(s"Error in file $file, line: $l")
-                lineFun(struct, null)
-              } else lineFun(struct, parseLine(l))
+                null.asInstanceOf[T]
+              } else lineFun(struct, fields)
             if (ao == null) Iterator.empty else Iterator(ao)
           }
       }.getOrElse {
