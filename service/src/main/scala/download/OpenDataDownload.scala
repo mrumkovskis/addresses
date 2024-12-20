@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.{Get, Head}
 import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.model.headers.`Last-Modified`
+import akka.http.scaladsl.model.headers.{HttpEncodings, `Accept-Encoding`, `Last-Modified`}
 import akka.stream.IOResult
 import akka.stream.scaladsl.{FileIO, Source}
 import com.typesafe.scalalogging.Logger
@@ -77,7 +77,9 @@ object OpenDataDownload {
         logger.info(s"Head request info - address file already exists: $f")
         DownloadRes(url, null, null, IOResult(-1))
       }.recoverWith { case _ =>
-        Http().singleRequest(Get(url)).flatMap { resp =>
+        import HttpEncodings._
+        val req = Get(url).withHeaders(List(`Accept-Encoding`(gzip, compress, deflate)))
+        Http().singleRequest(req).flatMap { resp =>
           val destFile = deriveAddressFile(resp, false)
           if (destFile.exists()) {
             logger.info(s"Address file already exists: $destFile")
