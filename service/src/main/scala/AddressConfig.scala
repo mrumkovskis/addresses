@@ -51,8 +51,8 @@ object AddressConfig {
       DbLoader.loadAddresses(c.driver, c.url, c.user, c.password, c.tresqlResources)
     case c: Configs.OpenData  =>
       OpenDataLoader.loadAddresses(
-        c.addressFiles.map(af => new File(c.directory, af).getPath),
-        c.historyAddressFiles.map(ahf => new File(c.directory, ahf).getPath),
+        c.addressFiles.map(af => af.copy(name = new File(c.directory, af.name).getPath)),
+        c.historyAddressFiles.map(ahf => ahf.copy(name = new File(c.directory, ahf.name).getPath)),
         c.historySince
       )
   }

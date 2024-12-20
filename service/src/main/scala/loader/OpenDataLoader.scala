@@ -1,9 +1,12 @@
 package lv.addresses.service.loader
 
 import lv.addresses.indexer.{AddrObj, Addresses}
+import lv.addresses.service.config.Configs
 
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.jdk.CollectionConverters.EnumerationHasAsScala
 import scala.util.{Failure, Success, Try}
@@ -11,8 +14,8 @@ import scala.util.{Failure, Success, Try}
 object OpenDataLoader {
   import Loader._
   def loadAddresses(
-    addressFiles: List[String],
-    addressHistoryFiles: List[String],
+    addressFiles: List[Configs.OpenDataAddressFile],
+    addressHistoryFiles: List[Configs.OpenDataAddressFile],
     historySince: LocalDate = null,
   ): Addresses = {
     import lv.addresses.index.Index.normalize
@@ -118,7 +121,7 @@ object OpenDataLoader {
           logger.warn(s"Cannot convert coordinate '$s' to decimal number in line ${line.mkString(";")}")
           None
       }
-      if (line(struct("exists")) == "EKS")
+      if (line != null && line(struct("exists")) == "EKS")
         AddrObj(
           code      = line(struct("code")).toInt,
           typ       = line(struct("typ")).toInt,
@@ -141,7 +144,7 @@ object OpenDataLoader {
             logger.warn(s"Cannot parse address end date '$s' in line ${line.mkString(";")}")
           LocalDate.now()
       }
-      if (historySince == null || historySince.isBefore(d(line(struct("end_date")))))
+      if (line != null && (historySince == null || historySince.isBefore(d(line(struct("end_date"))))))
         line(struct("code")).toInt -> line(struct("name"))
       else null
     }
@@ -162,6 +165,58 @@ object OpenDataLoader {
       val im = m
 //      logger.debug(s"MM: ${im.size}, $c")
       im
+    }
+
+    val LineRegex = """("([^"]|"")*")|([^,]*)(,(("([^"]|"")*")|([^,]*)))*""".r
+    val FieldRegex = """(?<f>(?:"(?:[^"]|"")*")|(?:[^,]*)),?""".r
+    def parseCsvFile[T](
+      file: Configs.OpenDataAddressFile,
+      fileSrc: Source,
+      lineFun: (Map[String, Int], Array[String]) => T
+    ): Iterator[T] = {
+      def parseLine(line: String): Array[String] = {
+        FieldRegex.findAllMatchIn(line).map { g =>
+          val f1 = g.group("f")
+          //strip enclosing quotes
+          val f2 = if (f1.startsWith("\"") && f1.endsWith("\"")) f1.drop(1).dropRight(1) else f1
+          //replace two double quotes with one single double quote, strip surrounding quotes
+          f2.replace("""""""", """"""")
+        }.toArray
+      }
+      logger.info(s"loading: ${file.name}")
+      structure.get(file.structureName.toUpperCase).map { struct =>
+        fileSrc
+          .getLines()
+          .drop(1)  // drop header row with column names
+          .flatMap { l =>
+            val ao =
+              if (!LineRegex.matches(l)) {
+                logger.error(s"Error in file $file, line: $l")
+                lineFun(struct, null)
+              } else lineFun(struct, parseLine(l))
+            if (ao == null) Iterator.empty else Iterator(ao)
+          }
+      }.getOrElse {
+        logger.warn(s"Unrecognized address file: $file. " +
+          s"Known entries:[${structure.keys.mkString(",")}]")
+        Iterator.empty
+      }
+    }
+
+    def processCsvFiles[A, B](
+      files: List[Configs.OpenDataAddressFile],
+      lineFun: (Map[String, Int], Array[String]) => A,
+      addrCreator: Iterator[A] => B,
+    ): B = {
+      val filesAndSources = files.map { af => (af, Source.fromFile(af.name)) }
+      val addreses = filesAndSources.iterator.flatMap {
+        case (af, src) => parseCsvFile(af, src, lineFun)
+      }
+      try addrCreator(addreses) finally filesAndSources.foreach { case (af, src) =>
+        try src.close() catch {
+          case th: Throwable => logger.error(s"Error closing address file: ${af.name}", th)
+        }
+      }
     }
 
     def processZipFile[T](file: java.util.zip.ZipFile, lineFun: (Map[String, Int], Array[String]) => T) =
@@ -208,11 +263,15 @@ object OpenDataLoader {
     }
 
     logger.info("Loading addresses...")
-    val addrObjs = processZipFiles(addressFiles, convertAddress, createAddresses)
+    // zip files are older version of open data
+    //val addrObjs = processZipFiles(addressFiles.map(_.name), convertAddress, createAddresses)
+    val addrObjs = processCsvFiles(addressFiles, convertAddress, createAddresses)
     logger.info("Creating addresses...done")
 
     logger.info(s"Loading addresses history...")
-    val addrHistory = processZipFiles(addressHistoryFiles, convertHistory, createHistory)
+    // zip files are older version of open data
+    //val addrHistory = processZipFiles(addressHistoryFiles.map(_.name), convertHistory, createHistory)
+    val addrHistory = processCsvFiles(addressHistoryFiles, convertHistory, createHistory)
     logger.info(s"Loading addresses history...done")
 
     Addresses(addrObjs, addrHistory)

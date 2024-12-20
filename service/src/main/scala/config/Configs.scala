@@ -18,15 +18,22 @@ object Configs {
     def version: String
   }
 
+  /** @param name           - full file name on disk.
+   *  @param structureName  - last component from open data file url indicating csv file sturcture */
+  case class OpenDataAddressFile(name: String, structureName: String)
+
   case class OpenData(urls: List[String],
                       historyUrls: List[String],
                       directory: String,
                       historySince: LocalDate) extends VARConfig {
-    def addressFiles: List[String] = files(urls)
-    def historyAddressFiles: List[String] = files(historyUrls)
+    def addressFiles: List[OpenDataAddressFile] = files(urls)
+    def historyAddressFiles: List[OpenDataAddressFile] = files(historyUrls)
     def version: String =
       addressFiles
-        .map(f => f.substring(0, f.indexOf(".")))
+        .map { f =>
+          val fn = f.name
+          fn.substring(0, fn.indexOf("."))
+        }
         .sorted
         .lastOption
         .orNull
@@ -46,7 +53,11 @@ object Configs {
         .orNull
     }
     private def files(urls: List[String]) = {
-      urls.map(fileNameFromUrl).map(addressFilePattern).map(currentFile).filter(_ != null)
+      urls.map { url =>
+        val fn = fileNameFromUrl(url)
+        val currentFileName = currentFile(addressFilePattern(fn))
+        if (currentFileName == null) null else OpenDataAddressFile(name = currentFileName, structureName = fn)
+      }.filter(_ != null)
     }
   }
 
