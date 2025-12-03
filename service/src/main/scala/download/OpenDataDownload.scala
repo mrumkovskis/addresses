@@ -63,14 +63,19 @@ object OpenDataDownload {
     def download(url: String, destDir: String, fileNameBase: String): Future[DownloadRes] = {
 
       def deriveAddressFile(resp: HttpResponse, discardBytes: Boolean) = {
-        val fn = resp.header[`Last-Modified`]
-          .map(_.date.toIsoDateTimeString().replaceAll("[-:]", "_"))
-          .map(_ + "." + fileNameBase)
-          .getOrElse(sys.error(
-            s"Last-Modified header was not found in response for '$url'. Cannot derive address data file name."))
-        val f = new File(destDir, fn)
-        if (discardBytes || f.exists()) resp.discardEntityBytes()
-        f
+        if (resp.status.isSuccess()) {
+          val fn = resp.header[`Last-Modified`]
+            .map(_.date.toIsoDateTimeString().replaceAll("[-:]", "_"))
+            .map(_ + "." + fileNameBase)
+            .getOrElse(sys.error(
+              s"Last-Modified header was not found in response for '$url'. Cannot derive address data file name."))
+          val f = new File(destDir, fn)
+          if (discardBytes || f.exists()) resp.discardEntityBytes()
+          f
+        } else {
+          resp.discardEntityBytes()
+          sys.error(s"HTTP error: ${resp.status}")
+        }
       }
 
       Http().singleRequest(Head(url)).map(deriveAddressFile(_, true)).collect { case f if f.exists =>
