@@ -18,7 +18,7 @@ import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshalling.{Marshaller, Marshalling, ToResponseMarshallable}
 import akka.http.scaladsl.server.Directive1
 import akka.util.ByteString
-import download.{DbSync, FTPDownload, OpenDataDownload}
+import download.{DbSync, FTPDownload, OpenDataAddressDownload}
 import lv.addresses.indexer.AddressFields._
 import lv.addresses.indexer.{Constants, MutableAddress, ResolvedAddress}
 import lv.addresses.service.config.Configs
@@ -292,7 +292,7 @@ object Boot extends scala.App with AddressHttpService {
   // start sync process
   AddressConfig.addressConfig match {
     case _: Configs.Db        => DbSync.initialize
-    case c: Configs.OpenData  => OpenDataDownload.initialize(c)
+    case c: Configs.OpenData  => OpenDataAddressDownload.initialize(c)
   }
 
   val bindingFuture =
