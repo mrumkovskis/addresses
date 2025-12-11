@@ -57,7 +57,7 @@ object OpenDataDownload {
   case class DownloadRes(srcUrl: String, tmpFile: File, destFile: File, ior: IOResult)
 
   class Downloader {
-    implicit val system: ActorSystem  = ActorSystem("open-data-ar-download")
+    implicit val system: ActorSystem  = AddressService.as
     implicit val ec: ExecutionContext = system.dispatcher
 
     def download(url: String, destDir: String, fileNameBase: String): Future[DownloadRes] = {

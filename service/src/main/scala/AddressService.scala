@@ -37,7 +37,7 @@ object AddressService extends EventBus with LookupClassification {
 
   case class MsgEnvelope(topic: String, payload: Msg)
 
-  private[service] val as = ActorSystem("uniso-address-service")
+  private[service] val as = Boot.system
   private[service] val addressFinderActor = as.actorOf(Props[AddressFinderActor](), "address-finder-actor")
   implicit val execCtx: ExecutionContext = as.dispatcher
 

@@ -27,7 +27,7 @@ trait Authorization {
 
   private val clientAuth = Try(conf.getBoolean("ssl.client-auth")).toOption.getOrElse(false)
 
-  private val as = ActorSystem("user-authorization")
+  private val as = Boot.system
 
   protected val logger = Logger(LoggerFactory.getLogger("lv.addresses.service"))
 
